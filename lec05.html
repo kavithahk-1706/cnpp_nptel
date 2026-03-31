@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 05 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec04.html" class="nav-lec">← prev</a>
+      <span class="nav-lec disabled">next →</span>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 05 <span class="med-badge">medium priority</span></div>
+    <h1>Application Layer — Part I</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This is the first lecture dedicated to a specific protocol layer. It covers the client-server interaction model, well-known port number assignments, the responsibilities of the Application layer, and an overview of the principal application layer protocols: DNS, FTP/TFTP, HTTP, SMTP, SNMP, and Telnet. The lecture concludes with a detailed examination of how sockets function in practice, including the five-tuple that uniquely identifies every network connection.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">The Client-Server Model <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~03:00</a></div>
+    <div class="callout green">
+      Every application layer interaction follows a <strong>client-server</strong> model. One process (the client) initiates a request for a service; another process (the server) responds by providing it. The two processes do not need to reside on different machines — they may run on the same host — but in network contexts they are typically on separate systems. Every application layer protocol has a defined client variant and a server variant that implement their respective roles.
+    </div>
+    <p>For example: a web browser is an HTTP client; the machine hosting iitkgp.ac.in is an HTTP server. An FTP client connects to an FTP server; a Telnet client connects to a Telnet server. This asymmetry — one party initiating, one party serving — is the defining characteristic of the model.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">How a Server Process Works <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~26:01</a></div>
+    <p>A server runs a <strong>daemon process</strong> — a background process that is always active and listening on a specific, well-known port. When an incoming client request arrives, the daemon reads the client's IP address and port number, then either handles the request directly or <strong>forks a child process</strong> to service it. Forking allows the parent daemon to immediately return to listening for new requests while the child handles the current one — enabling concurrent servicing of multiple clients.</p>
+    <div class="callout yellow">
+      Example: an HTTP server daemon (httpd) is permanently listening on port 80. When a browser sends a request, httpd forks a child process to serve the response. The parent process continues listening and can accept additional client requests simultaneously — this is how a single server can serve thousands of concurrent users.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Well-Known Port Numbers <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~05:38</a></div>
+    <p>Each server process is bound to a standardized port number so that clients know where to direct their requests without prior negotiation. These are the IANA-assigned well-known ports:</p>
+    <table class="port-table">
+      <tr><th>port</th><th>protocol</th><th>transport</th><th>what it does</th></tr>
+      <tr><td class="port-num">20 / 21</td><td class="proto-name">FTP</td><td><span class="transport tcp-badge">TCP</span></td><td>file transfer (20 = data channel, 21 = control channel)</td></tr>
+      <tr><td class="port-num">23</td><td class="proto-name">Telnet</td><td><span class="transport tcp-badge">TCP</span></td><td>remote terminal login</td></tr>
+      <tr><td class="port-num">25</td><td class="proto-name">SMTP</td><td><span class="transport tcp-badge">TCP</span></td><td>email transmission between servers</td></tr>
+      <tr><td class="port-num">53</td><td class="proto-name">DNS</td><td><span class="transport udp-badge">UDP</span></td><td>domain name → IP address resolution</td></tr>
+      <tr><td class="port-num">69</td><td class="proto-name">TFTP</td><td><span class="transport udp-badge">UDP</span></td><td>trivial (simplified) file transfer</td></tr>
+      <tr><td class="port-num">80</td><td class="proto-name">HTTP</td><td><span class="transport tcp-badge">TCP</span></td><td>web page delivery</td></tr>
+      <tr><td class="port-num">161</td><td class="proto-name">SNMP</td><td><span class="transport udp-badge">UDP</span></td><td>network device management</td></tr>
+      <tr><td class="port-num">443</td><td class="proto-name">HTTPS</td><td><span class="transport tcp-badge">TCP</span></td><td>encrypted web page delivery (HTTP over TLS)</td></tr>
+    </table>
+    <p style="color: var(--muted); font-size: 14px;">The server's port is fixed and well-known; the client's source port is dynamically assigned by the operating system from the ephemeral range (1024–65535). This is why the server always knows where to reply, but the client must record the server port number when initiating the connection.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Sockets — The Full Picture <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~24:22</a></div>
+    <p>A connection between a client and server is uniquely identified by five pieces of information — the <strong>5-tuple</strong>:</p>
+    <div class="socket-tuple">
+      <span class="tuple-part tuple-ip">client IP</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-port">client port</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-ip">server IP</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-port">server port</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-socket">protocol</span>
+    </div>
+    <p>This 5-tuple uniquely identifies every active connection in the network. A <strong>socket</strong> is the endpoint — the (IP address + port number) pair on one side of the connection. When a client connects to a server, a socket is created on each side, and the connection is represented as the pair of sockets. Because the client's port is dynamically assigned and differs for every connection, multiple clients can simultaneously connect to the same server port without conflict.</p>
+    <div class="callout">
+      Multiple browser tabs connecting to the same server (e.g., port 80) at the same time are each a distinct connection, because each has a different client port in its 5-tuple. The server can distinguish and track all of them simultaneously.
+    </div>
+    <p>The Application layer is split into <strong>user space</strong> (application code — a browser, an FTP client, a custom program) and <strong>kernel space</strong> (the TCP/UDP and IP implementations, managed by the OS). The socket API is the standardized interface that bridges these two spaces: application code calls socket functions, and the OS kernel handles the actual protocol execution.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Protocol Stack Implementation in a Host <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~10:02</a></div>
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">Application</div>
+        <div class="impl-impl" style="background:#7c6aff11; border:1px solid #7c6aff22;">user space / application code</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Transport</div>
+        <div class="impl-impl" style="background:#ffb86a11; border:1px solid #ffb86a22;">OS kernel (TCP/UDP)</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">Network</div>
+        <div class="impl-impl" style="background:#ffb86a11; border:1px solid #ffb86a22;">OS kernel (IP stack)</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">Data Link</div>
+        <div class="impl-impl" style="background:#6affd411; border:1px solid #6affd422;">firmware / device driver</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-phys">Physical</div>
+        <div class="impl-impl" style="background:#6ab8ff11; border:1px solid #6ab8ff22;">hardware / NIC</div>
+      </div>
+    </div>
+    <p>When configuring TCP/IP settings on a host (IP address, subnet mask, default gateway, DNS server address), the configuration targets the kernel-space layers. The NIC and its firmware handle everything below that boundary automatically, without user intervention.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Application Layer Responsibilities <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~14:35</a></div>
+    <p>The Application layer is responsible for the full set of concerns above reliable data delivery: identifying and verifying the availability of a communication partner (is the intended server reachable and ready?), synchronizing cooperating applications (orchestrating the correct request-response sequence), establishing error recovery procedures at the application level, and ensuring data integrity from the application's perspective. In short, the Application layer handles everything that remains after the lower layers have delivered the data.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Application Layer Protocols — Overview <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~16:08</a></div>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-card-title">DNS</div>
+        <div class="proto-card-sub">Domain Name System · UDP port 53</div>
+        <div class="proto-card-desc">Translates human-readable domain names to IP addresses. A DNS client on the host queries a DNS server; the server responds with the corresponding IP. All routing from that point forward operates on the IP address — intermediate routers have no knowledge of domain names. DHCP typically auto-configures the DNS server address when a host joins a network.</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-card-title">FTP vs. TFTP</div>
+        <div class="proto-card-sub">File Transfer · TCP 21 vs. UDP 69</div>
+        <div class="proto-card-desc">FTP (File Transfer Protocol) is connection-oriented, uses TCP for reliable transfer, and requires authentication credentials. TFTP (Trivial FTP) is connectionless, uses UDP, and is intentionally minimal — it is used in contexts such as pushing firmware images to routers, where simplicity and small code size matter more than guaranteed delivery.</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-card-title">HTTP</div>
+        <div class="proto-card-sub">Hypertext Transfer Protocol · TCP 80</div>
+        <div class="proto-card-desc">The dominant application-layer protocol on the internet. A browser sends an HTTP request; the web server sends an HTTP response containing the requested resource. HTTP is so ubiquitous that most firewalls and routers permit it by default, which is why web services and APIs are commonly built on top of it even for non-web use cases.</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-card-title">SMTP</div>
+        <div class="proto-card-sub">Simple Mail Transfer Protocol · TCP 25</div>
+        <div class="proto-card-desc">Handles the transmission of email between mail servers and from email clients to outgoing mail servers. SMTP is specifically for sending and relaying mail — POP3 and IMAP are separate protocols used by clients to retrieve mail from their mailbox on the server.</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-card-title">SNMP</div>
+        <div class="proto-card-sub">Simple Network Management Protocol · UDP 161</div>
+        <div class="proto-card-desc">An application layer protocol used for network device monitoring and management. SNMP agents run on managed devices (routers, switches, servers) and report status information to a central Network Management System (NMS). It is not directly used by end users, but it is the mechanism that keeps large networks operational and observable.</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-card-title">Telnet</div>
+        <div class="proto-card-sub">Remote Login · TCP 23</div>
+        <div class="proto-card-desc">Provides a command-line interface to a remote machine over a network — a Telnet client establishes a TCP connection to a Telnet server, which grants access to a shell or terminal. Telnet transmits all data, including credentials, in plaintext and has been largely superseded by SSH, which provides the same functionality over an encrypted channel.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">DNS Domain Structure <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~17:18</a></div>
+    <p>Domain names follow a hierarchical structure, read from right to left — the rightmost component is the most general (the Top Level Domain), and each component to the left is a subdivision of the one to its right:</p>
+    <div class="domain-parts">
+      <div class="dp dp-host"><span class="dp-label">subdomain</span><span class="dp-val">iitkgp</span></div>
+      <div class="dp dp-sub"><span class="dp-label">2nd level</span><span class="dp-val">.ac</span></div>
+      <div class="dp dp-tld"><span class="dp-label">TLD</span><span class="dp-val">.in</span></div>
+    </div>
+    <p style="font-size: 14px; color: var(--muted);">TLD = Top Level Domain. Over 200 TLDs exist: .in (India), .us, .uk, .edu (educational institutions), .com (commercial entities), .org (non-profit organizations), .gov (government), .net (network service providers). The DNS resolution hierarchy mirrors this structure — root name servers → TLD servers → authoritative name servers for each registered domain.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">TCP vs. UDP — Which Protocols Use Which <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~13:33</a></div>
+    <div class="callout green">
+      <strong>Use TCP when:</strong> data integrity and ordered delivery are non-negotiable — missing or corrupted data would render the result incorrect. HTTP, FTP, SMTP, Telnet, and most file transfer protocols fall into this category.<br><br>
+      <strong>Use UDP when:</strong> low latency or high throughput is the priority, or when the application itself handles retransmission and recovery. DNS uses UDP because queries are small and simply retransmitting on timeout is sufficient. SNMP, TFTP, and real-time media streaming (where a retransmitted packet would arrive too late to be useful) also use UDP.
+    </div>
+    <p>In rare cases, applications can bypass the Transport layer entirely and communicate directly with IP — but this requires the application to implement its own reliability mechanisms and is uncommon in practice.</p>
+  </div>
+
+</div>
+</body>
+</html>

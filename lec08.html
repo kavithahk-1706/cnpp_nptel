@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lec 08 — HTTP, HTML, TELNET</title>
+  <link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a class="back-link" href="#">← Index</a>
+    <div class="nav-right">
+      <a class="nav-lec" href="#">← Lec 07</a>
+      <a class="nav-lec" href="#">Lec 09 →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 08</span>
+    <h1>Application Layer — IV<br>HTTP, HTML &amp; TELNET</h1>
+    <p>HyperText Transfer Protocol internals — architecture, messages, methods, status codes, headers, document types, and connecting via TELNET.</p>
+  </div>
+
+  <!-- ── 1. QUICK RECAP ── -->
+  <div class="section">
+    <div class="section-label">Recap from previous lectures</div>
+    <p>Client-server model: a server program listens on a specific port; clients on the same or different machine request that service. Every connection is uniquely identified by the <strong>5-tuple</strong>:</p>
+    <div class="socket-tuple">
+      <span class="tuple-part tuple-ip">Server IP</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-port">Server Port</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-ip">Client IP</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-port">Client Port</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-socket">Protocol ID</span>
+    </div>
+    <p>Change any one element → distinct connection. This is why two tabs in the same browser hitting the same server are separate connections and never bleed into each other.</p>
+    <div class="callout">
+      Transport can be connection-oriented (TCP) or connectionless (UDP). Each layer only concerns itself with peer-to-peer communication at <em>its own layer</em> — reliability, ordering, etc. are handled by whichever layer owns them.
+    </div>
+  </div>
+
+  <!-- ── 2. WHAT IS HTTP ── -->
+  <div class="section">
+    <div class="section-label">HTTP — Overview</div>
+    <h3>HyperText Transfer Protocol</h3>
+    <p>HTTP is the <strong>application-level protocol</strong> that allows web documents to be communicated across a network. It is the foundational protocol that makes the World Wide Web possible.</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Web Server (HTTP Server)</div>
+        <div class="concept-desc">Runs an HTTPD daemon listening on a port. Responds to requests. Also called: web server / HTTPD.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Web Browser (HTTP Client)</div>
+        <div class="concept-desc">Constructs and sends HTTP requests, renders responses. Examples: Chrome, Firefox, IE. Synonymous with HTTP client.</div>
+      </div>
+    </div>
+
+    <h4>Versions</h4>
+    <table class="port-table">
+      <thead><tr><th>Version</th><th>RFC</th><th>Key Feature</th></tr></thead>
+      <tbody>
+        <tr><td class="port-num">HTTP 1.0</td><td>RFC 1945</td><td>Non-persistent connections by default</td></tr>
+        <tr><td class="port-num">HTTP 1.1</td><td>RFC 2616</td><td>Persistent connections by default; multiple req/resp over one TCP connection</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Key Properties</h4>
+    <div class="tag-row">
+      <span class="tag tag-good">Lightweight</span>
+      <span class="tag tag-good">Distributed</span>
+      <span class="tag tag-good">Hypermedia support</span>
+      <span class="tag tag-good">Transport-independent</span>
+      <span class="tag tag-good">Default port 80</span>
+      <span class="tag tag-good">Primarily over TCP</span>
+    </div>
+    <div class="callout yellow">
+      <strong>Transport independence:</strong> HTTP doesn't mandate TCP in its spec — it's just the de-facto default. The protocol itself can technically run over any transport layer.
+    </div>
+  </div>
+
+  <!-- ── 3. WWW ARCHITECTURE ── -->
+  <div class="section">
+    <div class="section-label">WWW Architecture</div>
+    <h3>Distributed Client-Server Service</h3>
+    <p>The World Wide Web is a distributed client-server system. An HTTP client (browser) accesses resources from HTTP servers anywhere on the internet. The parties involved:</p>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Client / Browser</div>
+        <div class="concept-desc">Sends requests. Renders returned documents. Supports protocols: HTTP, FTP, TELNET, SMTP, etc. via an internal controller.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Server (HTTPD)</div>
+        <div class="concept-desc">Listens on a port (default 80). Executes scripts or returns static files. Sends back response with status code.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">URL</div>
+        <div class="concept-desc"><code>protocol://host[:port]/path</code> — port omitted if default (80). Identifies the resource to retrieve.</div>
+      </div>
+    </div>
+    <div class="callout">
+      When you type <code>www.iitk.ac.in</code>, the browser: (1) resolves the name to an IP via DNS, (2) connects to port 80 by default, (3) sends an HTTP request. Specifying a different port: <code>xyz.com:7126</code>.
+    </div>
+    <p><strong>Cookies</strong> are also part of the HTTP ecosystem — they maintain session state, since HTTP is inherently <strong>stateless</strong> (each request-response pair is independent; no memory of previous exchanges).</p>
+  </div>
+
+  <!-- ── 4. DOCUMENT TYPES ── -->
+  <div class="section">
+    <div class="section-label">Web Document Types</div>
+    <h3>Static / Dynamic / Active</h3>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Static</div>
+        <div class="concept-desc">Pre-written HTML file on disk. Request it, get the exact same file back every time. No computation at server.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Dynamic (Server-side)</div>
+        <div class="concept-desc">A program runs at the server based on your request and <em>generates</em> the HTML response. Example: send a roll number → get that student's record. Technique: <strong>CGI (Common Gateway Interface)</strong>, server-side scripting.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Active (Client-side)</div>
+        <div class="concept-desc">Server returns code that <em>executes in the browser</em>. Examples: Java Applets, JavaScript. Used for client-side validation, dynamic UI updates without round-trips to server.</div>
+      </div>
+    </div>
+    <div class="callout green">
+      <strong>CGI (Common Gateway Interface):</strong> Classic server-side technique. Client request triggers a CGI program on the server; program dynamically builds an HTML page and returns it. Dynamic content changes based on input (e.g., student roll number → record lookup).
+    </div>
+  </div>
+
+  <!-- ── 5. REQUEST / RESPONSE STRUCTURE ── -->
+  <div class="section">
+    <div class="section-label">HTTP Message Format</div>
+    <h3>Request &amp; Response Structure</h3>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Request Message</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Line 1</span> <span><strong>Request line:</strong> Method + URL + HTTP version</span></div>
+          <div class="compare-row"><span class="label">Lines 2+</span> <span>Headers (key: value)</span></div>
+          <div class="compare-row"><span class="label">Blank</span> <span>Empty line (separator)</span></div>
+          <div class="compare-row"><span class="label">Body</span> <span>Optional — present in POST, PUT, etc.</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Response Message</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Line 1</span> <span><strong>Status line:</strong> HTTP version + Status code + Phrase</span></div>
+          <div class="compare-row"><span class="label">Lines 2+</span> <span>Headers (key: value)</span></div>
+          <div class="compare-row"><span class="label">Blank</span> <span>Empty line (separator)</span></div>
+          <div class="compare-row"><span class="label">Body</span> <span>Optional — the requested document / CGI output</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. HTTP METHODS ── -->
+  <div class="section">
+    <div class="section-label">HTTP Methods</div>
+    <h3>Request Methods</h3>
+    <table class="port-table">
+      <thead><tr><th>Method</th><th>Direction</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td class="proto-name">GET</td><td>Client→Server</td><td>Request a document from the server</td></tr>
+        <tr><td class="proto-name">HEAD</td><td>Client→Server</td><td>Request <em>metadata</em> about a document — not the document itself</td></tr>
+        <tr><td class="proto-name">POST</td><td>Client→Server</td><td>Send data/information from client to server (form submissions, uploads)</td></tr>
+        <tr><td class="proto-name">PUT</td><td>Server→Client</td><td>Send a document from the server to the client</td></tr>
+        <tr><td class="proto-name">TRACE</td><td>—</td><td>Echoes incoming request back — used for diagnostics</td></tr>
+        <tr><td class="proto-name">CONNECT</td><td>—</td><td>Reserved method</td></tr>
+        <tr><td class="proto-name">OPTIONS</td><td>—</td><td>Inquires about available options/methods the server supports</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">Most widely used in practice: <strong>GET, HEAD, POST, PUT</strong>.</div>
+  </div>
+
+  <!-- ── 7. STATUS CODES ── -->
+  <div class="section">
+    <div class="section-label">HTTP Status Codes</div>
+    <h3>Response Status Code Classes</h3>
+    <table class="port-table">
+      <thead><tr><th>Series</th><th>Category</th><th>Key Codes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="port-num">1xx</td>
+          <td>Informational</td>
+          <td>100 Continue — initial part received, client may proceed<br>101 Switching Protocols</td>
+        </tr>
+        <tr>
+          <td class="port-num">2xx</td>
+          <td>Success</td>
+          <td>200 OK — request successful<br>201 Created<br>202 Accepted (not yet acted on)<br>204 No Content (body is empty)</td>
+        </tr>
+        <tr>
+          <td class="port-num">3xx</td>
+          <td>Redirection</td>
+          <td>Moved Permanently / Moved Temporarily / Not Modified</td>
+        </tr>
+        <tr>
+          <td class="port-num">4xx</td>
+          <td>Client Error</td>
+          <td>400 Bad Request / 401 Unauthorized / 403 Forbidden / <strong>404 Not Found</strong> / 405 Method Not Allowed / 406 Not Acceptable</td>
+        </tr>
+        <tr>
+          <td class="port-num">5xx</td>
+          <td>Server Error</td>
+          <td>500 Internal Server Error / 501 Not Implemented / 503 Service Unavailable</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout pink">
+      <strong>404</strong> is the most commonly encountered error — document not found. It means you successfully reached the server but the requested resource doesn't exist there.
+    </div>
+  </div>
+
+  <!-- ── 8. HTTP HEADERS ── -->
+  <div class="section">
+    <div class="section-label">HTTP Headers</div>
+    <h3>Header Format</h3>
+    <p>All headers follow the pattern: <code>Header-Name: &lt;space&gt; value</code></p>
+    <p>Headers are divided into three types:</p>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">General Headers</div>
+        <div class="concept-desc">Apply to both requests and responses: <strong>Cache-Control</strong>, <strong>Connection</strong> (keep-alive or close), <strong>Date</strong>, MIME-Version, Upgrade.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Request Headers</div>
+        <div class="concept-desc">Sent by client: <strong>Accept</strong> (media types client handles), Accept-Charset, Accept-Encoding, Accept-Language, Authorization, Host, User-Agent.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Response Headers</div>
+        <div class="concept-desc">Sent by server: <strong>Accept-Ranges</strong>, Age (age of document), Public (supported methods), Retry-After, <strong>Server</strong> (server name + version).</div>
+      </div>
+    </div>
+
+    <h4>Entity Headers</h4>
+    <p>Describe the body/content of the message (used in both directions):</p>
+    <div class="tag-row">
+      <span class="tag tag-good">Allow</span>
+      <span class="tag tag-good">Content-Encoding</span>
+      <span class="tag tag-good">Content-Length</span>
+      <span class="tag tag-good">Content-Range</span>
+      <span class="tag tag-good">Content-Type</span>
+      <span class="tag tag-good">Expires</span>
+      <span class="tag tag-good">Last-Modified</span>
+      <span class="tag tag-good">Location</span>
+    </div>
+    <div class="callout">
+      This rich header set is why HTTP can handle heterogeneous media — text, images, video, audio — across a distributed, loosely coupled system with timeout management and caching.
+    </div>
+  </div>
+
+  <!-- ── 9. WORKED EXAMPLES ── -->
+  <div class="section">
+    <div class="section-label">Worked Examples</div>
+    <h3>GET Request — Retrieve an Image</h3>
+    <div class="vci-box">
+      <div class="vci-row"><span class="vci">REQUEST</span></div>
+      <div class="vci-row"><span class="port">Request line:</span> <span>GET /usr/bin/image1 HTTP/1.0</span></div>
+      <div class="vci-row"><span class="port">Header:</span> <span>Accept: image/gif, image/jpeg</span></div>
+      <div class="vci-row"><span style="color:var(--muted)">blank line</span></div>
+      <div class="vci-row"><span class="vci">RESPONSE</span></div>
+      <div class="vci-row"><span class="port">Status line:</span> <span>HTTP/1.0 200 OK</span></div>
+      <div class="vci-row"><span class="port">Headers:</span> <span>Date, Server, MIME-Version, Content-Length, Content-Type: image/jpeg</span></div>
+      <div class="vci-row"><span class="port">Body:</span> <span>&lt;image data&gt;</span></div>
+    </div>
+
+    <h3>POST Request — Send Data to Server</h3>
+    <div class="vci-box">
+      <div class="vci-row"><span class="vci">REQUEST</span></div>
+      <div class="vci-row"><span class="port">Request line:</span> <span>POST /path HTTP/1.0</span></div>
+      <div class="vci-row"><span class="port">Headers:</span> <span>Content-Type, Content-Length (4 header lines)</span></div>
+      <div class="vci-row"><span class="port">Body:</span> <span>&lt;form/query data&gt;</span></div>
+      <div class="vci-row"><span class="vci">RESPONSE</span></div>
+      <div class="vci-row"><span class="port">Status line:</span> <span>HTTP/1.0 200 OK</span></div>
+      <div class="vci-row"><span class="port">Headers:</span> <span>4 lines of headers</span></div>
+      <div class="vci-row"><span class="port">Body:</span> <span>CGI-generated document</span></div>
+    </div>
+  </div>
+
+  <!-- ── 10. CONNECTING VIA TELNET ── -->
+  <div class="section">
+    <div class="section-label">TELNET as HTTP Client</div>
+    <h3>Accessing HTTP Servers with TELNET</h3>
+    <p>Since HTTP is a plain-text protocol, you can manually drive it using TELNET:</p>
+    <div class="vci-box">
+      <div class="vci-row"><span class="port">Connect:</span><span><code>telnet www.mhhe.com 80</code></span></div>
+      <div class="vci-row"><span class="port">Type:</span><span><code>GET /somepath HTTP/1.0</code></span></div>
+      <div class="vci-row"><span class="port">Response:</span><span>HTTP/1.0 200 OK + headers + body</span></div>
+    </div>
+    <div class="callout green">
+      TELNET works here because HTTP is text-based. What matters is that <em>something</em> sends a valid HTTP request to port 80 — the server doesn't care whether it's a browser or a TELNET session. This demonstrates that the transport channel is protocol-agnostic at the application layer.
+    </div>
+    <p>TELNET itself is primarily a remote login protocol (covered in a subsequent lecture). Its use here is just to show raw HTTP interaction.</p>
+  </div>
+
+  <!-- ── 11. KEY SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">Exam Summary</div>
+    <h3>Core Points to Remember</h3>
+    <div class="callout yellow">
+      <strong>HTTP is stateless.</strong> Each request-response pair is independent. Cookies are the workaround to maintain session state across multiple exchanges.
+    </div>
+    <div class="callout green">
+      <strong>Default port is 80.</strong> Other ports must be explicitly specified in the URL (e.g., <code>xyz.com:8080</code>).
+    </div>
+    <div class="callout">
+      <strong>HTTP 1.1 vs 1.0:</strong> 1.1 made persistent connections the default — multiple request-response exchanges can happen over a single TCP connection.
+    </div>
+    <div class="callout pink">
+      <strong>Document types:</strong> Static (file returned as-is) → Dynamic/CGI (server-side program generates HTML) → Active (client-side script executes in browser). Know which is server-side vs client-side.
+    </div>
+    <div class="callout yellow">
+      <strong>Status code series:</strong> 1xx = info, 2xx = success, 3xx = redirect, 4xx = client error, 5xx = server error. 404 = Not Found (client error, not server error).
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

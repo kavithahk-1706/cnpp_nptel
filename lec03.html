@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 03 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec02.html" class="nav-lec">← prev</a>
+      <a href="lec04.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 03 <span class="high-badge">high priority</span></div>
+    <h1>Circuit Switching &amp; Packet Switching</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This lecture covers the two fundamental architectural choices for building switched networks: circuit switching and packet switching. Understanding this distinction is essential — it represents the core design decision that separates the traditional telephone network from the modern internet. The lecture also examines the two variants of packet switching (datagram and virtual circuit) and the trade-offs associated with each approach.</p>
+  </div>
+
+  <!-- SWITCHED NETWORKS -->
+  <div class="section">
+    <div class="section-label">Switched Networks — The Problem Being Solved <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~01:15</a></div>
+    <div class="callout green">
+      A <strong>switched network</strong> is a communication network in which data is routed between end devices (stations) through a series of intermediate switching nodes. The fundamental challenge is getting data from a source to a destination when there is no direct physical connection between every pair of users — the intermediate nodes are responsible for making the forwarding decisions.
+    </div>
+    <p>All long-distance communication relies on this model. The two fundamentally different philosophies for implementing it are circuit switching and packet switching.</p>
+  </div>
+
+  <!-- CIRCUIT SWITCHING -->
+  <div class="section">
+    <div class="section-label">Circuit Switching <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~04:00</a></div>
+    <div class="callout">
+      In circuit switching, a <strong>dedicated, end-to-end communication path</strong> is established before any data transfer begins. All intermediate nodes along the path reserve the necessary resources (switching capacity, channel bandwidth) for the exclusive use of this connection. The path remains reserved for the entire duration of the communication, regardless of whether data is actively being sent.
+    </div>
+
+    <h4>The Three Phases of a Circuit-Switched Connection <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~05:30</a></h4>
+    <p><strong>Phase 1 — Path Establishment:</strong> A signaling process propagates through the network, reserving resources at each intermediate node to construct the end-to-end circuit. No data transfer can begin until this phase completes successfully.</p>
+    <p><strong>Phase 2 — Data Transfer:</strong> Once the circuit is established, data flows along the dedicated path at a fixed, guaranteed rate. The connection behaves like a private wire — its capacity is unaffected by other traffic in the network.</p>
+    <p><strong>Phase 3 — Disconnection:</strong> When the communication ends, a teardown signal is sent, releasing the reserved resources at each node along the path so they become available for other connections.</p>
+
+    <h4>Circuit Switching Internals — Switching Types <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~08:53</a></h4>
+    <p>Inside a circuit-switched network, intermediate nodes use one of four switching mechanisms to establish and maintain the dedicated path:</p>
+    <div class="proto-grid">
+      <div class="proto-card"><div class="proto-layer">type 1</div><div class="proto-names" style="font-size:12px; color: var(--text);">Space Division Switch</div></div>
+      <div class="proto-card"><div class="proto-layer">type 2</div><div class="proto-names" style="font-size:12px; color: var(--text);">Time Division Switch</div></div>
+      <div class="proto-card"><div class="proto-layer">type 3</div><div class="proto-names" style="font-size:12px; color: var(--text);">TDM Bus</div></div>
+      <div class="proto-card"><div class="proto-layer">type 4</div><div class="proto-names" style="font-size:12px; color: var(--text);">Mix of above</div></div>
+    </div>
+    <p style="color: var(--muted); font-size: 14px;">The internal switching mechanism is not a focus of this course. For examination purposes, the relevant knowledge is the properties and trade-offs of circuit switching as a model — not the hardware implementation details.</p>
+
+    <h4>Blocking vs. Non-Blocking Architecture <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~14:40</a></h4>
+    <p>Consider a switch with 10 ports, all of which are currently handling active connections. If an 11th connection attempt arrives, a <strong>blocking</strong> switch will reject it — no additional resources are available. A <strong>non-blocking</strong> switch, by contrast, is designed with sufficient internal capacity to always accommodate any new connection request, regardless of current load. Real-world network switches strive for non-blocking designs, though this comes at significantly higher hardware cost.</p>
+
+    <h4>Advantages and Disadvantages of Circuit Switching</h4>
+    <div class="tag-row">
+      <span class="tag tag-good">guaranteed bandwidth</span>
+      <span class="tag tag-good">no congestion mid-call</span>
+      <span class="tag tag-good">in-order delivery guaranteed</span>
+      <span class="tag tag-good">suitable for voice and real-time streams</span>
+    </div>
+    <div class="tag-row">
+      <span class="tag tag-bad">setup delay before any data flows</span>
+      <span class="tag tag-bad">bandwidth wasted during idle periods</span>
+      <span class="tag tag-bad">fixed data rate — both ends must match</span>
+      <span class="tag tag-bad">single node failure destroys the entire circuit</span>
+      <span class="tag tag-bad">highly inefficient for bursty data traffic</span>
+    </div>
+    <div class="callout pink">
+      The central inefficiency of circuit switching: reserved bandwidth is held for the entire duration of a connection, even when no data is being transmitted. A phone call with a silent pause still holds the channel — that capacity cannot be used by anyone else. This is why circuit switching is poorly suited to data networks, where traffic is bursty and highly irregular rather than continuous.
+    </div>
+  </div>
+
+  <!-- PACKET SWITCHING -->
+  <div class="section">
+    <div class="section-label">Packet Switching <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~20:06</a></div>
+    <div class="callout green">
+      In packet switching, the source breaks data into small, discrete units called <strong>packets</strong>. Each packet contains a portion of the data along with a header carrying control information (addressing, routing metadata, sequence numbers). Packets are injected into the network independently and may travel through different intermediate nodes before being reassembled at the destination.
+    </div>
+    <p>The key forwarding mechanism at every intermediate node is <strong>store-and-forward</strong>: the node receives the entire packet, buffers it briefly in memory, makes a routing decision, and then transmits it toward the next hop. There is no pre-reservation of resources and no dedicated path.</p>
+
+    <h4>Advantages and Disadvantages of Packet Switching</h4>
+    <div class="tag-row">
+      <span class="tag tag-good">bandwidth consumed only when data is being sent</span>
+      <span class="tag tag-good">multiple packet streams share the same link dynamically</span>
+      <span class="tag tag-good">traffic can be rerouted around failed or congested nodes</span>
+      <span class="tag tag-good">packets can be assigned different priorities</span>
+      <span class="tag tag-good">accommodates communicating devices with different data rates</span>
+    </div>
+    <div class="tag-row">
+      <span class="tag tag-bad">no guaranteed bandwidth</span>
+      <span class="tag tag-bad">packets may arrive out of order</span>
+      <span class="tag tag-bad">packets can be lost or excessively delayed</span>
+      <span class="tag tag-bad">variable delay (jitter) depending on congestion</span>
+      <span class="tag tag-bad">receiver must handle reordering and loss recovery</span>
+    </div>
+
+    <h3>Two Variants of Packet Switching <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~27:17</a></h3>
+
+    <h4>1. Datagram</h4>
+    <p>Each packet is treated as a fully independent unit. Every packet carries the complete destination address in its header, and every intermediate node independently decides how to forward it based on current network conditions. Because packets make their own routing decisions, different packets belonging to the same communication may follow entirely different paths through the network — and consequently may arrive at the destination out of order, be duplicated, or be lost entirely. The responsibility for handling these anomalies rests entirely with the end systems (specifically, the transport layer protocols running on them).</p>
+    <div class="callout">
+      No setup phase is required. Each packet is self-contained and self-routing. This is the model used by the internet at the IP layer — IP is a datagram protocol.
+    </div>
+
+    <h4>2. Virtual Circuit <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~27:34</a></h4>
+    <p>A logical route is pre-established before packets are sent, similar to circuit switching. However, the path is not truly dedicated — it may be shared with other virtual circuits simultaneously. Each packet carries a compact <strong>VCI (Virtual Circuit Identifier)</strong> rather than the full destination address. At each intermediate node, a lookup table maps the incoming (port, VCI) pair to an outgoing (port, VCI) pair, and the packet is forwarded accordingly.</p>
+    <div class="callout yellow">
+      <strong>How VCI forwarding works at a node:</strong> The switch maintains a translation table. When a packet arrives on a given port with a given VCI, the switch looks up the corresponding output port and new VCI, rewrites the VCI in the packet header, and forwards it. VCIs are locally scoped — the same VCI number on different links can refer to completely different virtual circuits.
+    </div>
+
+    <div class="vci-box">
+      <div style="font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:10px;">example VCI table at a switch</div>
+      <div class="vci-row">
+        <span>in: <span class="port">port 1</span> VCI <span class="vci">14</span></span>
+        <span class="arrow">→</span>
+        <span>out: <span class="port">port 3</span> VCI <span class="vci">66</span></span>
+      </div>
+      <div class="vci-row">
+        <span>in: <span class="port">port 1</span> VCI <span class="vci">77</span></span>
+        <span class="arrow">→</span>
+        <span>out: <span class="port">port 2</span> VCI <span class="vci">14</span></span>
+      </div>
+      <div class="vci-row">
+        <span>in: <span class="port">port 2</span> VCI <span class="vci">22</span></span>
+        <span class="arrow">→</span>
+        <span>out: <span class="port">port 3</span> VCI <span class="vci">22</span></span>
+      </div>
+    </div>
+    <p>Because all packets belonging to a virtual circuit follow the same pre-established path, they are guaranteed to arrive in order. Forwarding is also faster than datagram routing since the routing decision is made only once at setup — each subsequent packet is processed via a simple table lookup. However, if any intermediate node along the path fails, all virtual circuits passing through it are destroyed and must be re-established.</p>
+  </div>
+
+  <!-- BIG COMPARISON -->
+  <div class="section">
+    <div class="section-label">Circuit Switching vs. Packet Switching — Side by Side <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~22:50</a></div>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Circuit Switching</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">path</span>dedicated, pre-established</div>
+          <div class="compare-row"><span class="label">bandwidth</span>guaranteed, reserved</div>
+          <div class="compare-row"><span class="label">setup</span>required before any data</div>
+          <div class="compare-row"><span class="label">idle waste</span>yes — channel reserved even when silent</div>
+          <div class="compare-row"><span class="label">data rate</span>fixed, both ends must match</div>
+          <div class="compare-row"><span class="label">ordering</span>always in order</div>
+          <div class="compare-row"><span class="label">node failure</span>breaks entire circuit</div>
+          <div class="compare-row"><span class="label">best for</span>voice, real-time, continuous streams</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ Packet Switching</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">path</span>dynamic (datagram) or pre-planned (VC)</div>
+          <div class="compare-row"><span class="label">bandwidth</span>not guaranteed, shared on demand</div>
+          <div class="compare-row"><span class="label">setup</span>not required (datagram) / handshake (VC)</div>
+          <div class="compare-row"><span class="label">idle waste</span>no — bandwidth freed when not in use</div>
+          <div class="compare-row"><span class="label">data rate</span>flexible, nodes can buffer + convert</div>
+          <div class="compare-row"><span class="label">ordering</span>may arrive out of order (datagram)</div>
+          <div class="compare-row"><span class="label">node failure</span>packets re-routed around failure</div>
+          <div class="compare-row"><span class="label">best for</span>data networks, bursty traffic, internet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Datagram vs. Virtual Circuit — Side by Side <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~27:17</a></div>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Datagram</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">route</span>decided per-packet, independently</div>
+          <div class="compare-row"><span class="label">address in packet</span>full destination address</div>
+          <div class="compare-row"><span class="label">call setup</span>none</div>
+          <div class="compare-row"><span class="label">ordering</span>may arrive out of order</div>
+          <div class="compare-row"><span class="label">node failure</span>reroute automatically</div>
+          <div class="compare-row"><span class="label">example</span>IP (internet layer)</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ Virtual Circuit</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">route</span>pre-established, all packets same path</div>
+          <div class="compare-row"><span class="label">address in packet</span>VCI (short local identifier)</div>
+          <div class="compare-row"><span class="label">call setup</span>required (call request + accept)</div>
+          <div class="compare-row"><span class="label">ordering</span>always in order</div>
+          <div class="compare-row"><span class="label">node failure</span>circuit breaks, must re-establish</div>
+          <div class="compare-row"><span class="label">example</span>ATM, Frame Relay, MPLS</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

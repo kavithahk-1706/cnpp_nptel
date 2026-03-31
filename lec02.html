@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 02 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec01.html" class="nav-lec">← prev</a>
+      <a href="lec03.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 02 <span class="med-badge">medium priority</span></div>
+    <h1>Protocol Stacks — OSI &amp; TCP/IP + Network Devices</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This lecture covers two primary topics: (1) a formal comparison of the OSI and TCP/IP models — the number of layers each defines, how they map to one another, and where they differ — and (2) network devices, specifically what layer each device operates at and what that implies about its capabilities. There is also a brief history of the internet, which is low-priority for examination purposes but provides useful contextual grounding.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">What Is a Protocol — Formal Definition <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~01:11</a></div>
+    <div class="callout">
+      A protocol is a controlled, precisely specified set of messages along with the rules governing when and how those messages are exchanged between two or more systems to accomplish a defined communication task. It specifies: (1) what messages exist, (2) their exact format and field layout, and (3) the sequence in which they must be transmitted. Any two systems that implement the same protocol specification can communicate with each other, regardless of differences in implementation language, hardware, or operating system.
+    </div>
+    <p>For example: if a web browser and a web server both implement HTTP, they can exchange requests and responses correctly — neither needs any knowledge of how the other is internally built. The protocol specification is the shared contract.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Encapsulation / Piggybacking <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~21:57</a></div>
+    <div class="callout green">
+      As data moves down the protocol stack from sender to receiver, each layer wraps the data it receives from the layer above with its own <strong>header</strong>, turning it into a <strong>payload</strong> for the layer below. This process — application data → Transport header added → becomes transport segment → Network header added → becomes packet → and so on — is called <strong>encapsulation</strong>.
+    </div>
+    <p>At the receiving end, the process runs in reverse: each layer strips its own header and passes the remaining payload upward. A critical property of this design is that only the layer which added a header can correctly interpret it — all other layers treat it as opaque data they are not permitted to inspect.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">OSI Model — 7 Layers <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~08:01</a></div>
+    <p>The OSI (Open Systems Interconnection) model defines seven layers. This course uses the TCP/IP 5-layer model, but OSI provides finer granularity — particularly in its decomposition of the upper three layers, which TCP/IP collapses into a single Application layer:</p>
+    <div class="stack">
+      <div class="stack-layer layer-app" style="background:#7c6aff18; border-color:#7c6aff44;"><span class="layer-name" style="color:#c4baff;">7 · Application</span><span class="layer-desc">network apps</span></div>
+      <div class="stack-layer layer-app" style="background:#9b6aff18; border-color:#9b6aff44;"><span class="layer-name" style="color:#c4a0ff;">6 · Presentation</span><span class="layer-desc">formatting, encryption</span></div>
+      <div class="stack-layer layer-app" style="background:#b56aff18; border-color:#b56aff44;"><span class="layer-name" style="color:#d4a0ff;">5 · Session</span><span class="layer-desc">establishes &amp; maintains sessions</span></div>
+      <div class="stack-layer layer-trans"><span class="layer-name">4 · Transport</span><span class="layer-desc">end-to-end delivery</span></div>
+      <div class="stack-layer layer-net"><span class="layer-name">3 · Network</span><span class="layer-desc">packet routing</span></div>
+      <div class="stack-layer layer-dl"><span class="layer-name">2 · Data Link</span><span class="layer-desc">framing, MAC, error check</span></div>
+      <div class="stack-layer layer-phys"><span class="layer-name">1 · Physical</span><span class="layer-desc">raw bits over medium</span></div>
+    </div>
+    <div class="callout pink">
+      In TCP/IP, OSI layers 5, 6, and 7 are consolidated into a single <strong>Application layer</strong>. Additionally, some textbooks treat Physical and Data Link as a single "Link" layer — making TCP/IP a 4-layer model — while others count them separately, yielding a 5-layer model. Both representations are valid; the choice is a matter of how finely one wishes to distinguish the lower-level responsibilities.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">OSI → TCP/IP Mapping <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~21:57</a></div>
+    <div class="proto-grid">
+      <div class="proto-card"><div class="proto-layer">OSI layers 5, 6, 7</div><div class="proto-names" style="color:#c4baff;">→ TCP/IP Application</div></div>
+      <div class="proto-card"><div class="proto-layer">OSI layer 4</div><div class="proto-names" style="color:#ff9dd4;">→ TCP/IP Transport</div></div>
+      <div class="proto-card"><div class="proto-layer">OSI layer 3</div><div class="proto-names" style="color:#ffcc99;">→ TCP/IP Network</div></div>
+      <div class="proto-card"><div class="proto-layer">OSI layer 2</div><div class="proto-names" style="color:#99ffe8;">→ TCP/IP Data Link</div></div>
+      <div class="proto-card"><div class="proto-layer">OSI layer 1</div><div class="proto-names" style="color:#99d4ff;">→ TCP/IP Physical</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Network Devices — Layer and Function <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~28:06</a></div>
+
+    <h3>Layer 1 — Repeater / Hub</h3>
+    <p>Operates exclusively at the Physical layer — it amplifies and rebroadcasts electrical signals with no awareness of the data they carry. A hub has no concept of MAC addresses, frames, or routing: it simply regenerates the signal on all ports. Because all ports share the same bandwidth and the same collision domain, an 8-port 10 Mbps hub offers only 10/8 Mbps effective throughput per device. If two devices transmit simultaneously, a collision occurs and both transmissions are lost.</p>
+    <div class="callout pink">⚠️ Hubs cannot filter traffic. Any frame transmitted by one device is received by every other device on the hub. This combination of wasted bandwidth and collision vulnerability is why hubs have been entirely replaced by switches in modern networks.</div>
+
+    <h3>Layer 2 — Bridge / Switch <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~29:36</a></h3>
+    <p>Operates at the Data Link layer. A switch maintains a MAC address table and uses it to forward frames only to the port where the destination device resides — all other ports are unaffected. This eliminates the shared collision problem: each port on a switch is its own isolated collision domain. A network interface card (NIC) in a host also operates at Layer 2.</p>
+    <div class="callout">
+      <strong>Important limitation:</strong> Switches do not segment broadcast domains. A broadcast frame sent by any device is forwarded to every device on the switch. To isolate broadcast traffic, a Layer 3 device (router) is required.
+    </div>
+
+    <h3>Layer 3 — Router <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~30:20</a></h3>
+    <p>Operates at the Network layer, working with IP addresses rather than MAC addresses. Routers are the devices that connect <em>separate</em> networks — a switch cannot forward traffic between networks with different IP subnets, but a router can. When a router receives a broadcast frame, it drops it rather than forwarding it, which means routers isolate both collision domains and broadcast domains simultaneously.</p>
+    <div class="callout green">
+      <strong>Capability hierarchy:</strong> A higher-layer device possesses all the capabilities of every layer below it. A router (L3) can also perform all functions of a switch (L2) and a repeater (L1). The reverse is not true — a switch cannot perform routing.
+    </div>
+
+    <h3>NIC — Network Interface Card</h3>
+    <p>The hardware component that connects a host to a network. Each NIC is assigned a globally unique <strong>MAC address</strong> (Media Access Control address) by its manufacturer. This 48-bit hardware address is the identifier used at Layer 2 for hop-to-hop frame delivery within a network segment.</p>
+    <p>Format: 6 bytes (48 bits) — <span style="font-family:'IBM Plex Mono',monospace; color: var(--accent3); font-size:14px;">AA:BB:CC:DD:EE:FF</span></p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Collision Domain vs. Broadcast Domain</div>
+    <div class="domain-grid">
+      <div class="domain-card">
+        <div class="domain-title">Collision Domain</div>
+        <div class="domain-desc">A set of devices where simultaneous transmission results in a collision. Layer 2 switches eliminate this problem by giving each port its own dedicated collision domain. Layer 1 hubs do not — all ports share one domain.</div>
+      </div>
+      <div class="domain-card">
+        <div class="domain-title">Broadcast Domain</div>
+        <div class="domain-desc">A set of devices that all receive any broadcast frame sent within the domain. Only Layer 3 routers split broadcast domains. Layer 2 switches forward broadcasts to all ports and therefore do not provide isolation.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">LAN vs. WAN <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~14:53</a></div>
+    <p><strong>LAN (Local Area Network):</strong> Covers a small geographic area such as a building or campus. The organization owns and manages the infrastructure. Uses broadcast topology — all devices can potentially communicate with all others by default.</p>
+    <p><strong>WAN (Wide Area Network):</strong> Spans large geographic distances. Organizations typically lease WAN connectivity from service providers rather than owning the physical infrastructure. The internet is, at the highest level of abstraction, a massive WAN.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Internet History — Low Exam Priority <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~03:18</a></div>
+    <p style="color: var(--muted); font-size: 14px;">1836 telegraph → 1950s ARPA formed → 1969 ARPANET (4 US universities) → 1971 first email → 1973 global networking (UK + Norway) → 1982 TCP/IP proposed → 1983 DNS → 1989 WWW coined by Tim Berners-Lee → 1991 Gopher → 1993 WWW revolution → 1994 Mosaic browser + Hotmail + Java → 1998 Google → exponential growth ever since.</p>
+  </div>
+
+</div>
+</body>
+</html>

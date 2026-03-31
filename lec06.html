@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 06 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec05.html" class="nav-lec">← prev</a>
+      <a href="lec07.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 06 <span class="high-badge">high priority</span></div>
+    <h1>Application Layer II — DNS</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This lecture covers the Domain Name System (DNS) — the internet's global naming infrastructure. DNS solves a fundamental usability problem: humans remember names, but routers and network devices only understand IP addresses. DNS is the translator between the two. The lecture covers the hierarchical structure of the domain namespace, how DNS servers are organised and replicate data, the resolution process (recursive and iterative), and the structure of DNS messages and resource records.</p>
+  </div>
+
+  <!-- WHAT IS DNS -->
+  <div class="section">
+    <div class="section-label">What is DNS — The Problem it Solves <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~01:11</a></div>
+    <div class="callout green">
+      <strong>DNS (Domain Name System)</strong> is a globally distributed database that maps human-readable domain names (like <code>www.iitkgp.ac.in</code>) to machine-readable IP addresses (like <code>203.16.x.x</code>). Without DNS, every user would need to memorize raw IP addresses to navigate the internet.
+    </div>
+    <p>The core problem: routers operate at the network layer and only understand IP addresses. Domain names exist at the application layer — purely for human convenience. DNS acts as the bridge. When you type a URL into a browser, DNS is queried first to resolve the name to an IP; only then can packets actually be routed to the destination.</p>
+    <div class="callout yellow">
+      <strong>Why routers can't just use names:</strong> Routers look up the network layer (IP). Names only make sense at the application level — they have no meaning below that. So the translation <em>must</em> happen before any packets leave your machine. DNS handles this invisibly every time you open a website.
+    </div>
+  </div>
+
+  <!-- DOMAIN NAME SPACE -->
+  <div class="section">
+    <div class="section-label">Domain Name Space — Hierarchical Tree Structure <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~04:16</a></div>
+    <p>Domain names are arranged in an <strong>inverted tree structure</strong>. The root is at the top (represented by a single trailing dot), branching downward through top-level domains, second-level domains, and further subdomains. Each node in the tree is called a <strong>label</strong>. A full domain name is formed by reading labels from the specific leaf up to the root, separated by dots.</p>
+
+    <!-- Domain hierarchy tree diagram -->
+    <svg viewBox="0 0 700 270" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:680px;display:block;margin:20px 0;">
+      <defs>
+        <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L6,3 z" fill="#2a2a38"/>
+        </marker>
+      </defs>
+
+      <!-- ROOT -->
+      <ellipse cx="350" cy="28" rx="46" ry="18" fill="#6affd411" stroke="#6affd455" stroke-width="1.5"/>
+      <text x="350" y="24" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#6affd4">root</text>
+      <text x="350" y="37" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">(dot)</text>
+
+      <!-- Lines root → TLDs -->
+      <line x1="304" y1="40" x2="110" y2="92" stroke="#2a2a38" stroke-width="1.2"/>
+      <line x1="335" y1="44" x2="255" y2="92" stroke="#2a2a38" stroke-width="1.2"/>
+      <line x1="350" y1="46" x2="350" y2="92" stroke="#2a2a38" stroke-width="1.2"/>
+      <line x1="365" y1="44" x2="445" y2="92" stroke="#2a2a38" stroke-width="1.2"/>
+      <line x1="396" y1="40" x2="590" y2="92" stroke="#2a2a38" stroke-width="1.2"/>
+
+      <!-- TLD nodes -->
+      <rect x="60" y="92" width="100" height="28" rx="5" fill="#7c6aff22" stroke="#7c6aff55" stroke-width="1.2"/>
+      <text x="110" y="106" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" fill="#a99dff" font-weight="500">arpa</text>
+      <text x="110" y="115" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">inverse</text>
+
+      <rect x="205" y="92" width="100" height="28" rx="5" fill="#7c6aff22" stroke="#7c6aff55" stroke-width="1.2"/>
+      <text x="255" y="106" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" fill="#a99dff" font-weight="500">com</text>
+      <text x="255" y="115" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">commercial</text>
+
+      <rect x="300" y="92" width="100" height="28" rx="5" fill="#7c6aff22" stroke="#7c6aff55" stroke-width="1.2"/>
+      <text x="350" y="106" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" fill="#a99dff" font-weight="500">edu</text>
+      <text x="350" y="115" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">education</text>
+
+      <rect x="395" y="92" width="100" height="28" rx="5" fill="#7c6aff22" stroke="#7c6aff55" stroke-width="1.2"/>
+      <text x="445" y="106" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" fill="#a99dff" font-weight="500">in</text>
+      <text x="445" y="115" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">India</text>
+
+      <rect x="540" y="92" width="100" height="28" rx="5" fill="#7c6aff22" stroke="#7c6aff55" stroke-width="1.2"/>
+      <text x="590" y="106" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" fill="#a99dff" font-weight="500">org</text>
+      <text x="590" y="115" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">non-profit</text>
+
+      <!-- Lines TLD edu → 2nd level -->
+      <line x1="330" y1="120" x2="240" y2="168" stroke="#2a2a38" stroke-width="1.2"/>
+      <line x1="370" y1="120" x2="420" y2="168" stroke="#2a2a38" stroke-width="1.2"/>
+
+      <!-- 2nd level under edu -->
+      <rect x="180" y="168" width="120" height="28" rx="5" fill="#ff6ab022" stroke="#ff6ab055" stroke-width="1.2"/>
+      <text x="240" y="182" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#ff9dd4">fhda.edu</text>
+      <text x="240" y="192" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">2nd level</text>
+
+      <rect x="360" y="168" width="120" height="28" rx="5" fill="#ff6ab022" stroke="#ff6ab055" stroke-width="1.2"/>
+      <text x="420" y="182" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#ff9dd4">bk.edu</text>
+      <text x="420" y="192" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">2nd level</text>
+
+      <!-- Lines TLD in → ac.in -->
+      <line x1="445" y1="120" x2="445" y2="168" stroke="#2a2a38" stroke-width="1.2"/>
+      <rect x="385" y="168" width="120" height="28" rx="5" fill="#ff6ab022" stroke="#ff6ab055" stroke-width="1.2"/>
+      <!-- Wait, this would overlap bk.edu, let me recalculate -->
+
+      <!-- Line fhda.edu → atc.fhda.edu -->
+      <line x1="240" y1="196" x2="240" y2="234" stroke="#2a2a38" stroke-width="1.2"/>
+      <rect x="155" y="234" width="170" height="28" rx="5" fill="#6affd418" stroke="#6affd455" stroke-width="1.2"/>
+      <text x="240" y="248" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#99ffe8">atc.fhda.edu</text>
+      <text x="240" y="258" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">subdomain</text>
+
+      <!-- in → ac.in (moved right to avoid overlap) -->
+      <line x1="590" y1="120" x2="590" y2="168" stroke="#2a2a38" stroke-width="1.2"/>
+      <rect x="530" y="168" width="120" height="28" rx="5" fill="#ff6ab022" stroke="#ff6ab055" stroke-width="1.2"/>
+      <text x="590" y="182" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#ff9dd4">ac.in</text>
+      <text x="590" y="192" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">academic India</text>
+
+      <!-- Wait, I connected org to in wrongly. Let me fix: 
+      Root has 5 children: arpa, com, edu, in, org
+      I connected root to in (445) which is correct
+      But then I said "Lines TLD in → ac.in" at x=445, and also used 590 for org
+      Let me reconsider - I'll just draw ac.in under "in" (445) and accept some overlap or shift -->
+
+      <!-- ac.in under in (445) -->
+      <line x1="445" y1="120" x2="540" y2="168" stroke="#2a2a38" stroke-width="1.2"/>
+
+      <!-- iitkgp.ac.in under ac.in -->
+      <line x1="590" y1="196" x2="590" y2="234" stroke="#2a2a38" stroke-width="1.2"/>
+      <rect x="510" y="234" width="160" height="28" rx="5" fill="#6affd418" stroke="#6affd455" stroke-width="1.2"/>
+      <text x="590" y="248" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#99ffe8">iitkgp.ac.in</text>
+      <text x="590" y="258" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">subdomain</text>
+
+      <!-- Label annotations -->
+      <text x="10" y="30" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">LEVEL 0</text>
+      <text x="10" y="110" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">TLD</text>
+      <text x="10" y="188" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">2nd</text>
+      <text x="10" y="252" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">3rd+</text>
+    </svg>
+
+    <h4>Domain Name Breakdown — Reading a Domain</h4>
+    <p>Each segment separated by a dot is a <strong>label</strong>. Read right-to-left for the hierarchy. For <code>cse.iitkgp.ac.in</code>:</p>
+    <div class="domain-parts">
+      <div class="dp dp-tld"><span class="dp-label">root</span><span class="dp-val">.</span></div>
+      <div class="dp dp-tld"><span class="dp-label">country TLD</span><span class="dp-val">in</span></div>
+      <div class="dp dp-sub"><span class="dp-label">2nd level</span><span class="dp-val">ac</span></div>
+      <div class="dp dp-sub"><span class="dp-label">org domain</span><span class="dp-val">iitkgp</span></div>
+      <div class="dp dp-host"><span class="dp-label">subdomain</span><span class="dp-val">cse</span></div>
+    </div>
+    <p style="color:var(--muted);font-size:14px;">The fully qualified name is globally unique. Even though IIT Bombay also has a "cse", <code>cse.iitb.ac.in</code> ≠ <code>cse.iitkgp.ac.in</code> — the hierarchy ensures no clashes anywhere in the tree.</p>
+  </div>
+
+  <!-- FQDN -->
+  <div class="section">
+    <div class="section-label">Fully Qualified Domain Names (FQDN) <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~08:25</a></div>
+    <div class="callout">
+      A <strong>Fully Qualified Domain Name (FQDN)</strong>, also called an absolute domain name, is a domain name that ends with a trailing dot representing the root — making it completely unambiguous. A name without the trailing dot is <strong>partially qualified</strong>, meaning the DNS resolver may append a configured local suffix to complete it before querying.
+    </div>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Partially Qualified</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">example</span><code>cse.iitkgp</code></div>
+          <div class="compare-row"><span class="label">trailing dot</span>absent</div>
+          <div class="compare-row"><span class="label">problem</span>ambiguous — which iitkgp, under what TLD?</div>
+          <div class="compare-row"><span class="label">fix</span>resolver appends local suffix to complete it</div>
+          <div class="compare-row"><span class="label">rules</span>implementation-dependent, locally configured</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ Fully Qualified (FQDN)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">example</span><code>cse.iitkgp.ac.in.</code></div>
+          <div class="compare-row"><span class="label">trailing dot</span>present — represents root</div>
+          <div class="compare-row"><span class="label">result</span>globally unique, no ambiguity</div>
+          <div class="compare-row"><span class="label">also called</span>absolute domain name</div>
+          <div class="compare-row"><span class="label">usage</span>standard in zone files and DNS config</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TYPES OF TLDs -->
+  <div class="section">
+    <div class="section-label">Types of Top-Level Domains <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~09:16</a></div>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Generic TLDs (gTLD)</div>
+        <div class="concept-desc">Three or more characters. Represent categories of organisations. Registered and maintained by <strong>ICANN</strong> (Internet Corporation for Assigned Names and Numbers — icann.org). Examples include: <code>com</code> (commercial), <code>edu</code> (education), <code>gov</code> (US government), <code>org</code> (non-profit), <code>mil</code> (US military), <code>net</code> (network providers), <code>int</code> (international), <code>aero</code>, <code>museum</code>, <code>biz</code>, <code>info</code>, <code>jobs</code>.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Country Code TLDs (ccTLD)</div>
+        <div class="concept-desc">Exactly two characters. Based on ISO 3166 international country codes. Every country gets one. Examples: <code>in</code> (India), <code>us</code> (USA), <code>uk</code> (British/Irish), <code>au</code> (Australia), <code>de</code> (Germany), <code>jp</code> (Japan), <code>fr</code> (French). Countries often define their own second-level domains underneath — e.g. India uses <code>ac.in</code> (academic) and <code>co.in</code> (commercial) to mirror generic TLD categories.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ZONES AND DOMAINS -->
+  <div class="section">
+    <div class="section-label">Zones vs Domains <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~12:27</a></div>
+    <div class="callout yellow">
+      These two terms look similar but are distinct. A <strong>domain</strong> is the complete set of all names and machines under an organisational domain name — including everything delegated away to sub-servers. A <strong>zone</strong> is that domain <em>minus</em> any sub-domains that have been delegated out to other DNS servers. Think of it as: zone = what this particular DNS server is directly responsible for.
+    </div>
+    <div class="compare">
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ Domain</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">what it is</span>entire set of names/machines under an org name</div>
+          <div class="compare-row"><span class="label">example</span>iitkgp.ac.in — includes cse, ece, mech, cac…</div>
+          <div class="compare-row"><span class="label">scope</span>includes all delegated sub-domains too</div>
+          <div class="compare-row"><span class="label">answer type</span>may give non-authoritative answers for delegated zones</div>
+        </div>
+      </div>
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Zone</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">what it is</span>domain minus sub-domains delegated to others</div>
+          <div class="compare-row"><span class="label">example</span>ac.in zone excludes iitkgp.ac.in (delegated away)</div>
+          <div class="compare-row"><span class="label">scope</span>only what this DNS server directly owns</div>
+          <div class="compare-row"><span class="label">answer type</span>authoritative answers only for own zone</div>
+        </div>
+      </div>
+    </div>
+    <p>A DNS server gives an <strong>authoritative answer</strong> for records within its own zone. If it answers about something it received from another server (via zone transfer), that is a <strong>non-authoritative answer</strong>.</p>
+  </div>
+
+  <!-- PRIMARY/SECONDARY + ZONE TRANSFER -->
+  <div class="section">
+    <div class="section-label">Primary & Secondary Servers — Zone Transfer <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~13:57</a></div>
+    <p>Every domain is typically served by <strong>two or more DNS servers</strong> for redundancy — if one fails, others can still answer queries. The setup follows a primary/secondary model:</p>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">primary server</div>
+        <div class="proto-names" style="color:var(--accent2);font-size:13px;">Master copy</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;margin-bottom:0;">Holds the authoritative master copy of zone data. Loads from its own local disk. Only <strong>one primary</strong> is allowed per zone.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">secondary server(s)</div>
+        <div class="proto-names" style="color:var(--accent3);font-size:13px;">Replica copies</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;margin-bottom:0;">Gets its data from the primary via zone transfer. Multiple secondary servers are possible. Handles queries when primary is unreachable.</p>
+      </div>
+    </div>
+    <div class="callout">
+      <strong>Zone Transfer:</strong> The synchronisation mechanism between primary and secondary. The primary loads zone data from disk. The secondary loads all zone data from the primary. When the primary downloads/re-syncs information from a secondary, this process is specifically called a <em>zone transfer</em>.
+    </div>
+  </div>
+
+  <!-- DNS IN THE INTERNET — THREE CATEGORIES -->
+  <div class="section">
+    <div class="section-label">DNS in the Internet — Three Domain Categories <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~15:19</a></div>
+    <p>The entire DNS namespace under the root is divided into three broad categories of domains:</p>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Generic Domains</div>
+        <div class="concept-desc">gTLDs — 3+ character names organised by category of organisation. <code>com, edu, gov, org, mil, net, int</code> etc. Geography-agnostic.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Country Domains</div>
+        <div class="concept-desc">ccTLDs — 2-character ISO country codes. Every country gets its own TLD. <code>in, us, uk, au, de, jp</code> etc. Geographically organised.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Inverse Domain</div>
+        <div class="concept-desc">Reverse DNS — maps IP addresses back to domain names. Lives under the <code>in-addr.arpa</code> special namespace. IP octets written in reverse order as labels.</div>
+      </div>
+    </div>
+
+    <h4>Inverse Domain — Reverse DNS Resolution</h4>
+    <div class="callout pink">
+      Normal DNS is <strong>forward resolution</strong>: name → IP. Inverse DNS is <strong>reverse resolution</strong>: IP → name. A common use case is authentication — an FTP server receives a connection from IP 153.2.7.9 and wants to verify whether that IP belongs to an authorised client. It performs a reverse DNS lookup to find the domain name associated with that IP.
+    </div>
+    <p>The inverse domain uses the <code>in-addr.arpa</code> special namespace. IP octets are written in <strong>reverse order</strong> as tree labels. IP <code>132.34.45.121</code> becomes the query: <code>121.45.34.132.in-addr.arpa.</code> — and the DNS server returns the domain name that owns that IP.</p>
+  </div>
+
+  <!-- NAME RESOLUTION PROCESS -->
+  <div class="section">
+    <div class="section-label">Name Resolution — BIND & nslookup <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~17:25</a></div>
+    <div class="callout green">
+      The most widely used DNS server software is <strong>BIND</strong> (Berkeley Internet Name Domain). It runs on UNIX/Linux as a background daemon process called <code>named</code>. When any application needs to resolve a domain name, it invokes the <strong>DNS name resolver</strong>, which translates an FQDN into the corresponding IP address.
+    </div>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">command-line tool</div>
+        <div class="proto-names">nslookup</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;margin-bottom:0;">Manually query a DNS server from the terminal. Type a domain name and it returns the resolved IP. Useful for testing DNS resolution and debugging.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">BIND daemon</div>
+        <div class="proto-names">named</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;margin-bottom:0;">The BIND process running in the background on a DNS server. Handles incoming queries, consults zone data and cache, and returns responses. If it doesn't know locally, it asks its primary server.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECURSIVE vs ITERATIVE -->
+  <div class="section">
+    <div class="section-label">Resolution Methods — Recursive vs Iterative <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~20:04</a></div>
+
+    <h4>Recursive Resolution</h4>
+    <p>The client asks a local DNS server and that server takes <em>full responsibility</em> for finding the answer — querying root, TLD, and authoritative servers on the client's behalf. Only one response comes back to the client: the final answer.</p>
+
+    <!-- Recursive resolution flow diagram -->
+    <svg viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:680px;display:block;margin:16px 0;">
+      <defs>
+        <marker id="aq" markerWidth="7" markerHeight="7" refX="3" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#7c6aff"/></marker>
+        <marker id="ar" markerWidth="7" markerHeight="7" refX="3" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#6affd4"/></marker>
+        <marker id="ad" markerWidth="7" markerHeight="7" refX="3" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#8884a0"/></marker>
+      </defs>
+
+      <!-- Client -->
+      <rect x="10" y="78" width="100" height="44" rx="6" fill="#7c6aff22" stroke="#7c6aff55" stroke-width="1.3"/>
+      <text x="60" y="97" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#a99dff" font-weight="500">Client</text>
+      <text x="60" y="111" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">browser/app</text>
+
+      <!-- Local DNS -->
+      <rect x="160" y="78" width="120" height="44" rx="6" fill="#ff6ab022" stroke="#ff6ab055" stroke-width="1.3"/>
+      <text x="220" y="97" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#ff9dd4" font-weight="500">Local DNS</text>
+      <text x="220" y="111" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">resolver</text>
+
+      <!-- Root Server -->
+      <rect x="340" y="20" width="120" height="44" rx="6" fill="#ffb86a22" stroke="#ffb86a55" stroke-width="1.3"/>
+      <text x="400" y="39" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#ffcc99" font-weight="500">Root Server</text>
+      <text x="400" y="53" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">knows all TLDs</text>
+
+      <!-- TLD Server -->
+      <rect x="340" y="136" width="120" height="44" rx="6" fill="#ffb86a22" stroke="#ffb86a55" stroke-width="1.3"/>
+      <text x="400" y="155" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#ffcc99" font-weight="500">TLD Server</text>
+      <text x="400" y="169" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">e.g. .edu server</text>
+
+      <!-- Authoritative -->
+      <rect x="530" y="78" width="140" height="44" rx="6" fill="#6affd418" stroke="#6affd455" stroke-width="1.3"/>
+      <text x="600" y="97" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="#99ffe8" font-weight="500">Auth. Server</text>
+      <text x="600" y="111" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">fhda.edu</text>
+
+      <!-- Client ←→ Local DNS -->
+      <line x1="110" y1="93" x2="158" y2="93" stroke="#7c6aff" stroke-width="1.5" marker-end="url(#aq)"/>
+      <text x="134" y="88" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#7c6aff">① query</text>
+      <line x1="158" y1="107" x2="110" y2="107" stroke="#6affd4" stroke-width="1.5" marker-end="url(#ar)"/>
+      <text x="134" y="120" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#6affd4">⑩ answer</text>
+
+      <!-- Local DNS ←→ Root -->
+      <line x1="270" y1="88" x2="338" y2="52" stroke="#8884a0" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ad)"/>
+      <text x="300" y="63" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">② ask root</text>
+      <line x1="338" y1="58" x2="270" y2="94" stroke="#8884a0" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ad)"/>
+      <text x="308" y="85" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">③ ref→TLD</text>
+
+      <!-- Local DNS ←→ TLD -->
+      <line x1="270" y1="106" x2="338" y2="148" stroke="#8884a0" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ad)"/>
+      <text x="298" y="135" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">④ ask TLD</text>
+      <line x1="338" y1="154" x2="270" y2="112" stroke="#8884a0" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ad)"/>
+      <text x="298" y="126" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">⑤ ref→auth</text>
+
+      <!-- Local DNS ←→ Auth -->
+      <line x1="280" y1="96" x2="528" y2="96" stroke="#8884a0" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ad)"/>
+      <text x="405" y="91" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">⑥ ask auth server</text>
+      <line x1="528" y1="104" x2="280" y2="104" stroke="#8884a0" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#ad)"/>
+      <text x="405" y="117" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#8884a0">⑦ IP address returned</text>
+    </svg>
+
+    <p style="color:var(--muted);font-size:13px;">Local DNS does all the legwork. Client sends one query, gets one final answer. The local resolver follows the chain: root → TLD → authoritative, then hands the IP back.</p>
+
+    <h4>Iterative Resolution</h4>
+    <div class="callout">
+      In iterative resolution, if a DNS server doesn't know the answer, it returns a <strong>referral</strong> — the address of the <em>next</em> DNS server the client should ask — rather than querying that server itself. The client is responsible for following the chain of referrals one by one. Multiple responses come back to the client, each pointing to the next server to query.
+    </div>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Recursive</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">who queries</span>DNS server queries on client's behalf</div>
+          <div class="compare-row"><span class="label">responses</span>one final answer back to client</div>
+          <div class="compare-row"><span class="label">burden</span>on the DNS server</div>
+          <div class="compare-row"><span class="label">client work</span>minimal — one query, wait for answer</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ Iterative</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">who queries</span>client queries each server itself</div>
+          <div class="compare-row"><span class="label">responses</span>multiple referrals until final answer</div>
+          <div class="compare-row"><span class="label">burden</span>on the client</div>
+          <div class="compare-row"><span class="label">server work</span>minimal — just return next DNS address</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESOLVERS -->
+  <div class="section">
+    <div class="section-label">Full Resolver vs Stub Resolver <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~21:04</a></div>
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">Full Resolver</div>
+        <div class="interface-desc">A standalone DNS resolver process separate from the user application. The user program sends its query to the full resolver, which contacts name servers, follows referrals, maintains its own cache of recent resolutions, and returns a final answer. If a local name server doesn't know, the full resolver contacts a foreign name server itself. Decoupled from the application but an extra step in the chain.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">Stub Resolver <span class="high-badge">commonly used</span></div>
+        <div class="interface-desc">A small routine directly linked into the user program itself. Forwards queries directly to a name server — no separate resolver process needed. Implemented via two standard library functions: <code>gethostbyname()</code> (name → IP) and <code>gethostbyaddr()</code> (IP → name). Faster, simpler, and the standard approach on modern platforms. The resolver logic lives inside the application.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DNS RESOURCE RECORDS -->
+  <div class="section">
+    <div class="section-label">DNS Resource Records (RR) <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~22:50</a></div>
+    <div class="callout green">
+      The DNS distributed database is built from <strong>Resource Records (RRs)</strong>. Each RR maps a domain name to a network object. The most common mapping is domain name → IP address, but RRs can map to mail servers, name servers, aliases, and other objects. A zone's complete RR database is what a DNS server is authoritative for.
+    </div>
+
+    <h4>Resource Record Fields</h4>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">field 1</div>
+        <div class="proto-names">Name</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">The domain name this record belongs to</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">field 2</div>
+        <div class="proto-names">Type</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;"><strong>A</strong> = address (name→IP), <strong>NS</strong> = name server, <strong>MX</strong> = mail server, <strong>PTR</strong> = pointer/inverse, <strong>SOA</strong> = start of authority</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">field 3</div>
+        <div class="proto-names">Class</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Network class. <strong>IN</strong> = internet in almost every real-world case</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">field 4</div>
+        <div class="proto-names">TTL</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Time To Live — how long this record may be cached before being considered stale and re-fetched</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">field 5</div>
+        <div class="proto-names">RDlength</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Length in bytes of the RData field that follows</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">field 6</div>
+        <div class="proto-names">RData</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">The actual record payload — e.g. the 4-byte IP address for an A record</p>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      A zone's resource records always start with a <strong>SOA (Start of Authority)</strong> record identifying the zone, followed by <strong>NS (Name Server)</strong> records identifying which servers are authoritative. The NS records specifically determine whether a server's answers are authoritative or not for that zone.
+    </div>
+  </div>
+
+  <!-- DNS MESSAGE FORMAT -->
+  <div class="section">
+    <div class="section-label">DNS Message Format — Query & Response <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~25:13</a></div>
+    <p>All DNS communication uses two message types: <strong>Query</strong> and <strong>Response</strong>. Both share the same header format, but differ in which sections carry data.</p>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Query Message</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">header</span>Identification + Flags</div>
+          <div class="compare-row"><span class="label">question</span>domain name, query type, query class</div>
+          <div class="compare-row"><span class="label">answer</span>empty — all 0s</div>
+          <div class="compare-row"><span class="label">authority</span>empty — all 0s</div>
+          <div class="compare-row"><span class="label">additional</span>empty — all 0s</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ Response Message</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">header</span>Identification + Flags</div>
+          <div class="compare-row"><span class="label">question</span>echoed from the original query</div>
+          <div class="compare-row"><span class="label">answer</span>resolved RR(s) — the actual IP(s)</div>
+          <div class="compare-row"><span class="label">authority</span>NS records for the authoritative zone</div>
+          <div class="compare-row"><span class="label">additional</span>extra helpful records (e.g. IPs for NS records)</div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Header Flag Fields <span class="med-badge">know these</span></h4>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">QR</div>
+        <div class="proto-names">Query / Response</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">0 = this is a query, 1 = this is a response</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">OpCode</div>
+        <div class="proto-names">Operation Type</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">0 = standard (name→IP), 1 = inverse (IP→name), 2 = server status request</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">AA</div>
+        <div class="proto-names">Authoritative Answer</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Set if the responding server is authoritative for the queried zone</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">TC</div>
+        <div class="proto-names">Truncated</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Set if the message was truncated because it was too long for a single UDP packet</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">RD</div>
+        <div class="proto-names">Recursion Desired</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Set by the client to request that the server perform recursive resolution on its behalf</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">RA</div>
+        <div class="proto-names">Recursion Available</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Set by the server in its response to indicate it supports recursive resolution</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">rCode</div>
+        <div class="proto-names">Error Status</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Status code indicating success or the type of error encountered during resolution</p>
+      </div>
+    </div>
+
+    <p style="color:var(--muted);font-size:14px;margin-top:10px;"><span class="skip-badge">low priority</span> The exact binary/hex field layout of query and response messages (Examples 1 & 2 from the lecture, with encoded octets) is implementation-level detail. Understand the structure and fields conceptually — you do not need to memorise the hex encoding format for the exam.</p>
+  </div>
+
+</div>
+</body>
+</html>

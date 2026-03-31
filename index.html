@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CNPP Notes</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f13;
+    --surface: #16161d;
+    --surface2: #1e1e28;
+    --border: #2a2a38;
+    --accent: #7c6aff;
+    --accent2: #ff6ab0;
+    --accent3: #6affd4;
+    --text: #e8e6f0;
+    --muted: #8884a0;
+    --tag-bg: #7c6aff22;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Lora', serif;
+    font-size: 16px;
+    line-height: 1.8;
+    min-height: 100vh;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 60px 32px;
+    position: relative;
+    z-index: 1;
+  }
+  .course-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--tag-bg);
+    border: 1px solid var(--accent);
+    padding: 4px 10px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 5vw, 44px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+  .course-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .course-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 40px;
+    margin-bottom: 48px;
+  }
+  .progress-bar-wrap {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 40px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .progress-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .bar-outer {
+    flex: 1;
+    min-width: 120px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .bar-inner {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 99px;
+  }
+  .progress-pct {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .lec-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-decoration: none;
+    display: block;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .lec-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .lec-card.done { border-left: 3px solid var(--accent3); }
+  .lec-card.pending { opacity: 0.4; pointer-events: none; cursor: default; }
+
+  .card-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: #fff;
+    line-height: 1.3;
+    margin-bottom: 10px;
+  }
+  .card-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  .tag-low { background: #ff6ab011; color: var(--accent2); border: 1px solid #ff6ab033; }
+  .tag-med { background: #ffb86a11; color: #ffb86a; border: 1px solid #ffb86a33; }
+  .tag-high { background: #6affd411; color: var(--accent3); border: 1px solid #6affd433; }
+  .tag-pending { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="course-header">
+    <div class="course-tag">NPTEL · BTech AIML · Sem 4</div>
+    <h1>Computer Networks &amp;<br>Internet Protocols</h1>
+    <div class="course-meta">
+      <span>Prof. Soumya Kanti Ghosh &amp; Dr. Sandip Chakraborty</span>
+      <span>IIT Kharagpur</span>
+      <span>Exam: Apr 19</span>
+    </div>
+  </div>
+
+  <div class="progress-bar-wrap">
+    <span class="progress-label">lectures covered</span>
+    <div class="bar-outer">
+      <div class="bar-inner" style="width: 20%"></div>
+    </div>
+    <span class="progress-pct">4 / ~20</span>
+  </div>
+
+  <div class="grid">
+    <a href="lec01.html" class="lec-card done">
+      <div class="card-num">LEC 01</div>
+      <div class="card-title">Introduction &amp; Network Architecture</div>
+      <span class="card-tag tag-low">low priority</span>
+    </a>
+    <a href="lec02.html" class="lec-card done">
+      <div class="card-num">LEC 02</div>
+      <div class="card-title">Protocol Stacks — OSI &amp; TCP/IP + Network Devices</div>
+      <span class="card-tag tag-med">medium priority</span>
+    </a>
+    <a href="lec03.html" class="lec-card done">
+      <div class="card-num">LEC 03</div>
+      <div class="card-title">Circuit Switching &amp; Packet Switching</div>
+      <span class="card-tag tag-high">high priority</span>
+    </a>
+    <a href="lec04.html" class="lec-card done">
+      <div class="card-num">LEC 04</div>
+      <div class="card-title">Protocol Stacks — Layered Services</div>
+      <span class="card-tag tag-med">medium priority</span>
+    </a>
+    <div class="lec-card pending">
+      <div class="card-num">LEC 05</div>
+      <div class="card-title">—</div>
+      <span class="card-tag tag-pending">not yet</span>
+    </div>
+    <div class="lec-card pending">
+      <div class="card-num">LEC 06</div>
+      <div class="card-title">—</div>
+      <span class="card-tag tag-pending">not yet</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

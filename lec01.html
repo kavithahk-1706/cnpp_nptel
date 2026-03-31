@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 01 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <span class="nav-lec disabled">← prev</span>
+      <a href="lec02.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 01 <span class="skip-badge">low priority</span></div>
+    <h1>Introduction &amp; Network Architecture Overview</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This lecture provides a broad, conceptual overview of network architecture — the foundational context for everything that follows in the course. It is primarily concerned with establishing <em>why</em> networks are structured in layers, and what each layer is responsible for. The primary focus is the TCP/IP protocol stack: understanding what each layer does, why the separation of concerns exists, and how real-world networking devices map onto this model.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Protocols — Definition</div>
+    <div class="callout">
+      A protocol is an agreed-upon set of rules that governs communication between two or more parties. Networks are built from multiple layers of protocols stacked on top of one another — each layer handling a specific, well-defined aspect of the communication process — hence the term <strong>protocol stack</strong>.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">The TCP/IP Protocol Stack <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~23:10</a></div>
+    <p>Every time data moves between machines, it passes through each of these layers in sequence. Each layer has a specific, well-defined responsibility and communicates only with the layers directly above and below it:</p>
+    <div class="stack">
+      <div class="stack-layer layer-app"><span class="layer-name">Application</span><span class="layer-desc">HTTP, FTP, SMTP</span></div>
+      <div class="stack-layer layer-trans"><span class="layer-name">Transport</span><span class="layer-desc">TCP, UDP, RTP</span></div>
+      <div class="stack-layer layer-net"><span class="layer-name">Network</span><span class="layer-desc">IPv4, IPv6, MPLS</span></div>
+      <div class="stack-layer layer-dl"><span class="layer-name">Data Link</span><span class="layer-desc">Ethernet, Wi-Fi, Bluetooth</span></div>
+      <div class="stack-layer layer-phys"><span class="layer-name">Physical</span><span class="layer-desc">wires, signals, radio</span></div>
+    </div>
+    <div class="callout green">
+      Consider sending a letter: you write the message (Application), seal it in an envelope (Transport), write the address (Network), hand it to the postal service (Data Link), and a vehicle physically transports it (Physical). Crucially, each layer only interacts with the layer directly above or below it — the postal service does not need to know what the letter says to deliver it correctly.
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Why Layers Exist — The Problem They Solve</h3>
+    <p><strong>Physical layer:</strong> The foundation — responsible only for transmitting raw signals. Two machines connected by a wire can exchange data at this level. Handles the conversion between digital data and the analog or electrical signals that travel over the medium. <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~06:49</a></p>
+    <p><strong>Data Link layer (L2 Switch):</strong> When more than two machines share the same network segment, unregulated transmission causes <em>collisions</em> — multiple devices transmitting simultaneously, corrupting each other's data. The Data Link layer, implemented by switches, prevents this by maintaining a table of MAC addresses and forwarding frames only to the correct port. This creates separate <em>collision domains</em> per port. However, all devices on the same switch still share a single <em>broadcast domain</em>. <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~08:27</a></p>
+    <p><strong>Network layer (Router):</strong> Switches operate only within a single network — they cannot forward traffic across different networks. Routers operate at the Network layer, working with IP addresses rather than MAC addresses, and are responsible for finding the best path between source and destination across multiple interconnected networks. Routers also break up broadcast domains, since they do not forward broadcast frames between networks. <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~14:10</a></p>
+    <p><strong>Transport layer:</strong> A single machine runs multiple processes simultaneously (a browser, a media player, a messaging app). The Network layer can deliver a packet to the correct machine, but it cannot determine which process should receive it. The Transport layer solves this using <strong>port numbers</strong> to multiplex and demultiplex traffic between processes. It also provides end-to-end error control, flow control, and traffic management. <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~20:50</a></p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Key Vocabulary</div>
+    <div class="callout pink">
+      <strong>Collision domain</strong> — A group of devices where simultaneous transmission causes a collision. Layer 2 switches split collision domains by providing a dedicated domain per port.<br><br>
+      <strong>Broadcast domain</strong> — A group of devices that all receive each other's broadcast frames. Only Layer 3 routers split broadcast domains — switches do not.<br><br>
+      <strong>Intermediate devices</strong> — Process packets only up to the layer at which they operate. A hub processes only at Layer 1 (physical signals). A switch processes up to Layer 2 (frames, MAC addresses). A router processes up to Layer 3 (packets, IP addresses). Higher-layer devices have the full capability of all layers below them.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Protocols at Each Layer <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~26:52</a></div>
+    <div class="proto-grid">
+      <div class="proto-card"><div class="proto-layer">application</div><div class="proto-names">HTTP · FTP · SMTP</div></div>
+      <div class="proto-card"><div class="proto-layer">transport</div><div class="proto-names">TCP · UDP · RTP</div></div>
+      <div class="proto-card"><div class="proto-layer">network</div><div class="proto-names">IPv4 · IPv6 · MPLS</div></div>
+      <div class="proto-card"><div class="proto-layer">data link</div><div class="proto-names">Ethernet · Wi-Fi · LTE</div></div>
+      <div class="proto-card"><div class="proto-layer">cross-layer (app ↔ transport)</div><div class="proto-names">DNS</div></div>
+      <div class="proto-card"><div class="proto-layer">cross-layer (network ↔ data link)</div><div class="proto-names">ARP · DHCP</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Course Approach</div>
+    <p>This course follows a <strong>top-down approach</strong> — beginning at the Application layer and working down toward the Physical layer. Kurose &amp; Ross (the primary textbook) uses the same ordering. Tanenbaum's <em>Computer Networks</em> takes the opposite, bottom-up approach. Both are valid framings; the top-down approach tends to be more intuitive because it starts with protocols you already interact with (HTTP, DNS) before descending into the lower-level mechanics.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">References from This Lecture</div>
+    <p style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--muted);">
+      Kurose &amp; Ross — Computer Networking: A Top-Down Approach<br>
+      Tanenbaum — Computer Networks<br>
+      Peterson — Computer Networks: A Systems Approach<br>
+      IBM Redbook TCP/IP Tutorial (free online)<br>
+      tcpipguide.com (free online)
+    </p>
+  </div>
+
+</div>
+</body>
+</html>

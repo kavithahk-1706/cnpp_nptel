@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 04 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec03.html" class="nav-lec">← prev</a>
+      <a href="lec05.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 04 <span class="med-badge">medium priority</span></div>
+    <h1>Protocol Stacks — Layered Services</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This lecture consolidates and extends the protocol stack concepts from Lectures 1 and 2, introducing new vocabulary that carries significant weight throughout the course: the three defining elements of any protocol (syntax, semantics, timing), the two interfaces every protocol must expose, the IETF standardization process, the hourglass model of internet architecture, and a first formal treatment of sockets. The per-layer function summary at the end is particularly examination-relevant.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Protocols — Refined Definition <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~02:19</a></div>
+    <p>A protocol defines two distinct interfaces simultaneously: the interface between layers within the same system (vertical), and the interface between peer layers across different systems (horizontal). It is the fundamental building block of any network architecture. Every protocol object exposes exactly two interfaces:</p>
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">Service Interface</div>
+        <div class="interface-desc">Defines the set of operations this protocol exposes to the layer immediately above it — what services it provides, and how those services can be invoked by a higher-layer protocol.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">Peer-to-Peer Interface</div>
+        <div class="interface-desc">Defines how this protocol communicates with its counterpart on a remote machine — the message format, field sizes, message sequencing, and acknowledgement rules that the two instances must agree on.</div>
+      </div>
+    </div>
+    <div class="callout">
+      A protocol also requires a <strong>module that implements</strong> these interfaces. The specification describes the required behavior; the module is the actual code or hardware that realizes it.
+    </div>
+    <p style="font-size:14px; color: var(--muted);">Protocols are standardized by the <strong style="color:#fff;">IETF</strong> (Internet Engineering Task Force). For a protocol to be formally included in the internet architecture, it must satisfy two criteria: (1) a written specification must exist, and (2) at least one — and preferably two — independent working implementations must be demonstrated.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Three Key Elements of Any Protocol <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~05:28</a></div>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Syntax</div>
+        <div class="concept-desc">The structure and format of messages — data formats, field sizes, encoding schemes, signal levels. Defines the "grammar" of the protocol: what a valid message looks like.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Semantics</div>
+        <div class="concept-desc">The meaning assigned to each message and each field within it — what control information is conveyed, how error conditions are signaled and handled. Defines the "vocabulary": what each message means and what action it requires.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Timing</div>
+        <div class="concept-desc">Speed matching between sender and receiver, and sequencing constraints — ensuring messages are sent and processed in the correct order, and that transmission rates are compatible. Defines the "rhythm" of the exchange.</div>
+      </div>
+    </div>
+    <div class="callout green">
+      Every protocol at every layer of the stack can be analyzed through these three dimensions. This is a useful framework for examination questions that ask what a given protocol "defines" or "specifies."
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Encapsulation — Revisited <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~13:48</a></div>
+    <p>As data moves down the stack, each layer wraps the payload it receives from the layer above with its own header, adding control information relevant to that layer's function. Intermediate network devices (routers, switches) only unwrap headers down to the layer at which they operate — everything above that layer is treated as opaque payload. This is what makes the layered architecture composable: each layer functions independently without requiring knowledge of the protocols above or below it.</p>
+    <div class="callout pink">
+      A critical distinction: <strong>peer layers communicate virtually, not physically.</strong> The Transport layer on Machine A does not send data directly to the Transport layer on Machine B. Physically, data travels down through all layers on Machine A, across the network medium, and back up through all layers on Machine B. Logically, however, Transport communicates with Transport, Network with Network, and so on — each layer's header is written for its peer on the other side and is invisible to all other layers.
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Internet Architecture — The Hourglass Model <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~24:52</a></div>
+    <p>The IETF's internet architecture does not enforce strict layering — an application is technically free to bypass the Transport layer and interact directly with IP if required. The architecture is described as an <strong>hourglass</strong> due to its characteristic shape when visualized:</p>
+    <div class="hourglass">
+      <div class="hg-row hg-wide">many applications (HTTP, FTP, SMTP, DNS...)</div>
+      <div class="hg-row hg-mid">TCP &nbsp;|&nbsp; UDP</div>
+      <div class="hg-row hg-narrow">IP — the waist</div>
+      <div class="hg-row hg-mid2">Ethernet · Wi-Fi · ATM · FDDI...</div>
+      <div class="hg-row hg-wide2">many physical networks</div>
+    </div>
+    <p>IP is the narrow waist of the hourglass: every application protocol above it must eventually pass through IP, and every physical network technology below it must be reachable via IP. The wide variety of application protocols at the top and physical network technologies at the bottom are unified by this single, common IP layer in the middle. This design is what allows the internet to accommodate heterogeneous hardware and applications simultaneously.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Each Layer's Function + Data Unit <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~17:05</a></div>
+    <p style="color: var(--muted); font-size: 14px; margin-bottom: 16px;">The Physical, Data Link, and Network layers run on every node in the network (hosts and intermediate routers). The Transport layer and above run only on end hosts — intermediate routers do not implement or process these layers.</p>
+
+    <div class="layer-row">
+      <span class="layer-badge" style="background:#6ab8ff11; color:#99d4ff; border:1px solid #6ab8ff33;">L1</span>
+      <div class="layer-content">
+        <div class="layer-name">Physical</div>
+        <div class="layer-detail">Transmits raw bits over a communication link by converting digital data to analog signals and back. The Physical layer has no concept of message structure or addressing — it is solely responsible for faithfully delivering individual bits from one node to the immediately adjacent one.</div>
+        <div class="layer-unit">unit: bits</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge" style="background:#6affd411; color:#99ffe8; border:1px solid #6affd433;">L2</span>
+      <div class="layer-content">
+        <div class="layer-name">Data Link</div>
+        <div class="layer-detail">Collects a stream of raw bits into structured units called <strong>frames</strong>. Handles hop-to-hop delivery using MAC addresses — responsible for getting a frame from one device to the next directly-connected device. Implemented jointly by the NIC hardware and the device driver in the operating system.</div>
+        <div class="layer-unit">unit: frames</div>
+        <div class="layer-protocols">protocols: Ethernet (IEEE 802.3) · Wi-Fi (802.11) · X.25 · ATM · FDDI</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge" style="background:#ffb86a11; color:#ffcc99; border:1px solid #ffb86a33;">L3</span>
+      <div class="layer-content">
+        <div class="layer-name">Network (Internetwork)</div>
+        <div class="layer-detail">Handles routing between networks — responsible for finding a path from the source to the destination across multiple intermediate hops. IP is <strong>connectionless</strong> and <strong>best-effort</strong>: it makes no guarantees about delivery, ordering, or timing. Reliability, flow control, and error recovery are intentionally delegated to higher layers.</div>
+        <div class="layer-unit">unit: packets (also called IP datagrams)</div>
+        <div class="layer-protocols">protocols: IP · ICMP · IGMP · ARP · RARP</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge" style="background:#ff6ab011; color:#ff9dd4; border:1px solid #ff6ab033;">L4</span>
+      <div class="layer-content">
+        <div class="layer-name">Transport</div>
+        <div class="layer-detail">Provides process-to-process communication — the ability to address individual applications running on a host, not just the host itself. Port numbers serve as process identifiers. Runs only on end hosts, not on intermediate routing nodes.</div>
+        <div class="layer-unit">unit: messages (segments for TCP, datagrams for UDP)</div>
+        <div class="layer-protocols">TCP — connection-oriented, reliable, flow control, congestion control, duplicate suppression · UDP — connectionless, unreliable, best-effort, minimal overhead</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge" style="background:#7c6aff11; color:#a99dff; border:1px solid #7c6aff33;">L5–7</span>
+      <div class="layer-content">
+        <div class="layer-name">Application (+ Session + Presentation in OSI)</div>
+        <div class="layer-detail">The layer directly interacted with by end users and applications. In the OSI model: the Session layer manages and terminates connections between cooperating applications; the Presentation layer handles data format translation and encryption; the Application layer is the interface for user-facing network programs. In TCP/IP all three are collapsed into one.</div>
+        <div class="layer-unit">unit: messages / data</div>
+        <div class="layer-protocols">HTTP · FTP · SMTP · Telnet · DNS · SNMP</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Sockets — First Introduction <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~28:12</a></div>
+    <div class="callout yellow">
+      A <strong>socket</strong> is the programming interface between the Application layer and the Transport layer. A networked application is uniquely identified by two components: its <strong>IP address</strong> (which machine on the network) and its <strong>port number</strong> (which process on that machine). A socket is the abstraction that combines these two — it is the endpoint through which an application sends and receives data. Full socket programming is covered later in the course; this is the conceptual introduction.
+    </div>
+    <p>This is why connecting to a website involves more than just an IP address: the browser connects to port 80 (HTTP) or port 443 (HTTPS) on the server's IP. The port number tells the operating system's networking stack which application process should receive the incoming data.</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">TCP vs. UDP — Quick Reference <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~29:08</a></div>
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title" style="color: var(--accent3);">TCP</div>
+        <div class="interface-desc">Connection-oriented · Reliable delivery · Duplicate suppression · Congestion control · Flow control. Use when data integrity and completeness are required: file transfers, web pages, email, database queries.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title" style="color: var(--accent2);">UDP</div>
+        <div class="interface-desc">Connectionless · Unreliable · Best-effort · Minimal overhead · Fast. Use when throughput or latency matters more than guaranteed delivery: video streaming, VoIP, DNS lookups, online gaming, live broadcasts.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Network API <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~26:01</a></div>
+    <p>Most network protocols are implemented as software within the operating system kernel. The standardized interface through which applications request network communication services from the OS is called the <strong>Network API</strong>. The socket API is the most widely used implementation of this interface and is available in virtually every modern operating system. When writing any networked application, the developer interacts with the OS through the network API — the underlying protocol implementation is handled by the kernel.</p>
+  </div>
+
+</div>
+</body>
+</html>
