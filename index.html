@@ -71,9 +71,21 @@
       background: var(--surface);
       border: 1px solid #ff6ab033;
       border-radius: 12px;
-      padding: 28px 32px;
+      overflow: hidden;
     }
     #doubts-panel.open { display: block; }
+
+    #doubts-scroll {
+      height: 480px;
+      overflow-y: auto;
+      padding: 28px 32px;
+      scrollbar-width: thin;
+      scrollbar-color: #ff6ab044 transparent;
+    }
+    #doubts-scroll::-webkit-scrollbar { width: 6px; }
+    #doubts-scroll::-webkit-scrollbar-track { background: transparent; }
+    #doubts-scroll::-webkit-scrollbar-thumb { background: #ff6ab044; border-radius: 3px; }
+    #doubts-scroll::-webkit-scrollbar-thumb:hover { background: #ff6ab088; }
 
     /* markdown rendering inside panel */
     #doubts-content h2 {
@@ -196,7 +208,9 @@
     <button class="doubts-btn" onclick="toggleDoubts()">▸ open doubts_log.md</button>
 
     <div id="doubts-panel">
-      <div id="doubts-content"><p style="color:var(--muted);">loading...</p></div>
+      <div id="doubts-scroll">
+        <div id="doubts-content"><p style="color:var(--muted);">loading...</p></div>
+      </div>
     </div>
   </div>
 
