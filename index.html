@@ -1,315 +1,240 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CNPP — Lecture Notes</title>
-  <link rel="stylesheet" href="notes.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CNPP — Notes Index</title>
+  <link rel="stylesheet" href="notes.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
   <style>
-    /* ── index-specific styles only ── */
-    .index-hero {
-      margin-bottom: 48px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 36px;
-    }
-    .hero-meta {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 11px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 14px;
-    }
-    .hero-title {
-      font-family: 'Syne', sans-serif;
-      font-size: clamp(28px, 5vw, 48px);
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      color: #fff;
-      line-height: 1.1;
-      margin-bottom: 12px;
-    }
-    .hero-title span { color: var(--accent); }
-    .hero-sub {
-      font-family: 'Lora', serif;
-      font-size: 15px;
-      color: var(--muted);
-      max-width: 520px;
-      line-height: 1.7;
-    }
-
-    /* ── search ── */
-    .search-wrap {
-      margin-bottom: 32px;
-      position: relative;
-      max-width: 420px;
-    }
-    .search-icon {
-      position: absolute;
-      left: 14px;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--muted);
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 13px;
-      pointer-events: none;
-      user-select: none;
-    }
-    #search {
-      width: 100%;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 13px;
-      padding: 11px 16px 11px 36px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    #search::placeholder { color: var(--muted); }
-    #search:focus { border-color: var(--accent); }
-
-    /* ── status line ── */
-    .status-line {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 20px;
-      min-height: 18px;
-    }
-    .status-line .count { color: var(--accent3); }
-
-    /* ── lecture grid ── */
-    .lec-grid {
+    .index-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      margin: 20px 0;
     }
-    @media (max-width: 480px) {
-      .lec-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
-    }
-
-    /* ── lecture card ── */
     .lec-card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 16px;
+      padding: 16px 18px;
       text-decoration: none;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      transition: border-color 0.18s, background 0.18s, transform 0.15s;
-      cursor: pointer;
-      position: relative;
-      overflow: hidden;
+      display: block;
+      transition: border-color 0.2s, background 0.2s;
     }
-    .lec-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      opacity: 0;
-      transition: opacity 0.18s;
-    }
-    .lec-card:hover {
-      border-color: var(--accent);
-      background: var(--surface2);
-      transform: translateY(-2px);
-    }
-    .lec-card:hover::before { opacity: 1; }
-    .card-num {
+    .lec-card:hover { border-color: var(--accent); background: var(--surface2); }
+    .lec-card .lec-num {
       font-family: 'IBM Plex Mono', monospace;
       font-size: 11px;
       color: var(--accent);
       letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
     }
-    .card-label {
+    .lec-card .lec-title {
       font-family: 'Syne', sans-serif;
       font-weight: 700;
-      font-size: 22px;
-      color: #fff;
-      line-height: 1;
-    }
-    .card-arrow {
       font-size: 14px;
-      color: var(--muted);
-      margin-top: 4px;
-      transition: color 0.18s, transform 0.18s;
+      color: #fff;
+      line-height: 1.4;
     }
-    .lec-card:hover .card-arrow {
-      color: var(--accent3);
-      transform: translateX(3px);
-    }
-
-    /* ── states ── */
-    .state-box {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 60px 20px;
-      gap: 12px;
-      text-align: center;
-    }
-    .state-icon {
-      font-size: 32px;
-      opacity: 0.5;
-    }
-    .state-msg {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .state-sub {
+    .lec-card .lec-topic {
       font-size: 12px;
       color: var(--muted);
-      opacity: 0.6;
-      max-width: 300px;
-      line-height: 1.6;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+    .lec-card.done { border-color: #6affd433; }
+    .lec-card.done .lec-num { color: var(--accent3); }
+    .lec-card.wip { border-color: #ffb86a33; }
+    .lec-card.wip .lec-num { color: #ffb86a; }
+
+    /* doubts panel */
+    .doubts-btn {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      background: #ff6ab011;
+      color: var(--accent2);
+      border: 1px solid #ff6ab044;
+      padding: 10px 22px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-block;
+      margin-top: 8px;
+    }
+    .doubts-btn:hover { background: #ff6ab022; }
+
+    #doubts-panel {
+      display: none;
+      margin-top: 28px;
+      background: var(--surface);
+      border: 1px solid #ff6ab033;
+      border-radius: 12px;
+      padding: 28px 32px;
+    }
+    #doubts-panel.open { display: block; }
+
+    /* markdown rendering inside panel */
+    #doubts-content h2 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      color: var(--accent2);
+      margin-top: 36px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    #doubts-content h2:first-child { margin-top: 0; }
+    #doubts-content h3 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: #fff;
+      margin-top: 22px;
+      margin-bottom: 6px;
+    }
+    #doubts-content p { color: var(--muted); font-size: 14px; line-height: 1.8; margin-bottom: 10px; }
+    #doubts-content strong { color: var(--accent3); }
+    #doubts-content hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+    #doubts-content code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent3);
+    }
+    #doubts-content blockquote {
+      border-left: 3px solid var(--accent);
+      background: var(--tag-bg);
+      padding: 10px 16px;
+      border-radius: 0 6px 6px 0;
+      margin: 12px 0;
     }
 
-    /* ── loading spinner ── */
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner {
-      width: 20px; height: 20px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
+    .doubts-error {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      color: var(--accent2);
+      padding: 16px;
+      background: #ff6ab011;
+      border-radius: 8px;
     }
-
-    /* ── fade in ── */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(10px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .lec-card { animation: fadeUp 0.25s ease both; }
   </style>
 </head>
 <body>
-  <div class="container">
+<div class="container">
 
-    <!-- hero -->
-    <div class="index-hero">
-      <p class="hero-meta">IIT Kharagpur · NPTEL · Prof. S. K. Ghosh &amp; Dr. S. Chakraborty</p>
-      <h1 class="hero-title">Computer Networks<br>&amp; <span>Internet Protocols</span></h1>
-      <p class="hero-sub">All lecture notes, auto-loaded from the repo. New files show up on their own — no manual updates needed.</p>
-    </div>
-
-    <!-- search -->
-    <div class="search-wrap">
-      <span class="search-icon">⌕</span>
-      <input id="search" type="text" placeholder="search lectures — try '05' or '12'" autocomplete="off" />
-    </div>
-
-    <!-- status -->
-    <p class="status-line" id="status">loading...</p>
-
-    <!-- grid -->
-    <div class="lec-grid" id="grid"></div>
-
+  <div class="lec-header">
+    <span class="lec-tag">CNPP</span>
+    <h1>Computer Networks &amp;<br>Internet Protocols</h1>
+    <p style="color:var(--muted); font-size:14px; margin-top:8px;">Prof. Soumya Kanti Ghosh &amp; Dr. Sandip Chakraborty — IIT Kharagpur</p>
   </div>
 
-  <script>
-    const OWNER  = 'kavithahk-1706';
-    const REPO   = 'cnpp_nptel';
-    const API    = `https://api.github.com/repos/${OWNER}/${REPO}/contents/`;
-    const RAW    = `https://${OWNER}.github.io/${REPO}/`;
+  <div class="section">
+    <div class="section-label">Lectures</div>
+    <div class="index-grid">
+      <a class="lec-card done" href="lec01.html">
+        <div class="lec-num">Lec 01</div>
+        <div class="lec-title">Introduction</div>
+        <div class="lec-topic">Networks, internet, protocol basics</div>
+      </a>
+      <a class="lec-card done" href="lec02.html">
+        <div class="lec-num">Lec 02</div>
+        <div class="lec-title">Protocol Stacks</div>
+        <div class="lec-topic">OSI, TCP/IP, encapsulation, network devices</div>
+      </a>
+      <a class="lec-card done" href="lec03.html">
+        <div class="lec-num">Lec 03</div>
+        <div class="lec-title">Switching</div>
+        <div class="lec-topic">Circuit switching, packet switching</div>
+      </a>
+      <a class="lec-card done" href="lec04.html">
+        <div class="lec-num">Lec 04</div>
+        <div class="lec-title">Layered Services</div>
+        <div class="lec-topic">Virtual circuits, datagrams, hourglass model</div>
+      </a>
+      <a class="lec-card done" href="lec05.html">
+        <div class="lec-num">Lec 05</div>
+        <div class="lec-title">Application Layer — I</div>
+        <div class="lec-topic">App layer basics, sockets, ports</div>
+      </a>
+      <a class="lec-card done" href="lec06.html">
+        <div class="lec-num">Lec 06</div>
+        <div class="lec-title">Application Layer — II</div>
+        <div class="lec-topic">DNS deep dive</div>
+      </a>
+      <a class="lec-card done" href="lec07.html">
+        <div class="lec-num">Lec 07</div>
+        <div class="lec-title">Application Layer — III</div>
+        <div class="lec-topic">Client-server model, FTP, TFTP</div>
+      </a>
+      <a class="lec-card done" href="lec08.html">
+        <div class="lec-num">Lec 08</div>
+        <div class="lec-title">Application Layer — IV</div>
+        <div class="lec-topic">HTTP, HTML, TELNET</div>
+      </a>
+      <a class="lec-card wip" href="lec09.html">
+        <div class="lec-num">Lec 09</div>
+        <div class="lec-title">—</div>
+        <div class="lec-topic">not yet generated</div>
+      </a>
+      <a class="lec-card wip" href="lec10.html">
+        <div class="lec-num">Lec 10</div>
+        <div class="lec-title">—</div>
+        <div class="lec-topic">not yet generated</div>
+      </a>
+    </div>
+  </div>
 
-    const grid   = document.getElementById('grid');
-    const status = document.getElementById('status');
-    const search = document.getElementById('search');
+  <div class="section">
+    <div class="section-label">Doubts Log</div>
+    <p style="color:var(--muted); font-size:14px;">All clarified doubts from every session, reverse-engineered into Q&amp;A format.</p>
+    <button class="doubts-btn" onclick="toggleDoubts()">▸ open doubts_log.md</button>
 
-    let allLectures = []; // { num: '01', href: '...' }
+    <div id="doubts-panel">
+      <div id="doubts-content"><p style="color:var(--muted);">loading...</p></div>
+    </div>
+  </div>
 
-    // ── fetch files from github contents api ──
-    async function fetchLectures() {
-      try {
-        const res = await fetch(API);
-        if (!res.ok) throw new Error(`GitHub API ${res.status}`);
-        const files = await res.json();
+</div>
 
-        // filter for lec##.html pattern
-        const lecFiles = files
-          .filter(f => f.type === 'file' && /^lec\d+\.html$/i.test(f.name))
-          .map(f => {
-            const num = f.name.match(/\d+/)[0].padStart(2, '0');
-            return { num, name: f.name, href: `${RAW}${f.name}` };
-          })
-          .sort((a, b) => parseInt(a.num) - parseInt(b.num));
+<script>
+  let loaded = false;
 
-        allLectures = lecFiles;
-        renderGrid(allLectures);
+  function toggleDoubts() {
+    const panel = document.getElementById('doubts-panel');
+    const btn = document.querySelector('.doubts-btn');
+    const isOpen = panel.classList.contains('open');
 
-      } catch (err) {
-        grid.innerHTML = '';
-        status.innerHTML = '';
-        grid.innerHTML = `
-          <div class="state-box" style="grid-column:1/-1">
-            <div class="state-icon">⚠</div>
-            <p class="state-msg">couldn't reach the GitHub API</p>
-            <p class="state-sub">${err.message}<br>check your connection or try again in a bit</p>
-          </div>`;
-      }
+    if (isOpen) {
+      panel.classList.remove('open');
+      btn.textContent = '▸ open doubts_log.md';
+      return;
     }
 
-    // ── render cards ──
-    function renderGrid(lectures) {
-      grid.innerHTML = '';
+    panel.classList.add('open');
+    btn.textContent = '▾ close doubts_log.md';
 
-      if (lectures.length === 0) {
-        status.innerHTML = `<span>no results</span>`;
-        grid.innerHTML = `
-          <div class="state-box" style="grid-column:1/-1">
-            <div class="state-icon">⌕</div>
-            <p class="state-msg">nothing matches that</p>
-            <p class="state-sub">try a different number or clear the search</p>
-          </div>`;
-        return;
-      }
+    if (loaded) return;
 
-      status.innerHTML = `<span class="count">${lectures.length}</span> lecture${lectures.length !== 1 ? 's' : ''} available`;
-
-      lectures.forEach((lec, i) => {
-        const a = document.createElement('a');
-        a.className = 'lec-card';
-        a.href = lec.href;
-        a.style.animationDelay = `${i * 30}ms`;
-        a.innerHTML = `
-          <span class="card-num">LEC</span>
-          <span class="card-label">${lec.num}</span>
-          <span class="card-arrow">→</span>
-        `;
-        grid.appendChild(a);
+    fetch('doubts_log.md')
+      .then(r => {
+        if (!r.ok) throw new Error('file not found');
+        return r.text();
+      })
+      .then(md => {
+        document.getElementById('doubts-content').innerHTML = marked.parse(md);
+        loaded = true;
+      })
+      .catch(() => {
+        document.getElementById('doubts-content').innerHTML =
+          '<div class="doubts-error">could not load doubts_log.md — make sure it\'s in the same folder as index.html</div>';
       });
-    }
-
-    // ── loading state ──
-    function showLoading() {
-      status.innerHTML = 'fetching from repo...';
-      grid.innerHTML = `
-        <div class="state-box" style="grid-column:1/-1">
-          <div class="spinner"></div>
-          <p class="state-msg">hitting the github api</p>
-        </div>`;
-    }
-
-    // ── search ──
-    search.addEventListener('input', () => {
-      const q = search.value.trim().toLowerCase();
-      if (!q) { renderGrid(allLectures); return; }
-      const filtered = allLectures.filter(l =>
-        l.num.includes(q) || `lec${l.num}`.includes(q) || l.name.toLowerCase().includes(q)
-      );
-      renderGrid(filtered);
-    });
-
-    // ── go ──
-    showLoading();
-    fetchLectures();
-  </script>
+  }
+</script>
 </body>
 </html>

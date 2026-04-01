@@ -220,3 +220,37 @@ HTTP headers are plain-text key-value pairs (`Header-Name: value`) sent alongsid
 PUT replaces the entire resource at the target URL — whatever was there before is gone, replaced wholesale by what the client sent. PATCH does a partial update — only modifies the specified fields, leaving the rest intact. The lecture only covers PUT. PATCH is a real HTTP method (RFC 5789) but is out of scope for this course.
 
 ---
+
+## Lecture 09 — HTTP Proxy, HTML, TELNET
+
+---
+
+**Q: Is the TELNET use case correct — access a remote machine (Bengal) from a different location (Hyderabad) as if physically present?**
+Yes, exactly. telnetd runs on the remote machine, the telnet client connects to it over TCP, authenticates with login/password, and from that point every command executes on the remote system. the connection persists until explicitly closed.
+
+---
+
+**Q: Is FTP unidirectional while TELNET is bidirectional?**
+Partially correct, but the framing needs to be precise. FTP's DATA CONNECTION is unidirectional per transfer — data flows only one way at a time, either client→server (upload) or server→client (download), never both simultaneously on the same connection. The data connection can also be initiated by either side: server-initiated = active mode, client-initiated = passive mode. FTP also uses two separate TCP connections — port 21 for control, port 20 for data.
+
+TELNET, by contrast, uses a SINGLE TCP connection for both data and control, and that connection is full-duplex — both directions can flow simultaneously. So the right comparison is: FTP data connection = unidirectional per transfer; TELNET connection = full-duplex.
+
+---
+
+**Q: What kind of "terminal" does NVT abstract over — like Git Bash / WSL?**
+Yes, exactly that kind. Different systems historically had completely different physical/virtual terminal types (VT100, VT220, xterm, IBM 3270, etc.), each with its own escape sequences and control characters. NVT provides a common intermediate format: local terminal → NVT format → TCP → NVT → server's native terminal format. Both sides maintain an NVT layer and translate to/from it.
+
+---
+
+**Q: Is the bare minimum NVT capability set part of NVT or the TELNET protocol? Where do negotiated options fit?**
+The minimum capability set belongs to NVT — all NVT implementations must support it by definition. The negotiated options are deliberately NOT part of the TELNET protocol spec. This separation means new terminal features (new options) can be added without modifying the TELNET protocol itself. Two endpoints negotiate extra options on top of the NVT baseline at connection time.
+
+---
+
+**Q: What is line mode vs character mode in TELNET negotiated options?**
+Line mode: client buffers the entire input line locally and sends it in one go when you hit Enter. Character mode: every single keystroke is transmitted immediately to the server. Character mode is more responsive; line mode is more bandwidth-efficient. This is negotiated upfront between endpoints. Echo mode (local vs remote) is related — whether your terminal shows keystrokes locally or waits for the server to echo them back.
+
+---
+
+**Q: IAC escape — how does 255 as data vs 255 as command work?**
+Rule: if you see 255 and the next byte is ALSO 255 → it's an escape sequence meaning "this 255 is literal data, pass it to the application." If 255 is followed by anything other than 255 → treat it as a command. Analogous to bit stuffing / character stuffing: same principle of using a special marker to distinguish control info from data that happens to look like control info.
