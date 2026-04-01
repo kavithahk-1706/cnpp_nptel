@@ -1,281 +1,342 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lec 07 — Application Layer III: Client-Server & FTP</title>
-  <link rel="stylesheet" href="notes.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lec 07 — Client-Server & FTP</title>
+  <link rel="stylesheet" href="notes.css">
 </head>
 <body>
 <div class="container">
 
   <nav>
-    <a class="back-link" href="#">← index</a>
+    <a href="index.html" class="back-link">← index</a>
     <div class="nav-right">
-      <a class="nav-lec" href="lec06.html">← Lec 06</a>
-      <a class="nav-lec" href="lec08.html">Lec 08 →</a>
+      <a href="lec06.html" class="nav-lec">← lec06</a>
+      <a href="lec08.html" class="nav-lec">lec08 →</a>
     </div>
   </nav>
 
   <div class="lec-header">
-    <span class="lec-tag">Week 2 · Lecture 07</span>
-    <span class="high-badge">HIGH YIELD</span>
-    <h1>Application Layer III — Client-Server &amp; FTP</h1>
-    <p>Client-server paradigm, sockets &amp; 5-tuple, FTP dual-connection model, TFTP.</p>
+    <span class="lec-tag">Lecture 07</span>
+    <span class="med-badge">medium priority</span>
+    <h1>Application Layer — III<br>Client-Server &amp; FTP</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
   </div>
 
-  <!-- ───────────────────────────── 1. CLIENT-SERVER PARADIGM ───────────── -->
+  <!-- ── SECTION 1: Client-Server ── -->
   <div class="section">
-    <div class="section-label">01 — Client-Server Paradigm</div>
+    <div class="section-label">Client-Server Model</div>
 
-    <p>The dominant model for network application communication. A <strong>server</strong> is a process that offers a service; a <strong>client</strong> is a process that requests it. Both can live on the same machine or different machines — the handling is identical either way.</p>
+    <p>The <strong>client-server paradigm</strong> is the dominant model for network application design. A <strong>server</strong> is a process that offers a service and waits. A <strong>client</strong> is a process that requests that service. They can be on the same machine or different machines — the mechanism is identical either way.</p>
 
-    <div class="callout green">
-      <strong>Core rule:</strong> Server is always active, sleeping/waiting for a client request. Client initiates on demand.
+    <div class="callout">
+      <strong>Lifecycle:</strong> Server initializes → goes to sleep listening on a port → client wakes it up with a request → server responds → goes back to sleep → repeat. The server is always active, the client initiates.
     </div>
 
     <h3>Iterative vs Concurrent Servers</h3>
+    <p>When multiple clients arrive simultaneously, the server has two strategies for handling them:</p>
 
     <div class="compare">
       <div class="compare-col circuit-col">
         <div class="compare-col-header">Iterative Server</div>
         <div class="compare-body">
-          <div class="compare-row"><div class="label">when</div><div>Duration of each request is known in advance; resource must be allocated one at a time</div></div>
-          <div class="compare-row"><div class="label">how</div><div>Single copy runs; serves one client fully, then moves to the next</div></div>
-          <div class="compare-row"><div class="label">wait</div><div>Client <strong>may have to wait</strong> if server is busy</div></div>
+          <div class="compare-row"><span class="label">trigger</span>Service time per request is predictable / known in advance</div>
+          <div class="compare-row"><span class="label">mechanism</span>Single server process; handles one client completely before moving on</div>
+          <div class="compare-row"><span class="label">clients</span>Must queue and wait if server is busy</div>
+          <div class="compare-row"><span class="label">example</span>Resource reservation — concurrent access would cause conflicts</div>
         </div>
       </div>
       <div class="compare-col packet-col">
         <div class="compare-col-header">Concurrent Server</div>
         <div class="compare-body">
-          <div class="compare-row"><div class="label">when</div><div>Amount of work per request is unknown; most application servers (e.g. HTTP)</div></div>
-          <div class="compare-row"><div class="label">how</div><div><strong>Forks a child process</strong> per client; parent goes back to listening immediately</div></div>
-          <div class="compare-row"><div class="label">wait</div><div>Multiple clients served simultaneously up to resource limit</div></div>
+          <div class="compare-row"><span class="label">trigger</span>Service time per request is unknown or highly variable</div>
+          <div class="compare-row"><span class="label">mechanism</span>Forks a child process per client; parent immediately goes back to listening</div>
+          <div class="compare-row"><span class="label">clients</span>Served simultaneously up to resource limits</div>
+          <div class="compare-row"><span class="label">example</span>HTTP servers — iitkgp.ac.in can't make the whole internet wait</div>
         </div>
       </div>
     </div>
 
     <div class="callout yellow">
-      <strong>MCQ trap:</strong> "Server goes back to sleep after serving" describes iterative behaviour. Concurrent servers <em>fork</em>, not sleep.
-    </div>
-  </div>
-
-  <!-- ───────────────────────────── 2. SOCKET & 5-TUPLE ─────────────────── -->
-  <div class="section">
-    <div class="section-label">02 — Sockets &amp; the 5-Tuple</div>
-
-    <p>A <strong>socket</strong> is the OS mechanism for Inter-Process Communication (IPC) — allows one process to speak to another on the same or a different machine. Analogous to a file descriptor: you get a socket ID and use it for all subsequent I/O.</p>
-
-    <h3>The 5-Tuple</h3>
-    <p>Every network connection is uniquely identified by five fields:</p>
-
-    <div class="socket-tuple">
-      <span class="tuple-part tuple-ip">Server IP</span>
-      <span class="tuple-plus">+</span>
-      <span class="tuple-part tuple-port">Server Port</span>
-      <span class="tuple-plus">+</span>
-      <span class="tuple-part tuple-ip">Client IP</span>
-      <span class="tuple-plus">+</span>
-      <span class="tuple-part tuple-port">Client Port</span>
-      <span class="tuple-plus">+</span>
-      <span class="tuple-part tuple-socket">Protocol</span>
-    </div>
-
-    <div class="callout">
-      If client and server are on the <strong>same machine</strong>, Server IP = Client IP — but port numbers will still differ, so the 5-tuple stays unique.
-    </div>
-
-    <h3>Half-Socket → Full Association</h3>
-    <div class="two-col">
-      <div class="concept-card">
-        <div class="concept-title">Half Socket (server side)</div>
-        <div class="concept-desc">Protocol + Server IP + Server Port. Server opens this and <em>listens</em> — waiting for a client.</div>
-      </div>
-      <div class="concept-card">
-        <div class="concept-title">Half Socket (client side)</div>
-        <div class="concept-desc">Protocol + Client IP + Client Port. Client opens this and sends a connection request to the server.</div>
-      </div>
-    </div>
-    <p>When the handshake completes the two half-sockets merge into a full <strong>association</strong> (the complete 5-tuple) and the socket ID is returned for data transfer.</p>
-
-    <div class="callout yellow">
-      DNS resolves a hostname → IP address before any socket can be opened. Network layer only understands IPs — names are meaningless at L3.
-    </div>
-  </div>
-
-  <!-- ───────────────────────────── 3. FTP ─────────────────────────────── -->
-  <div class="section">
-    <div class="section-label">03 — FTP (File Transfer Protocol)</div>
-
-    <p>Defined in <strong>RFC 959</strong>. Transfers files over a network using a client-server model on top of <strong>TCP</strong> (reliable, connection-oriented). The defining feature of FTP: it uses <em>two separate TCP connections</em>.</p>
-
-    <h3>Dual-Connection Architecture</h3>
-
-    <div class="compare">
-      <div class="compare-col circuit-col">
-        <div class="compare-col-header">Control Connection — Port 21</div>
-        <div class="compare-body">
-          <div class="compare-row"><div class="label">purpose</div><div>Send/receive FTP commands (login, directory ops, logout)</div></div>
-          <div class="compare-row"><div class="label">lifetime</div><div>Stays open for the entire FTP session</div></div>
-          <div class="compare-row"><div class="label">managed by</div><div><strong>PI</strong> — Protocol Interpreter</div></div>
-          <div class="compare-row"><div class="label">direction</div><div>Both ways (commands and server replies)</div></div>
-        </div>
-      </div>
-      <div class="compare-col packet-col">
-        <div class="compare-col-header">Data Connection — Port 20</div>
-        <div class="compare-body">
-          <div class="compare-row"><div class="label">purpose</div><div>Actual file/data transfer</div></div>
-          <div class="compare-row"><div class="label">lifetime</div><div>Opened only when a data transfer command is issued; closed after transfer</div></div>
-          <div class="compare-row"><div class="label">managed by</div><div><strong>DTP</strong> — Data Transfer Process</div></div>
-          <div class="compare-row"><div class="label">direction</div><div>Unilateral — either client→server <em>or</em> server→client, never both simultaneously</div></div>
-        </div>
-      </div>
+      <strong>Forking:</strong> When a request arrives at a concurrent server, it forks a child process that handles that specific client end-to-end. The parent process immediately returns to listening. As many children as resources allow can run simultaneously.
     </div>
 
     <div class="callout pink">
-      <strong>MCQ critical:</strong> Only one data transfer can occur per data connection. If multiple transfers are needed in one FTP session, a distinct data connection is opened for each.
+      <strong>MCQ trap:</strong> "Server goes back to sleep after serving" = iterative behaviour. Concurrent servers <em>fork</em>, not sleep. The parent goes back to listening; the child does the work.
+    </div>
+  </div>
+
+  <!-- ── SECTION 2: Sockets & 5-tuple ── -->
+  <div class="section">
+    <div class="section-label">Sockets &amp; the 5-Tuple</div>
+
+    <p>Every connection on a network is uniquely identified by a <strong>5-tuple</strong>. IP identifies the machine, port identifies the process on that machine. Together they nail down exactly one endpoint on each side.</p>
+
+    <div class="socket-tuple">
+      <div class="tuple-part tuple-ip">Protocol</div>
+      <div class="tuple-plus">+</div>
+      <div class="tuple-part tuple-ip">Source IP</div>
+      <div class="tuple-plus">+</div>
+      <div class="tuple-part tuple-port">Source Port</div>
+      <div class="tuple-plus">+</div>
+      <div class="tuple-part tuple-ip">Dest IP</div>
+      <div class="tuple-plus">+</div>
+      <div class="tuple-part tuple-port">Dest Port</div>
+      <div class="tuple-eq">=</div>
+      <div class="tuple-part tuple-socket">unique connection</div>
     </div>
 
+    <p>This is why you can have five browser tabs open to five different sites at the same time — each tab gets a different source port, making each one a distinct 5-tuple and therefore a distinct, independent connection.</p>
+
+    <h3>What is a Socket?</h3>
+    <p>A <strong>socket</strong> is the OS mechanism for Inter-Process Communication (IPC). It lets one process talk to another — same machine or across the network. Analogy: a telephone line between two processes.</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Half-Association (3-tuple)</div>
+        <div class="concept-desc">One endpoint: <strong>Protocol + IP + Port</strong>. The server opens a half-socket and waits. The client opens its own half-socket. Neither is a connection yet — they need each other.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Full Association (5-tuple)</div>
+        <div class="concept-desc">Both half-sockets combined. Once the handshake succeeds, the OS issues a <strong>socket ID</strong>. All subsequent data transfer just uses this ID — no need to re-specify the whole tuple every time.</div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <strong>Socket ID ≈ file descriptor:</strong> In C, you open a file and get a file ID to use for all reads and writes. Same concept — open a socket, get a socket ID, use it for all data transfer. The plumbing is hidden behind the ID.
+    </div>
+
+    <div class="callout yellow">
+      <strong>MCQ note:</strong> DNS must resolve a hostname → IP before any socket can be opened. The network layer only understands IP addresses — names are meaningless at L3. So the sequence is always: DNS lookup → get IP → open socket.
+    </div>
+
+    <h3>What you need to build a network app</h3>
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">Application Layer</div>
+        <div class="impl-impl">Berkeley Socket Interface (API)</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Transport Layer</div>
+        <div class="impl-impl">TCP or UDP</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">Network Layer</div>
+        <div class="impl-impl">IP</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">Data Link Layer</div>
+        <div class="impl-impl">Ethernet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: FTP ── -->
+  <div class="section">
+    <div class="section-label">FTP — File Transfer Protocol</div>
+
+    <p><strong>FTP</strong> (defined in RFC 959) is the application layer protocol for transferring files over a network. It follows the client-server model and uses <strong>TCP</strong> underneath for reliable, connection-oriented transfer. FTP also relies on the Telnet protocol for some control operations.</p>
+
+    <div class="callout pink">
+      FTP's defining quirk: it maintains <strong>two separate TCP connections simultaneously</strong> — one for commands and one for data. Most protocols use one. FTP uses two.
+    </div>
+
+    <h3>The Two Connections</h3>
+    <div class="two-col">
+      <div class="proto-card">
+        <div class="proto-layer">Connection 1 — always open</div>
+        <div class="proto-card-title">Control Connection</div>
+        <div class="proto-card-sub">Server Port 21</div>
+        <div class="proto-card-desc">Persistent for the entire session. Used for login, FTP commands, directory navigation, and server response messages. Stays open even when no data is being transferred — this is the command channel.</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Connection 2 — on demand</div>
+        <div class="proto-card-title">Data Connection</div>
+        <div class="proto-card-sub">Server Port 20 (default)</div>
+        <div class="proto-card-desc">Opened only when a data transfer is actually needed (file upload, download, directory listing). Closed immediately after each transfer. One distinct data connection per transfer command.</div>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Data connection is unidirectional:</strong> in any single data connection, data flows only one way — either client→server or server→client, never both simultaneously. Also, it can be initiated by either side: server-initiated = <strong>active</strong>, client-initiated = <strong>passive</strong>.
+    </div>
+
+    <div class="callout pink">
+      <strong>MCQ critical:</strong> Only <strong>one data transfer per data connection</strong>. If multiple files need transferring in a single FTP session, a distinct data connection is opened for each transfer. The control connection stays open the whole time.
+    </div>
+
+    <h3>Internal Architecture: PI &amp; DTP</h3>
+    <p>Both client and server applications are internally split into two processes that mirror each other:</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">PI — Protocol Interpreter</div>
+        <div class="concept-desc">Manages the <strong>control connection</strong>. Translates application-level commands into RFC 959-compliant FTP commands and communicates them to the other side. Stays active for the whole session.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">DTP — Data Transfer Process</div>
+        <div class="concept-desc">Manages the <strong>data connection</strong>. Handles actual file transfer after the PI has set things up. DTP comes into play only when a command requires data to move. After transfer, control returns to PI.</div>
+      </div>
+    </div>
+
+    <p><strong>Client</strong> additionally has a User Interface on top. <strong>Server</strong> has only PI + DTP — no UI needed. Each side has its own file system; data moves between them via the data connection.</p>
+
     <h3>Active vs Passive Mode</h3>
+    <p>This refers to which side initiates the data connection (not the control connection — that's always client→server on port 21).</p>
+
     <div class="compare">
       <div class="compare-col circuit-col">
         <div class="compare-col-header">Active Mode</div>
         <div class="compare-body">
-          <div class="compare-row"><div class="label">control</div><div>Client (large port N) → Server port 21</div></div>
-          <div class="compare-row"><div class="label">data</div><div>Client port N+1 ← Server port 20</div></div>
-          <div class="compare-row"><div class="label">initiator</div><div><strong>Server</strong> initiates data connection</div></div>
+          <div class="compare-row"><span class="label">control</span>Client port N (&gt;1023) → Server port 21</div>
+          <div class="compare-row"><span class="label">data</span>Client port N+1 ← Server port 20</div>
+          <div class="compare-row"><span class="label">initiator</span><strong>Server</strong> initiates data connection → "active"</div>
+          <div class="compare-row"><span class="label">problem</span>Firewalls on the client side often block inbound connections, breaking this</div>
         </div>
       </div>
       <div class="compare-col packet-col">
         <div class="compare-col-header">Passive Mode</div>
         <div class="compare-body">
-          <div class="compare-row"><div class="label">control</div><div>Client (large port N) → Server port 21</div></div>
-          <div class="compare-row"><div class="label">data</div><div>Client port N+1 → Server (ephemeral port &gt;1023)</div></div>
-          <div class="compare-row"><div class="label">initiator</div><div><strong>Client</strong> initiates data connection</div></div>
+          <div class="compare-row"><span class="label">control</span>Client port N (&gt;1023) → Server port 21</div>
+          <div class="compare-row"><span class="label">data</span>Client port N+1 → Server large port (&gt;1023)</div>
+          <div class="compare-row"><span class="label">initiator</span><strong>Client</strong> initiates data connection → "passive"</div>
+          <div class="compare-row"><span class="label">why it's used</span>Client always initiates outbound connections, so firewalls don't block it</div>
         </div>
       </div>
     </div>
 
-    <div class="callout">
-      Ephemeral ports are any port &gt;1023 — i.e. not a reserved/well-known port. Both client and server can agree to use these for data in passive mode.
-    </div>
-
-    <h3>Internal Components (both client and server)</h3>
-    <div class="three-col">
-      <div class="concept-card">
-        <div class="concept-title">PI — Protocol Interpreter</div>
-        <div class="concept-desc">Manages the <strong>control connection</strong>. Translates app-specific commands into RFC 959 FTP commands. Client PI ↔ Server PI talk to each other over port 21.</div>
-      </div>
-      <div class="concept-card">
-        <div class="concept-title">DTP — Data Transfer Process</div>
-        <div class="concept-desc">Manages the <strong>data connection</strong>. Does the actual file movement. Activated only when PI determines a data transfer is required.</div>
-      </div>
-      <div class="concept-card">
-        <div class="concept-title">User Interface (client only)</div>
-        <div class="concept-desc">CLI or GUI that the user interacts with. Translates user actions into PI commands.</div>
-      </div>
-    </div>
-
     <h3>File Transfer Modes</h3>
+    <p>Must be specified before transferring a file. Mismatch = corrupted file.</p>
     <div class="tag-row">
-      <span class="tag tag-good">ASCII — text, html, etc.</span>
-      <span class="tag tag-good">Binary — doc, pdf, media, etc.</span>
-    </div>
-    <p>Must be declared before transfer using the <code>TYPE</code> command.</p>
-
-    <h3>Key FTP Commands (exam relevant)</h3>
-
-    <div class="two-col">
-      <div class="interface-card">
-        <div class="interface-title">Access Commands</div>
-        <div class="interface-desc">USER, PASS, ACCT, REIN (re-init), QUIT (logout), ABOR (abort previous command)</div>
-      </div>
-      <div class="interface-card">
-        <div class="interface-title">File Management</div>
-        <div class="interface-desc">CWD (change directory), DELE (delete file), MKD (make directory), RMD (remove directory), PWD (print working directory)</div>
-      </div>
-    </div>
-    <div class="two-col">
-      <div class="interface-card">
-        <div class="interface-title">Data Formatting</div>
-        <div class="interface-desc">TYPE (ASCII/binary), STRU (file/record/page structure), MODE (stream/block/compressed)</div>
-      </div>
-      <div class="interface-card">
-        <div class="interface-title">File Transfer</div>
-        <div class="interface-desc">RETR (retrieve/download from server), STOR (store/upload to server), STAT (return status of file set)</div>
-      </div>
+      <span class="tag tag-good">ASCII — .txt, .html, .js, .asp (text files)</span>
+      <span class="tag tag-bad">Binary / Image — .doc, .pdf, .mp3, .mp4 (everything else)</span>
     </div>
   </div>
 
-  <!-- ───────────────────────────── 4. TFTP ────────────────────────────── -->
+  <!-- ── SECTION 4: TFTP ── -->
   <div class="section">
-    <div class="section-label">04 — TFTP (Trivial FTP)</div>
+    <div class="section-label">TFTP — Trivial File Transfer Protocol</div>
 
-    <p><strong>Trivial File Transfer Protocol</strong> — a stripped-down FTP variant for resource-constrained environments. The key contrast with FTP:</p>
+    <p>TFTP is the stripped-down sibling of FTP for resource-constrained environments — diskless devices, routers, switches that need a firmware or config file pushed at boot time, where full FTP would be overkill.</p>
 
     <div class="compare">
       <div class="compare-col circuit-col">
         <div class="compare-col-header">FTP</div>
         <div class="compare-body">
-          <div class="compare-row"><div class="label">transport</div><div>TCP (reliable)</div></div>
-          <div class="compare-row"><div class="label">control port</div><div>21</div></div>
-          <div class="compare-row"><div class="label">data port</div><div>20 (or ephemeral)</div></div>
-          <div class="compare-row"><div class="label">auth</div><div>USER + PASS</div></div>
-          <div class="compare-row"><div class="label">features</div><div>Full directory ops, multiple transfer modes</div></div>
+          <div class="compare-row"><span class="label">transport</span>TCP — reliable, connection-oriented</div>
+          <div class="compare-row"><span class="label">ports</span>21 (control), 20 (data)</div>
+          <div class="compare-row"><span class="label">auth</span>Username + password (USER, PASS commands)</div>
+          <div class="compare-row"><span class="label">features</span>Full directory nav, permissions, multiple transfer types, resume support</div>
+          <div class="compare-row"><span class="label">use case</span>General file transfer between machines</div>
         </div>
       </div>
       <div class="compare-col packet-col">
         <div class="compare-col-header">TFTP</div>
         <div class="compare-body">
-          <div class="compare-row"><div class="label">transport</div><div><strong>UDP</strong> (unreliable)</div></div>
-          <div class="compare-row"><div class="label">initial port</div><div><strong>69</strong></div></div>
-          <div class="compare-row"><div class="label">subsequent</div><div>Client &amp; server negotiate ephemeral port after initial contact</div></div>
-          <div class="compare-row"><div class="label">auth</div><div><strong>None</strong> — inherently insecure</div></div>
-          <div class="compare-row"><div class="label">features</div><div>Read file from server OR write file to server only</div></div>
+          <div class="compare-row"><span class="label">transport</span>UDP — unreliable, no connection setup</div>
+          <div class="compare-row"><span class="label">ports</span>69 (initial), then client+server negotiate a different port for the rest</div>
+          <div class="compare-row"><span class="label">auth</span>None — insecure by design</div>
+          <div class="compare-row"><span class="label">features</span>Read a file from server OR write a file to server. That's it.</div>
+          <div class="compare-row"><span class="label">use case</span>Firmware updates, diskless device boot, router config pushes</div>
         </div>
       </div>
     </div>
 
     <div class="callout green">
-      <strong>Use cases for TFTP:</strong> uploading router/switch firmware or config files at boot, diskless devices downloading boot images, any automated process where user credentials aren't feasible.
+      <strong>Why UDP for TFTP?</strong> These use cases happen on controlled local/internal networks where packet loss is rare. TCP's overhead isn't worth it for a one-time config push over a trusted internal link. Security is handled by the physical environment (no external connections), not the protocol.
     </div>
 
     <div class="callout pink">
-      <strong>MCQ trap:</strong> TFTP uses <strong>UDP</strong>, not TCP. FTP = TCP port 21/20. TFTP = UDP port 69. Don't mix these up.
+      <strong>MCQ trap:</strong> TFTP uses <strong>UDP port 69</strong>, not TCP. FTP = TCP ports 21 (control) / 20 (data). TFTP = UDP port 69 (initial only — subsequent transfer uses a negotiated ephemeral port). Don't mix these up.
     </div>
   </div>
 
-  <!-- ───────────────────────────── QUICK REF ─────────────────────────── -->
+  <!-- ── SECTION 5: FTP Commands ── -->
+  <div class="section">
+    <div class="section-label">FTP Commands — Reference</div>
+
+    <h3>Access Commands</h3>
+    <table class="port-table">
+      <thead><tr><th>Command</th><th>Argument</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td class="proto-name">USER</td><td>User ID</td><td>Send username</td></tr>
+        <tr><td class="proto-name">PASS</td><td>Password</td><td>Send password</td></tr>
+        <tr><td class="proto-name">ACCT</td><td>Account</td><td>Account/billing info</td></tr>
+        <tr><td class="proto-name">REIN</td><td>—</td><td>Reinitialize session</td></tr>
+        <tr><td class="proto-name">QUIT</td><td>—</td><td>Log out</td></tr>
+        <tr><td class="proto-name">ABOR</td><td>—</td><td>Abort previous command</td></tr>
+      </tbody>
+    </table>
+
+    <h3>File Management Commands</h3>
+    <table class="port-table">
+      <thead><tr><th>Command</th><th>Argument</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td class="proto-name">CWD</td><td>Directory</td><td>Change working directory</td></tr>
+        <tr><td class="proto-name">CDUP</td><td>—</td><td>Go to parent directory</td></tr>
+        <tr><td class="proto-name">DELE</td><td>File name</td><td>Delete a file</td></tr>
+        <tr><td class="proto-name">LIST</td><td>Directory</td><td>List files with attributes</td></tr>
+        <tr><td class="proto-name">NLIST</td><td>Directory</td><td>List file names only (no attributes)</td></tr>
+        <tr><td class="proto-name">MKD</td><td>Directory</td><td>Create new directory</td></tr>
+        <tr><td class="proto-name">PWD</td><td>—</td><td>Print current directory path</td></tr>
+        <tr><td class="proto-name">RMD</td><td>Directory</td><td>Remove a directory</td></tr>
+        <tr><td class="proto-name">RNFR</td><td>Old file name</td><td>Identify file to rename (from)</td></tr>
+        <tr><td class="proto-name">RNTO</td><td>New file name</td><td>Complete the rename (to)</td></tr>
+        <tr><td class="proto-name">SMNT</td><td>File system</td><td>Mount a file system</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Data Formatting Commands</h3>
+    <table class="port-table">
+      <thead><tr><th>Command</th><th>Options</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td class="proto-name">TYPE</td><td>A (ASCII), E (EBCDIC), I (Image/Binary), N (Nonprint), T (Telnet)</td><td>Define file type and print format</td></tr>
+        <tr><td class="proto-name">STRU</td><td>F (File), R (Record), P (Page)</td><td>Define data organization</td></tr>
+        <tr><td class="proto-name">MODE</td><td>S (Stream), B (Block), C (Compressed)</td><td>Define transmission mode</td></tr>
+      </tbody>
+    </table>
+
+    <h3>File Transfer Commands</h3>
+    <table class="port-table">
+      <thead><tr><th>Command</th><th>Argument</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td class="proto-name">RETR</td><td>File name</td><td>Download file: server → client</td></tr>
+        <tr><td class="proto-name">STOR</td><td>File name</td><td>Upload file: client → server (overwrites)</td></tr>
+        <tr><td class="proto-name">APPE</td><td>File name</td><td>Like STOR but appends if file already exists</td></tr>
+        <tr><td class="proto-name">STOU</td><td>File name</td><td>Like STOR but guarantees unique filename on server</td></tr>
+        <tr><td class="proto-name">ALLO</td><td>File name</td><td>Pre-allocate storage space on server</td></tr>
+        <tr><td class="proto-name">REST</td><td>Data point</td><td>Set file marker at a position (for resuming transfers)</td></tr>
+        <tr><td class="proto-name">STAT</td><td>File name</td><td>Return status of file(s)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── QUICK REF ── -->
   <div class="section">
     <div class="section-label">Quick Reference — Ports &amp; Protocols</div>
-
     <table class="port-table">
       <thead>
-        <tr>
-          <th>Protocol</th>
-          <th>Port(s)</th>
-          <th>Transport</th>
-          <th>Notes</th>
-        </tr>
+        <tr><th>Protocol</th><th>Port(s)</th><th>Transport</th><th>Notes</th></tr>
       </thead>
       <tbody>
         <tr>
           <td class="proto-name">FTP Control</td>
           <td class="port-num">21</td>
           <td><span class="transport tcp-badge">TCP</span></td>
-          <td>Commands, login, session management — stays open whole session</td>
+          <td>Commands, login, session management — stays open the whole session</td>
         </tr>
         <tr>
           <td class="proto-name">FTP Data</td>
           <td class="port-num">20</td>
           <td><span class="transport tcp-badge">TCP</span></td>
-          <td>Active mode default; ephemeral in passive mode; opened per transfer</td>
+          <td>Active mode default; ephemeral port in passive mode; opened per transfer</td>
         </tr>
         <tr>
           <td class="proto-name">TFTP</td>
           <td class="port-num">69</td>
           <td><span class="transport udp-badge">UDP</span></td>
-          <td>Initial contact only; subsequent transfer uses negotiated ephemeral port</td>
+          <td>Initial contact only; subsequent transfer uses negotiated ephemeral port; no auth</td>
         </tr>
       </tbody>
     </table>

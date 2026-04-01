@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 10 — SMTP & SNMP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a class="back-link" href="#">← index</a>
+    <div class="nav-right">
+      <a class="nav-lec" href="#">← lec 09</a>
+      <a class="nav-lec" href="#">lec 11 →</a>
+    </div>
+  </nav>
+
+  <!-- ── HEADER ── -->
+  <div class="lec-header">
+    <span class="lec-tag">Week 10</span>
+    <span class="high-badge">HIGH YIELD</span>
+    <h1>Application Layer — V<br>SMTP &amp; SNMP</h1>
+    <p>Two more application-layer protocols: SMTP for email delivery and MIME for non-ASCII content, plus POP3/IMAP4 for mail access. Then SNMP — the protocol that silently keeps your entire network from dying.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 1 — SMTP OVERVIEW
+  ═══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Part 1 — SMTP</div>
+    <h3>Simple Mail Transfer Protocol — Basics</h3>
+
+    <div class="callout green">
+      <strong>MCQ anchor:</strong> SMTP runs over <strong>TCP</strong>, default port <strong>25</strong>. Defined in RFC 821 (1982, Jon Postel). Message format defined in RFC 822/2822.
+    </div>
+
+    <p>SMTP is a client-server protocol. The server listens at port 25. The goal: transfer mail <em>reliably</em> between mail clients across the internet.</p>
+
+    <h4>Two Core Components</h4>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">User Agent (UA)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>Prepares the message and encloses it in an envelope. Examples: Thunderbird, Eudora. Sits at the user-facing end.</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Mail Transfer Agent (MTA)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>Transfers mail across the internet. Examples: Sendmail, Exim, Postfix. Acts as both SMTP client and server. Analogous to the postal service.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <p>MTAs can also act as <strong>relays</strong> — receive a mail and forward it onward toward the destination MTA. A <strong>mail gateway</strong> accepts mail in non-SMTP formats and converts it to SMTP before forwarding.</p>
+
+    <h4>Email Structure</h4>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Envelope</span>
+        <span class="arrow">→</span>
+        <span class="vci">Sender address + receiver address + routing metadata</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Header</span>
+        <span class="arrow">→</span>
+        <span class="vci">From, To, Subject, Date — human-readable metadata</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Body</span>
+        <span class="arrow">→</span>
+        <span class="vci">Actual message content (the payload)</span>
+      </div>
+    </div>
+
+    <h4>SMTP Keywords (Commands)</h4>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Keyword</th>
+          <th>Purpose</th>
+          <th>Priority</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">HELO</td>
+          <td>Sender identifies itself — sends its host domain name</td>
+          <td><span class="transport tcp-badge">core</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">MAIL FROM</td>
+          <td>Email address of the sender</td>
+          <td><span class="transport tcp-badge">core</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">RCPT TO</td>
+          <td>Email address of the intended recipient</td>
+          <td><span class="transport tcp-badge">core</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">DATA</td>
+          <td>Start of message body; terminated by a lone dot on a line</td>
+          <td><span class="transport tcp-badge">core</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">QUIT</td>
+          <td>Formal connection termination by client</td>
+          <td><span class="transport tcp-badge">core</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">VRFY</td>
+          <td>Verify a username</td>
+          <td><span class="transport udp-badge">extra</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">EXPN</td>
+          <td>Expand a mailing list</td>
+          <td><span class="transport udp-badge">extra</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">RSET / NOOP / TURN / HELP</td>
+          <td>Reset session / no-op / reverse roles / help</td>
+          <td><span class="transport udp-badge">extra</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>SMTP Status Codes</h4>
+    <div class="callout yellow">
+      <strong>Pattern to remember:</strong> 2xx = OK, 3xx = more info needed, 4xx = temporary error (retry), 5xx = permanent failure (bad user/address)
+    </div>
+    <table class="port-table">
+      <thead><tr><th>Code Range</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td class="port-num">2xx</td><td>Success</td></tr>
+        <tr><td class="port-num">3xx</td><td>Command accepted, more information required</td></tr>
+        <tr><td class="port-num">4xx</td><td>Command rejected — <em>temporary</em> error (client should retry)</td></tr>
+        <tr><td class="port-num">5xx</td><td>Command rejected — <em>permanent</em> failure (bad user etc.)</td></tr>
+      </tbody>
+    </table>
+
+    <h4>SMTP Session Flow</h4>
+    <div class="vci-box">
+      <div class="vci-row"><span class="port">Step 1</span><span class="arrow">→</span><span class="vci">TCP connection established (client → server port 25)</span></div>
+      <div class="vci-row"><span class="port">Step 2</span><span class="arrow">→</span><span class="vci">Server sends <strong>220</strong> service ready</span></div>
+      <div class="vci-row"><span class="port">Step 3</span><span class="arrow">→</span><span class="vci">Client sends <strong>HELO</strong> → server responds <strong>250 OK</strong></span></div>
+      <div class="vci-row"><span class="port">Step 4</span><span class="arrow">→</span><span class="vci">Client: <strong>MAIL FROM:</strong>&lt;addr&gt; → server: 250 OK</span></div>
+      <div class="vci-row"><span class="port">Step 5</span><span class="arrow">→</span><span class="vci">Client: <strong>RCPT TO:</strong>&lt;addr&gt; → server: 250 OK</span></div>
+      <div class="vci-row"><span class="port">Step 6</span><span class="arrow">→</span><span class="vci">Client: <strong>DATA</strong> → server: 354 start input → client sends headers, blank line, body, ends with lone <code>.</code></span></div>
+      <div class="vci-row"><span class="port">Step 7</span><span class="arrow">→</span><span class="vci">Server: <strong>250</strong> mail accepted</span></div>
+      <div class="vci-row"><span class="port">Step 8</span><span class="arrow">→</span><span class="vci">Client: <strong>QUIT</strong> → server: <strong>221</strong> service closing</span></div>
+    </div>
+
+    <div class="callout pink">
+      <strong>MCQ trap:</strong> You can replicate an SMTP session manually using Telnet (e.g., <code>telnet mailserver 25</code>). Same idea as doing HTTP via Telnet on port 80.
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 2 — MIME
+  ═══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Part 2 — MIME</div>
+    <h3>Multipurpose Internet Mail Extensions</h3>
+
+    <p>Basic SMTP only handles <strong>7-bit ASCII</strong>. MIME is an extension that enables sending non-ASCII data (images, audio, video, executables) by encoding it into 7-bit NVT ASCII that SMTP can carry.</p>
+
+    <div class="callout">
+      <strong>Where MIME lives:</strong> MIME headers sit <em>between</em> the email header and the body. They describe what the body contains and how it's encoded.
+    </div>
+
+    <h4>MIME Header Fields</h4>
+    <table class="port-table">
+      <thead><tr><th>Field</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td class="proto-name">MIME-Version</td><td>Identifies message as MIME-formatted</td></tr>
+        <tr><td class="proto-name">Content-Type</td><td>Type/subtype of the data (text/plain, image/jpeg, etc.)</td></tr>
+        <tr><td class="proto-name">Content-Transfer-Encoding</td><td>How data is encoded for transmission</td></tr>
+        <tr><td class="proto-name">Content-ID</td><td>Unique identifier for the content</td></tr>
+        <tr><td class="proto-name">Content-Description</td><td>Human-readable description</td></tr>
+      </tbody>
+    </table>
+
+    <h4>MIME Content Types</h4>
+    <div class="tag-row">
+      <span class="tag tag-good">text</span>
+      <span class="tag tag-good">application</span>
+      <span class="tag tag-good">image</span>
+      <span class="tag tag-good">audio</span>
+      <span class="tag tag-good">video</span>
+      <span class="tag tag-good">multipart</span>
+    </div>
+
+    <h4>Transfer Encodings</h4>
+    <div class="tag-row">
+      <span class="tag tag-good">7-bit</span>
+      <span class="tag tag-good">8-bit</span>
+      <span class="tag tag-good">binary</span>
+      <span class="tag tag-good">base64</span>
+      <span class="tag tag-good">quoted-printable</span>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Note:</strong> Some mail servers block certain content types (executables, large videos). Those are application-level restrictions on top of SMTP — MIME itself just defines the encoding format.
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 3 — MAIL ACCESS PROTOCOLS
+  ═══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Part 3 — Mail Access</div>
+    <h3>POP3 vs IMAP4</h3>
+
+    <p>SMTP delivers mail <em>to</em> the mail server. But how does the user <em>retrieve</em> it? That's what mail access protocols are for. MTA delivers to the mailbox; user uses POP3 or IMAP4 to pull it out.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">POP3 — Post Office Protocol v3</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Style</span><span>Simple download model</span></div>
+          <div class="compare-row"><span class="label">Download</span><span>Pulls all messages from server to client</span></div>
+          <div class="compare-row"><span class="label">After DL</span><span>User can delete or keep on server</span></div>
+          <div class="compare-row"><span class="label">Headers</span><span>Must download full message to read</span></div>
+          <div class="compare-row"><span class="label">Location</span><span>Primarily single-device use</span></div>
+          <div class="compare-row"><span class="label">Goal</span><span>Minimize server resource usage</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">IMAP4 — Internet Message Access Protocol v4</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Style</span><span>Full mailbox management on server</span></div>
+          <div class="compare-row"><span class="label">Download</span><span>Can download partial emails</span></div>
+          <div class="compare-row"><span class="label">Pre-DL</span><span>Can check <strong>headers before downloading</strong></span></div>
+          <div class="compare-row"><span class="label">Search</span><span>Search email for a string <em>before</em> downloading</span></div>
+          <div class="compare-row"><span class="label">Location</span><span>Access from any device/location</span></div>
+          <div class="compare-row"><span class="label">Mailboxes</span><span>Create, delete, rename mailboxes on server</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <strong>MCQ anchor:</strong> IMAP4 key differentiators — check headers before download, search before download, partial email download, multi-device access, server-side mailbox management.
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SECTION 4 — SNMP OVERVIEW
+  ═══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Part 4 — SNMP</div>
+    <h3>Simple Network Management Protocol</h3>
+
+    <p>While most protocols are about moving data, SNMP is about <em>managing the network itself</em>. Two core functions: <strong>monitor</strong> (collect info to ensure health) and <strong>control</strong> (act on that info to fix/change things).</p>
+
+    <div class="callout">
+      <strong>RFC 1157</strong> defines the components. SNMP runs on <strong>UDP</strong> (not TCP — manager queries are fast, stateless).
+    </div>
+
+    <h4>SNMP Architecture — Components</h4>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">SNMP Agent</span>
+        <span class="arrow">→</span>
+        <span class="vci">Software running on a network device (router, host, printer). Maintains a local database of config/state. Reports to the manager.</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">SNMP Manager</span>
+        <span class="arrow">→</span>
+        <span class="vci">Application program (management station) that queries or modifies the agent's database. Network admin uses this.</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">MIB</span>
+        <span class="arrow">→</span>
+        <span class="vci">Management Information Base — text file on the agent describing what managed objects exist and their structure, using ASN.1 syntax.</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">SNMP Protocol</span>
+        <span class="arrow">→</span>
+        <span class="vci">The application-layer protocol used by agents and managers to exchange data. Runs on UDP port 161.</span>
+      </div>
+    </div>
+
+    <h4>MIB — Management Information Base</h4>
+    <p>MIB is a text file that describes managed objects using <strong>ASN.1</strong> (Abstract Syntax Notation 1) — a formal language for describing data structures. Each managed object is assigned an <strong>OID (Object Identifier)</strong> — a sequence of integers separated by dots (e.g., 1.3.6.1.2.1.1.1) that uniquely identifies it. MIB-2 (RFC 1213) defines the standard managed objects for TCP/IP networks.</p>
+
+    <div class="callout yellow">
+      Manager sends the OID to the agent to request a specific piece of data. Think of OIDs as a unique address for each piece of network info.
+    </div>
+
+    <h4>SNMP Operations</h4>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Operation</th>
+          <th>Direction</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Get-request</td>
+          <td>Manager → Agent</td>
+          <td>Request value of one or more objects</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Get-next-request</td>
+          <td>Manager → Agent</td>
+          <td>Request next object in <strong>lexicographical OID order</strong></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Set-request</td>
+          <td>Manager → Agent</td>
+          <td>Modify the value of one or more objects</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Get-response</td>
+          <td>Agent → Manager</td>
+          <td>Response to Get-request, Get-next-request, or Set-request</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Trap</td>
+          <td>Agent → Manager</td>
+          <td><strong>Unsolicited</strong> notification — agent pushes alert on a specific event without waiting for a query</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout pink">
+      <strong>MCQ trap:</strong> Traps are the only SNMP messages <em>initiated by the agent</em> without a request from the manager. Everything else is request-response. Port 161 for request/response; traps go to port 162.
+    </div>
+
+    <h4>SNMP Versions</h4>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>Year</th>
+          <th>PDU Counter</th>
+          <th>Security</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">SNMPv1</td>
+          <td>1990</td>
+          <td>32-bit</td>
+          <td>Community string as plain text password — no encryption. Essentially none.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">SNMPv2c</td>
+          <td>1996</td>
+          <td>64-bit</td>
+          <td>Attempted to fix security, failed. Still community-based (the "c").</td>
+        </tr>
+        <tr>
+          <td class="proto-name">SNMPv3</td>
+          <td>2002</td>
+          <td>—</td>
+          <td>Full security: <strong>Integrity</strong> (packet not tampered), <strong>Authentication</strong> (valid source), <strong>Privacy/Confidentiality</strong> (encrypted). CIA triad.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout green">
+      <strong>MCQ anchor — SNMPv3 security triad:</strong> Integrity + Authentication + Privacy (confidentiality). Many agents and managers support all 3 versions simultaneously.
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       QUICK REFERENCE — BOTH PROTOCOLS
+  ═══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Quick Reference</div>
+    <h3>Lec 10 at a Glance</h3>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Protocol</th>
+          <th>Transport</th>
+          <th>Port</th>
+          <th>Purpose</th>
+          <th>RFC</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">SMTP</td>
+          <td><span class="transport tcp-badge">TCP</span></td>
+          <td class="port-num">25</td>
+          <td>Mail transfer between MTAs</td>
+          <td>821, 822</td>
+        </tr>
+        <tr>
+          <td class="proto-name">POP3</td>
+          <td><span class="transport tcp-badge">TCP</span></td>
+          <td class="port-num">110</td>
+          <td>Mail retrieval (download-and-delete model)</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td class="proto-name">IMAP4</td>
+          <td><span class="transport tcp-badge">TCP</span></td>
+          <td class="port-num">143</td>
+          <td>Mail retrieval (full server-side management)</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td class="proto-name">SNMP</td>
+          <td><span class="transport udp-badge">UDP</span></td>
+          <td class="port-num">161 / 162</td>
+          <td>Network monitoring and management</td>
+          <td>1157</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

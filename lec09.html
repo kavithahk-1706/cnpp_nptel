@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 09 — HTTP Proxy, HTML & TELNET</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a class="back-link" href="#">← All Lectures</a>
+    <div class="nav-right">
+      <a class="nav-lec" href="#">← Lec 08</a>
+      <a class="nav-lec" href="#">Lec 10 →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div>
+      <span class="lec-tag">Lecture 09</span>
+      <span class="high-badge">Application Layer</span>
+    </div>
+    <h1>HTTP Proxy, HTML & TELNET</h1>
+    <p style="color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 13px;">
+      Prof. Soumya Kanti Ghosh · IIT Kharagpur · CNPP
+    </p>
+  </div>
+
+  <!-- ───────────────────────────── HTTP PROXY ─────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Part 1 — HTTP Proxy</div>
+
+    <h3>What is an HTTP Proxy?</h3>
+    <p>
+      An HTTP proxy server sits <strong>between the client and the actual HTTP server</strong> and acts on behalf of one or both sides. It is an intermediate server that intercepts HTTP requests and responses.
+    </p>
+
+    <div class="callout yellow">
+      <strong>Proxy ≠ server.</strong> The client talks to the proxy; the proxy talks to the real server. From the client's perspective, the proxy IS the server.
+    </div>
+
+    <h4>What a proxy can do</h4>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Caching</div>
+        <div class="concept-desc">Stores responses locally. If another client requests the same resource, the proxy serves it directly without contacting the origin server — faster, less bandwidth.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Filtering</div>
+        <div class="concept-desc">Controls which clients can access which resources. Can block specific URLs, domains, or content types — used in corporate networks and schools.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Logging</div>
+        <div class="concept-desc">Logs all HTTP traffic passing through. Useful for monitoring, auditing, and debugging network activity.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────── HTML ────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Part 2 — HTML</div>
+
+    <h3>What is HTML?</h3>
+    <p>
+      <strong>HyperText Markup Language</strong> — a computer language used to create web pages. A browser (HTTP client) requests an HTML document from the web server, then parses and renders it. Files use <code>.html</code> or <code>.htm</code> extension.
+    </p>
+
+    <div class="callout green">
+      HTML is a <strong>tag language</strong>. Tags tell the browser how to display content — format, colour, position, structure. The browser has a built-in HTML parser/interpreter.
+    </div>
+
+    <h3>Document Structure</h3>
+    <p>Every valid HTML document follows this skeleton:</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">&lt;html&gt;</span>
+        <span class="arrow">→</span>
+        <span style="color: var(--text); font-size: 13px;">Container for the entire document</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">&lt;head&gt;</span>
+        <span class="arrow">→</span>
+        <span style="color: var(--text); font-size: 13px;">Metadata: title, charset, links to CSS etc.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">&lt;title&gt;</span>
+        <span class="arrow">→</span>
+        <span style="color: var(--text); font-size: 13px;">Page title shown in browser tab</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">&lt;body&gt;</span>
+        <span class="arrow">→</span>
+        <span style="color: var(--text); font-size: 13px;">All visible page content goes here</span>
+      </div>
+    </div>
+
+    <h3>Tags — The Basics</h3>
+    <p>Tags come in <strong>pairs</strong>: an opening tag and a closing tag. The content between them is the <em>element content</em>. Tags are not case-sensitive, but the modern standard is lowercase.</p>
+
+    <div class="callout">
+      <strong>Opening:</strong> <code>&lt;p&gt;</code> &nbsp;|&nbsp; <strong>Closing:</strong> <code>&lt;/p&gt;</code> &nbsp;|&nbsp; <strong>Empty (self-closing):</strong> <code>&lt;img&gt;</code> (no closing tag needed)
+    </div>
+
+    <h3>Key Tags — Quick Reference</h3>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Tag</th>
+          <th>Purpose</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">&lt;h1&gt;…&lt;h6&gt;</td>
+          <td class="proto-name">Headings</td>
+          <td>6 levels, h1 = largest</td>
+        </tr>
+        <tr>
+          <td class="port-num">&lt;p&gt;</td>
+          <td class="proto-name">Paragraph</td>
+          <td>Inserts space before/after</td>
+        </tr>
+        <tr>
+          <td class="port-num">&lt;a href="url"&gt;</td>
+          <td class="proto-name">Hyperlink</td>
+          <td>Two parts: address + display text</td>
+        </tr>
+        <tr>
+          <td class="port-num">&lt;img src="url" alt="desc"&gt;</td>
+          <td class="proto-name">Image</td>
+          <td>Empty tag — no closing tag. alt = screen reader description</td>
+        </tr>
+        <tr>
+          <td class="port-num">&lt;div&gt;</td>
+          <td class="proto-name">Division / Section</td>
+          <td>Groups elements; apply format/style to a section</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Link Types (3 kinds)</h4>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Same Folder</div>
+        <div class="concept-desc"><code>&lt;a href="page.html"&gt;</code> — just the filename, no path needed.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Different Folder</div>
+        <div class="concept-desc"><code>&lt;a href="/folder/page.html"&gt;</code> — relative path from root.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">External (Internet)</div>
+        <div class="concept-desc"><code>&lt;a href="https://iitk.ac.in"&gt;</code> — full absolute URL.</div>
+      </div>
+    </div>
+
+    <h4>Image Path Types</h4>
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">Same Folder</div>
+        <div class="interface-desc"><code>src="samplePic.gif"</code> — browser looks in same directory as HTML file.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">Different Folder</div>
+        <div class="interface-desc"><code>src="/images/samplePic.gif"</code> — specify the path explicitly.</div>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      <strong>DTD (Document Type Definition):</strong> Defines what elements/attributes are valid in an HTML document. The <code>&lt;!DOCTYPE html&gt;</code> declaration at the top of a page tells the browser which version of HTML rules to apply.
+    </div>
+  </div>
+
+  <!-- ───────────────────────────── TELNET ─────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Part 3 — TELNET</div>
+
+    <h3>What is TELNET?</h3>
+    <p>
+      TELNET is a protocol (and program) that allows a user to <strong>remotely log into another system</strong> over a network and work on it as if physically present. It provides a <strong>general, bidirectional, 8-bit byte-oriented communication facility</strong>.
+    </p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Protocol</div>
+        <div class="concept-desc">TELNET (RFC 854) — defines how the connection is established, commands are sent, and terminals communicate.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Application / Program</div>
+        <div class="concept-desc">Also called <code>telnet</code> — the client-side program that implements the TELNET protocol. Server-side daemon = <strong>telnetd</strong>.</div>
+      </div>
+    </div>
+
+    <h3>Key Technical Facts</h3>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 12px;">RFC</td>
+          <td class="proto-name">854</td>
+        </tr>
+        <tr>
+          <td style="color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 12px;">Default Port</td>
+          <td class="port-num">23</td>
+        </tr>
+        <tr>
+          <td style="color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 12px;">Transport</td>
+          <td><span class="transport tcp-badge">TCP</span> — connection-oriented</td>
+        </tr>
+        <tr>
+          <td style="color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 12px;">Data + Control</td>
+          <td class="proto-name">Same TCP connection (unlike FTP which uses port 20 + 21)</td>
+        </tr>
+        <tr>
+          <td style="color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 12px;">Communication</td>
+          <td class="proto-name">Bidirectional, 8-bit byte-oriented</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout pink">
+      <strong>TELNET vs FTP — key difference:</strong> FTP uses two separate connections — port 21 for control, port 20 for data. TELNET uses a single TCP connection for everything.
+    </div>
+
+    <h3>Network Virtual Terminal (NVT)</h3>
+    <p>
+      Different systems have different terminal types, escape characters, and control sequences. To handle this, TELNET introduces an <strong>intermediate abstraction layer</strong> — the NVT.
+    </p>
+
+    <div class="callout green">
+      <strong>NVT =</strong> an intermediate representation of a generic terminal. It provides a <strong>standard language</strong> for communicating terminal control functions between any two systems, regardless of their native terminal type.
+    </div>
+
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Client Side</div>
+        <div class="proto-names">Local terminal → NVT → TCP</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Server Side</div>
+        <div class="proto-names">TCP → NVT → Server processes</div>
+      </div>
+    </div>
+
+    <p>Both TELNET client and server maintain an NVT layer. The client maps its local terminal into NVT; the server maps NVT into whatever its native environment expects.</p>
+
+    <h3>Negotiated Options</h3>
+    <p>
+      All NVTs support a <strong>minimal set of capabilities</strong>. Additional capabilities beyond this baseline are <strong>optional and negotiated</strong> between the two endpoints at connection time.
+    </p>
+    <div class="callout">
+      Options are <strong>NOT part of the TELNET protocol itself</strong> — they're separate. This means new terminal features can be added without changing the protocol. The two endpoints negotiate mutually acceptable options.
+    </div>
+
+    <h4>Examples of Negotiated Options</h4>
+    <div class="tag-row">
+      <span class="tag tag-good">Line mode vs Character mode</span>
+      <span class="tag tag-good">Echo mode (local vs remote)</span>
+      <span class="tag tag-good">Character set (ASCII vs EBCDIC)</span>
+    </div>
+
+    <h3>TELNET Control Functions</h3>
+    <p>TELNET includes a set of control functions for managing the terminal session. These provide a <strong>uniform mechanism</strong> for both ends to signal things beyond raw data.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Function</th>
+          <th>Code</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Interrupt Process (IP)</td>
+          <td class="port-num">—</td>
+          <td>Suspend / abort the currently running process</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Abort Output (AO)</td>
+          <td class="port-num">—</td>
+          <td>Stop sending further output to the user terminal</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Are You There (AYT)</td>
+          <td class="port-num">—</td>
+          <td>"Are you alive?" — checks if the remote system is still running</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Erase Character (EC)</td>
+          <td class="port-num">—</td>
+          <td>Delete the last character sent</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Erase Line (EL)</td>
+          <td class="port-num">—</td>
+          <td>Delete all input on the current line</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>IAC — Interpret As Command</h3>
+    <p>
+      Since data and control share the same TCP connection, TELNET needs a way to distinguish regular data from commands. It uses a special escape byte.
+    </p>
+
+    <div class="callout pink">
+      <strong>IAC (Interpret As Command)</strong> = byte value <strong>255</strong>. When the TELNET layer sees a 255, it interprets the following byte as a command, not data.
+    </div>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Receive 255 → next byte is 255</span>
+        <span class="arrow">→</span>
+        <span style="color: var(--text); font-size:13px;">Single byte 255 passed to application as data (escaped)</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Receive 255 → next byte is anything else</span>
+        <span class="arrow">→</span>
+        <span style="color: var(--text); font-size:13px;">TELNET layer interprets it as a command and executes accordingly</span>
+      </div>
+    </div>
+
+    <h3>TELNET as a Generic TCP Client</h3>
+    <p>
+      TELNET is more than just remote login. Because it establishes a raw TCP connection and passes whatever you type, it works as a <strong>generic ASCII-based TCP client</strong> — useful for testing any ASCII-protocol TCP server.
+    </p>
+
+    <div class="callout green">
+      You can test an SMTP mail server by doing <code>telnet mailserver.com 25</code> — TELNET connects, and you interact directly with the SMTP protocol. Same idea for any ASCII-based protocol.
+    </div>
+
+    <h4>Unix Default Servers (accessible via TELNET)</h4>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Port</th>
+          <th>Server</th>
+          <th>What it does</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">7</td>
+          <td class="proto-name">Echo</td>
+          <td>Echoes back everything you send — useful for connectivity tests</td>
+        </tr>
+        <tr>
+          <td class="port-num">9</td>
+          <td class="proto-name">Discard</td>
+          <td>Accepts and discards everything — tests that sending works</td>
+        </tr>
+        <tr>
+          <td class="port-num">13</td>
+          <td class="proto-name">Daytime</td>
+          <td>Responds with current date and time</td>
+        </tr>
+        <tr>
+          <td class="port-num">19</td>
+          <td class="proto-name">Chargen</td>
+          <td>Continuously generates character data</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>TELNET — Architecture Summary</h3>
+
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">User Applications / Processes</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Multi-user / Access Interface + Control Interface</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">NVT (Network Virtual Terminal)</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-phys">TCP (Connection-Oriented Transport)</div>
+      </div>
+    </div>
+
+    <h3>TELNET — Authentication & Access</h3>
+    <p>
+      When a TELNET connection is established to a remote server, the server prompts for a <strong>login and password</strong>. Once authenticated, the user gets access according to the permissions set on the server — browse directory structures, execute programs, etc. The session persists until explicitly closed or an error occurs.
+    </p>
+
+    <div class="callout yellow">
+      <strong>Security note (exam awareness):</strong> TELNET transmits everything — including passwords — in <strong>plain text over TCP</strong>. This is why it's been largely replaced by <strong>SSH</strong> (Secure Shell) in modern systems. TELNET is now mostly used for testing, not real remote access.
+    </div>
+  </div>
+
+  <!-- ───────────────────────────── SUMMARY ─────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Lecture Summary</div>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">HTML</div>
+        <div class="compare-body">
+          <div class="compare-row"><div class="label">Full form</div><div>HyperText Markup Language</div></div>
+          <div class="compare-row"><div class="label">Purpose</div><div>Structure and display web pages</div></div>
+          <div class="compare-row"><div class="label">Parsed by</div><div>Browser's HTML parser/renderer</div></div>
+          <div class="compare-row"><div class="label">Tags</div><div>Open+close pairs; empty tags (img)</div></div>
+          <div class="compare-row"><div class="label">Transport</div><div>Delivered via HTTP</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">TELNET</div>
+        <div class="compare-body">
+          <div class="compare-row"><div class="label">RFC</div><div>854</div></div>
+          <div class="compare-row"><div class="label">Port</div><div>23 (default)</div></div>
+          <div class="compare-row"><div class="label">Transport</div><div>TCP — connection-oriented</div></div>
+          <div class="compare-row"><div class="label">Data+Ctrl</div><div>Same connection (≠ FTP)</div></div>
+          <div class="compare-row"><div class="label">Key idea</div><div>NVT + IAC (255) + negotiated options</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <strong>Coming up next:</strong> SMTP (Simple Mail Transfer Protocol) — application layer protocol for email, runs on port 25. Also SNMP (management protocol). Both build on concepts from this lecture.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
