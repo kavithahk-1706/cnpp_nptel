@@ -193,3 +193,30 @@ TC is a flag in the DNS header (used by both TCP and UDP). DNS normally runs ove
 Just one row in the DNS database. Every record has: name (what domain), type (A = IPv4 address, NS = nameserver, MX = mail server, etc.), class (almost always IN = internet), TTL (how long to cache this), and the actual data value. The entire DNS system is just a massive distributed collection of these records. Nothing more complicated than that.
 
 ---
+## Lecture 07 — Client-Server & FTP
+
+---
+
+**Q: Is the TCP connection setup a 3-way handshake?**
+Yes. TCP uses a 3-way handshake to establish a connection before any data flows: (1) client sends SYN, (2) server responds SYN-ACK, (3) client sends ACK. Only after this is the full socket association (5-tuple) live and the socket ID assigned by the OS.
+
+---
+
+**Q: What exactly is the Berkeley Socket Interface?**
+It's the standard API that abstracts socket programming so application code doesn't need to interact with the OS kernel directly. Defines system calls: `socket()`, `bind()`, `connect()`, `listen()`, `accept()`, `send()`, `recv()`. Originally from BSD Unix, now implemented by virtually every OS (Linux natively, Windows via Winsock, macOS). It's the standard — there's no real competing interface for TCP/IP socket programming.
+
+---
+
+## Lecture 08 — HTTP
+
+---
+
+**Q: What actually goes into an HTTP application-layer header?**
+HTTP headers are plain-text key-value pairs (`Header-Name: value`) sent alongside requests and responses. They carry metadata the application needs to function — not the actual data being transferred. Categories: General headers (Cache-Control, Connection, Date — apply to both), Request headers (Accept, Accept-Language, Host, User-Agent — sent by client), Response headers (Server, Age, Retry-After — sent by server), Entity headers (Content-Type, Content-Length, Content-Encoding, Last-Modified — describe the body). The body is separate from headers, below the blank separator line.
+
+---
+
+**Q: What's the difference between PUT and PATCH?**
+PUT replaces the entire resource at the target URL — whatever was there before is gone, replaced wholesale by what the client sent. PATCH does a partial update — only modifies the specified fields, leaving the rest intact. The lecture only covers PUT. PATCH is a real HTTP method (RFC 5789) but is out of scope for this course.
+
+---
