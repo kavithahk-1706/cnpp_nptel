@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lec 11 — Transport Layer: Services</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+   <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec10.html" class="nav-lec">← prev</a>
+      <a href="lec12.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 11</span>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>Transport Layer — 1: Services</h1>
+    <p><strong>Prof. Sandip Chakraborty</strong> · IIT Kharagpur · CNPP</p>
+    <p>Introduces the transport layer — what it is, where it lives in the protocol stack, why it exists on top of an unreliable network layer, and the complete set of services it provides. Lays the groundwork for TCP vs UDP.</p>
+  </div>
+
+  <!-- ── 1. WHERE TRANSPORT LAYER SITS ── -->
+  <div class="section">
+    <div class="section-label">1 · Position in the Stack</div>
+
+    <p>The TCP/IP stack has 5 layers. End hosts run all 5; intermediate devices only run lower layers:</p>
+
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">Application</div>
+        <div class="impl-impl">end hosts only</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Transport</div>
+        <div class="impl-impl">end hosts only</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">Network (IP)</div>
+        <div class="impl-impl">routers / L3 switches</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">Data Link</div>
+        <div class="impl-impl">L2 switches</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-phys">Physical</div>
+        <div class="impl-impl">all nodes</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      The transport layer exists <strong>only at the two communicating end hosts</strong>. Intermediate routers have no transport layer — they only see up to Layer 3 (the IP header). This is why transport layer services are described as <strong>end-to-end</strong>.
+    </div>
+
+    <p>The transport layer acts as the <strong>interface between user applications and the operating system</strong>. Data from the application passes into the OS through the transport layer.</p>
+  </div>
+
+  <!-- ── 2. IMPLEMENTATION BREAKDOWN ── -->
+  <div class="section">
+    <div class="section-label">2 · Physical Implementation Inside a Host</div>
+
+    <p>Inside an individual computer, the layers are implemented across three tiers:</p>
+
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Hardware (NIC)</div>
+        <div class="proto-names">Physical Layer</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">Network Interface Card (NIC) handles all physical layer functions. In wireless networks, parts of the data link layer are also pushed into hardware for speed and robustness.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Firmware / Device Driver</div>
+        <div class="proto-names">Data Link Layer (MAC)</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">The driver installed for the NIC implements the MAC sub-layer. The upper part of the data link layer (Logical Link Control / LLC) sits in the OS kernel.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">OS Kernel</div>
+        <div class="proto-names">LLC · Network · Transport</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">In UNIX-type OSes, the kernel implements LLC, the full IP layer, and both TCP and UDP transport layer protocols.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">User Space</div>
+        <div class="proto-names">Application Layer</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">Browser, chat apps, YouTube, Facebook — all application layer software. Designed by application developers, runs on top of the kernel-provided transport services.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3. ENCAPSULATION RECAP ── -->
+  <div class="section">
+    <div class="section-label">3 · Encapsulation (Headers Added Per Layer)</div>
+
+    <p>Each layer adds its own header as data travels down the stack from sender to receiver:</p>
+
+    <div class="stack">
+      <div class="stack-layer layer-app">
+        <span class="layer-name">HTTP Data + HTTP Header</span>
+        <span class="layer-desc">App layer</span>
+      </div>
+      <div class="stack-layer layer-trans">
+        <span class="layer-name">+ TCP/UDP Header</span>
+        <span class="layer-desc">Transport layer</span>
+      </div>
+      <div class="stack-layer layer-net">
+        <span class="layer-name">+ IP Header</span>
+        <span class="layer-desc">Network layer</span>
+      </div>
+      <div class="stack-layer layer-dl">
+        <span class="layer-name">+ MAC Header</span>
+        <span class="layer-desc">Data link layer</span>
+      </div>
+      <div class="stack-layer layer-phys">
+        <span class="layer-name">+ Physical Header [+ Trailer]</span>
+        <span class="layer-desc">Physical layer</span>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      Some physical layer protocols also add a <strong>trailer</strong> (appended at the end of the frame) to mark the end of the frame, in addition to the header at the front.
+    </div>
+
+    <p>As an application developer, you must specify which transport layer protocol (TCP or UDP) your application will use — this determines which header gets wrapped around your data.</p>
+  </div>
+
+  <!-- ── 4. WHY TRANSPORT LAYER EXISTS ── -->
+  <div class="section">
+    <div class="section-label">4 · Why the Transport Layer is Needed</div>
+
+    <h3>The Problem: Network Layer is Unreliable</h3>
+
+    <p>The network layer provides <strong>best-effort datagram delivery</strong> — it tries to forward packets hop-by-hop using destination IP addresses, but it provides <strong>no guarantee</strong> that data actually arrives.</p>
+
+    <p>Reasons packets get dropped at the network layer:</p>
+
+    <div class="tag-row">
+      <span class="tag tag-bad">Router buffer overflow</span>
+      <span class="tag tag-bad">Physical transmission errors</span>
+      <span class="tag tag-bad">Wireless channel interference</span>
+      <span class="tag tag-bad">Congestion</span>
+    </div>
+
+    <div class="callout pink">
+      Routers maintain finite buffers. When the buffer fills up due to high network load, <strong>incoming packets are simply dropped</strong>. The network layer makes no attempt to recover them.
+    </div>
+
+    <h3>The Solution: Transport Layer Services</h3>
+    <p>The transport layer sits on top of the unreliable network layer and provides <strong>end-to-end services</strong> that guarantee applications get what they need — reliability, ordering, flow control, and more.</p>
+
+    <div class="callout green">
+      Key principle: <strong>Applications should not be affected by packet loss at intermediate routers.</strong> The transport layer hides this unreliability from the application.
+    </div>
+  </div>
+
+  <!-- ── 5. SERVICES PROVIDED ── -->
+  <div class="section">
+    <div class="section-label">5 · Transport Layer Services</div>
+
+    <h3>Connection Establishment</h3>
+    <p>Before transferring data, the transport layer performs a "handshake" — analogous to saying <em>hello</em> at the start of a phone call. One host sends a hello to verify the other end is alive and ready. Once both ends acknowledge, a <strong>logical connection</strong> is established and data transfer begins. This ensures the receiver is available before the sender commits to sending data.</p>
+
+    <h3>Reliable Data Delivery</h3>
+    <p>The transport layer monitors whether each piece of data has been successfully received at the other end. If a packet is lost in transit, the transport layer <strong>detects the loss and retransmits</strong> the missing data — so the application eventually gets everything it was supposed to receive, regardless of what the network layer dropped.</p>
+
+    <h3>Flow Control</h3>
+    <p>Flow control addresses a <strong>speed mismatch between sender and receiver</strong>. Example: sender can transmit at 10 Mbps but receiver can only process at 1 Mbps. Without flow control, the sender floods the network with data the receiver can't handle — the excess is wasted and the network gets unnecessarily loaded.</p>
+
+    <div class="callout">
+      Flow control forces the <strong>transmitter and receiver to agree on a transmission rate</strong> — the sender can only push data as fast as the receiver can consume it.
+    </div>
+
+    <h3>Congestion Control</h3>
+    <p>Distinct from flow control — congestion control handles the <strong>network itself being overloaded</strong>, not just the receiver. Intermediate routers receive traffic from multiple paths simultaneously. If too many packets converge on one router, it becomes congested (analogous to a traffic junction with vehicles from multiple roads). The transport layer reduces the transmission rate to avoid contributing to this congestion.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Flow Control</div>
+        <div class="compare-body">
+          <div class="compare-row"><div class="label">Problem</div><div>Receiver too slow for sender</div></div>
+          <div class="compare-row"><div class="label">Scope</div><div>Between the two end hosts</div></div>
+          <div class="compare-row"><div class="label">Fix</div><div>Sender slows down to match receiver's rate</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Congestion Control</div>
+        <div class="compare-body">
+          <div class="compare-row"><div class="label">Problem</div><div>Network routers overloaded</div></div>
+          <div class="compare-row"><div class="label">Scope</div><div>The intermediate network</div></div>
+          <div class="compare-row"><div class="label">Fix</div><div>Sender slows down to relieve network load</div></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Ordered Packet Delivery</h3>
+    <p>In a packet-switched network, packets from the same stream may take <strong>different paths</strong> through the network and arrive <strong>out of order</strong>. Example: packet 3 arrives before packet 2 because it took a faster route. The transport layer assigns <strong>sequence numbers</strong> to packets and reorders them at the receiving end before delivering to the application. Applications always see data in the correct order.</p>
+
+    <div class="callout yellow">
+      The network layer delivers datagrams — the order they arrive is not guaranteed. The transport layer imposes order on top of this chaos.
+    </div>
+  </div>
+
+  <!-- ── 6. TCP vs UDP ── -->
+  <div class="section">
+    <div class="section-label">6 · TCP vs UDP</div>
+
+    <p>The transport layer has two major protocol families. Which one to use depends entirely on what the application needs.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">UDP — User Datagram Protocol</div>
+        <div class="compare-body">
+          <div class="compare-row"><div class="label">Model</div><div>Thin wrapper over the network (IP) layer</div></div>
+          <div class="compare-row"><div class="label">Services</div><div>Minimal — no connection, no reliability, no ordering, no flow/congestion control</div></div>
+          <div class="compare-row"><div class="label">Priority</div><div>Speed and low latency over correctness</div></div>
+          <div class="compare-row"><div class="label">Loss</div><div>Acceptable — application handles it</div></div>
+          <div class="compare-row"><div class="label">Use cases</div><div>Multimedia streaming, DNS, real-time protocols</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">TCP — Transmission Control Protocol</div>
+        <div class="compare-body">
+          <div class="compare-row"><div class="label">Model</div><div>Full-featured, connection-oriented protocol</div></div>
+          <div class="compare-row"><div class="label">Services</div><div>Connection establishment, reliable delivery, flow control, congestion control, ordered delivery</div></div>
+          <div class="compare-row"><div class="label">Priority</div><div>Correctness and completeness over speed</div></div>
+          <div class="compare-row"><div class="label">Loss</div><div>Not acceptable — retransmission guaranteed</div></div>
+          <div class="compare-row"><div class="label">Use cases</div><div>HTTP, FTP, file transfer, web browsing</div></div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Why UDP Exists — The Delay Trade-off</h4>
+    <p>Every service the transport layer provides comes at a cost: <strong>processing delay</strong>. Implementing reliability, ordering, and congestion control introduces latency. For applications like video streaming, getting the frame within a deadline matters more than getting every frame perfectly — a missed frame can be approximated by averaging adjacent frames. Adding TCP's overhead would cause unacceptable delays. UDP eliminates this overhead entirely.</p>
+
+    <div class="callout green">
+      Multimedia protocols can tolerate loss up to a point — a missing frame can be interpolated from neighbours. But <strong>receiving data within a time deadline is non-negotiable</strong>. UDP serves this requirement; TCP does not.
+    </div>
+
+    <h4>Protocol Usage Summary</h4>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Application Layer Protocol</th>
+          <th>Transport Layer</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">HTTP</td>
+          <td><span class="transport tcp-badge">TCP</span></td>
+          <td>Web data must be complete and ordered</td>
+        </tr>
+        <tr>
+          <td class="proto-name">FTP</td>
+          <td><span class="transport tcp-badge">TCP</span></td>
+          <td>File transfer must be reliable</td>
+        </tr>
+        <tr>
+          <td class="proto-name">DNS</td>
+          <td><span class="transport udp-badge">UDP</span></td>
+          <td>Short queries — speed critical, loss tolerable</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Multimedia / RTP</td>
+          <td><span class="transport udp-badge">UDP</span></td>
+          <td>Real-time, loss-tolerant, latency-sensitive</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 7. SUMMARY TABLE ── -->
+  <div class="section">
+    <div class="section-label">7 · Services Summary</div>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>What it Does</th>
+          <th>TCP</th>
+          <th>UDP</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Connection Establishment</td>
+          <td>Verifies receiver is alive before sending</td>
+          <td><span class="transport tcp-badge">Yes</span></td>
+          <td><span class="transport udp-badge">No</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Reliable Data Delivery</td>
+          <td>Retransmits lost packets; guarantees arrival</td>
+          <td><span class="transport tcp-badge">Yes</span></td>
+          <td><span class="transport udp-badge">No</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Flow Control</td>
+          <td>Matches sender rate to receiver capacity</td>
+          <td><span class="transport tcp-badge">Yes</span></td>
+          <td><span class="transport udp-badge">No</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Congestion Control</td>
+          <td>Prevents overloading intermediate network</td>
+          <td><span class="transport tcp-badge">Yes</span></td>
+          <td><span class="transport udp-badge">No</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Ordered Delivery</td>
+          <td>Reorders out-of-order packets before delivery</td>
+          <td><span class="transport tcp-badge">Yes</span></td>
+          <td><span class="transport udp-badge">No</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Coming up in Lec 12:</strong> Deep dive into each service — starting with connection establishment. Socket programming will also be covered to show how end-to-end communication is implemented in code.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

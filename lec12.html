@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 12 — Transport Layer II: Connection</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+   <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec11.html" class="nav-lec">← prev</a>
+      <a href="lec13.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <header class="lec-header">
+    <span class="lec-tag">Lecture 12</span>
+    <h1>Transport Layer — II: Connection Establishment</h1>
+    <p>Why establishing a logical connection in a packet-switching network is non-trivial, the problem of delayed duplicates, three proposed solutions, and the sequence-numbering requirements that form the foundation of TCP connection setup.</p>
+  </header>
+
+  <!-- SECTION 1: CONTEXT -->
+  <div class="section">
+    <div class="section-label">Context &amp; Motivation</div>
+
+    <p>The network layer provides <strong>unreliable, best-effort datagram delivery</strong>. The transport layer builds services on top of this. The first such service examined here is <strong>connection establishment</strong> — ensuring both ends are live, ready, and in agreement before data transfer begins.</p>
+
+    <div class="callout">
+      In a telephone (circuit-switched) network, a simple "hello" suffices for connection establishment — the path is dedicated and reliable. In a packet-switched network, this assumption breaks down entirely.
+    </div>
+
+    <p>Problems unique to packet-switched networks that complicate connection establishment:</p>
+
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Problem 1</div>
+        <div class="proto-names">Packet Loss</div>
+        <p style="font-size:14px; margin-top:6px;">Router buffers overflow under high load; packets are silently dropped. A connection request may never arrive.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Problem 2</div>
+        <div class="proto-names">Arbitrary Delay</div>
+        <p style="font-size:14px; margin-top:6px;">Congestion at intermediate routers causes packets to queue for variable, unpredictable durations — analogous to road congestion.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Problem 3</div>
+        <div class="proto-names">Corruption</div>
+        <p style="font-size:14px; margin-top:6px;">Packets can be corrupted in transit, requiring detection and retransmission.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Problem 4</div>
+        <div class="proto-names">Duplicate Delivery</div>
+        <p style="font-size:14px; margin-top:6px;">Retransmission for reliability means a packet that was merely delayed (not lost) may arrive twice — once from the original, once from the retransmit. These are <strong>delayed duplicates</strong>.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: NAIVE PROTOCOL -->
+  <div class="section">
+    <div class="section-label">The Naive Protocol &amp; Its Failure</div>
+
+    <h3>Two-Way Handshake (and why it fails)</h3>
+    <p>A straightforward attempt at connection establishment in a client-server model:</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Client</span>
+        <span class="arrow">──── CONNECTION REQUEST ────►</span>
+        <span class="vci">Server (LISTEN state)</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Client</span>
+        <span class="arrow">◄── CONNECTION ACK ──────────</span>
+        <span class="vci">Server</span>
+      </div>
+    </div>
+
+    <p>This works under ideal conditions but fails because of <strong>delayed duplicates</strong>. Consider: the client sends a connection request, which gets delayed in the network. The client times out, assumes the packet was lost, and retransmits. Now the server receives two connection requests. It cannot determine whether the second is:</p>
+    <ul style="margin: 10px 0 10px 20px; color: var(--text); font-size:15px; line-height:2;">
+      <li>A duplicate of the first (caused by retransmission).</li>
+      <li>A genuinely new connection request (because the client crashed and restarted).</li>
+    </ul>
+
+    <div class="callout pink">
+      <strong>The core challenge:</strong> In a packet-switching network, a receiver cannot reliably distinguish a fresh connection request from a delayed duplicate of an old one. This is the fundamental problem that all subsequent solutions address.
+    </div>
+
+    <p>There is a fundamental design trade-off here:</p>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Correctness-first</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Add mechanisms to always distinguish delayed duplicates from new requests. Protocol is correct but complex and slow — overhead eats into throughput.</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Performance-first</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Accept that rare edge-cases may fail; minimise handshake overhead. Protocol has an acceptable level of conformance with delayed-duplicate handling.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: THREE SOLUTIONS -->
+  <div class="section">
+    <div class="section-label">Handling Delayed Duplicates — Three Solutions</div>
+
+    <h3>Solution 1: Throwaway Transport Addresses (Port Numbers)</h3>
+    <p><strong>Idea:</strong> Once a port number has been used for a connection, never reuse it. If the application crashes and restarts, it must use a fresh port. Delayed duplicates addressed to the old port will find no matching transport process and be discarded.</p>
+
+    <div class="callout pink">
+      <strong>Why it fails:</strong> Port numbers are 16-bit — a finite space. Every crashed-and-restarted connection permanently retires a port. Eventually, the address space is exhausted. Completely infeasible in practice.
+    </div>
+
+    <h3>Solution 2: Unique Connection Identifier per Segment</h3>
+    <p><strong>Idea:</strong> The initiating party generates a globally unique identifier embedded in every segment of the connection. Delayed duplicates from a previous connection carry the old identifier and are rejected.</p>
+
+    <div class="callout pink">
+      <strong>Why it fails:</strong> Generating a <em>globally</em> unique identifier requires a coordination algorithm that must survive system crashes. Even after a crash-and-recovery, the host must not accidentally reuse an old identifier that is still live in the network. This requires hardware-assisted state persistence — significant overhead.
+    </div>
+
+    <h3>Solution 3: Restrict Packet Lifetime <span class="high-badge">Adopted</span></h3>
+    <p><strong>Idea:</strong> If delayed duplicates are the problem, eliminate them by ensuring every packet has a bounded lifetime. Once a packet's lifetime expires, it is dropped by the network. A sender can then wait until the old connection's packets have definitively died before initiating a new one with the same parameters.</p>
+
+    <div class="callout green">
+      This is the feasible solution. It forms the basis for TCP's sequence number design.
+    </div>
+
+    <h4>Three mechanisms to bound packet lifetime:</h4>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">1. Restricted Network Design</div>
+        <div class="concept-desc">Prevent routing loops; enforce a maximum end-to-end delay bound including congestion. A packet exceeding this bound is dropped. Requires network-wide guarantees — difficult to achieve at internet scale.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">2. Hop Count (TTL) <span class="high-badge">Used in practice</span></div>
+        <div class="concept-desc">Each packet carries a maximum hop count (e.g., TTL = 64). Every router that forwards the packet decrements this counter by 1. When it reaches 0, the packet is dropped. This is the <strong>TTL field in the IP header</strong>, used in today's internet.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">3. Timestamp per Packet</div>
+        <div class="concept-desc">Embed a creation timestamp; packets older than a threshold T are dropped. Requires <strong>strict clock synchronisation</strong> across all network devices. Clock drift makes this impractical at internet scale.</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      The hop-count (TTL) mechanism is used in practice. The timestamp mechanism is theoretically appealing but requires synchronisation that cannot be guaranteed across the internet.
+    </div>
+  </div>
+
+  <!-- SECTION 4: MAXIMUM PACKET LIFETIME T -->
+  <div class="section">
+    <div class="section-label">Maximum Packet Lifetime T &amp; the Virtual Clock</div>
+
+    <h3>The Requirement: Packets AND Acknowledgements Must Die</h3>
+    <p>Bounding packet lifetime is necessary but not sufficient. Consider: a client sends a connection request (CR1), crashes, and restarts. Before it can send a new connection request (CR2), the <em>acknowledgement</em> to CR1 arrives. The restarted client cannot tell whether this ACK belongs to the old CR1 or the new CR2.</p>
+
+    <div class="callout yellow">
+      <strong>Requirement:</strong> We must guarantee that after waiting a duration T, <em>both</em> the original packet <em>and all acknowledgements to it</em> have been purged from the network. Only then can sequence numbers from that connection be safely reused.
+    </div>
+
+    <h3>Virtual Clock via Sequence Numbers</h3>
+    <p>A physical clock cannot be used — internet-scale clock synchronisation is infeasible (clock drift between systems). Instead, we use a <strong>virtual clock</strong>: the sequence number field, incremented based on clock ticks.</p>
+
+    <p>The key principle: <strong>a sequence number must not be reused within T seconds.</strong> Within any T-second window, at most one packet carrying a given sequence number is alive in the network. This eliminates the possibility of a delayed duplicate being confused with a fresh packet.</p>
+
+    <div class="callout green">
+      Example: Packet with sequence number 125 is sent. T = 1 minute. For the next 60 seconds, no other packet with sequence number 125 is transmitted. After 60 seconds, seq 125 is guaranteed to have left the network — it can safely be reused.
+    </div>
+
+    <p>The <strong>size of the sequence number space</strong> is determined by T and the rate of packet transmission (packets per second). A faster sender or a longer T requires more bits in the sequence number field to avoid wraparound within T.</p>
+  </div>
+
+  <!-- SECTION 5: SEQUENCE NUMBER REQUIREMENTS -->
+  <div class="section">
+    <div class="section-label">Sequence Number Requirements (Tomlinson, 1975)</div>
+
+    <p>Formalised in <em>"Selecting Sequence Numbers"</em> by R. Tomlinson (1975). Two requirements must hold for any correct connection-establishment protocol:</p>
+
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">R1 — Uniqueness per Byte</div>
+        <div class="interface-desc">A given sequence number must refer to at most one byte in the network at any point in time (for byte-sequence-number protocols such as TCP). There must not be two distinct bytes in flight between the same source-destination pair sharing a sequence number.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">R2 — Positive Synchronisation</div>
+        <div class="interface-desc">The valid range of sequence numbers in use must be positively synchronised between sender and receiver throughout the connection. After the initial sequence number (ISN) is agreed upon, flow control algorithms ensure all subsequent bytes follow that sequence consistently.</div>
+      </div>
+    </div>
+
+    <h4>Byte Sequence Numbers vs. Packet Sequence Numbers</h4>
+    <p>TCP uses <strong>byte sequence numbers</strong>, not packet sequence numbers. Every individual byte of data has a unique sequence number — not every packet. A packet carries a sequence number indicating the first byte of its payload, plus a length field:</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Packet</span>
+        <span class="vci">seq=500, len=100</span>
+        <span class="arrow">→ carries bytes 501–600</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Packet</span>
+        <span class="vci">seq=600, len=50</span>
+        <span class="arrow">→ carries bytes 601–650</span>
+      </div>
+    </div>
+
+    <p>This allows fine-grained, byte-level addressing of data within a stream — critical for reliable in-order delivery and selective retransmission.</p>
+
+    <h4>Example: Sequence Number Progression after Connection Setup</h4>
+    <div class="vci-box">
+      <div class="vci-row"><span class="port">Client → Server</span><span class="vci">ISN = 1000</span><span class="arrow">(connection request)</span></div>
+      <div class="vci-row"><span class="port">Server → Client</span><span class="vci">ACK ISN 1000</span><span class="arrow">(connection accepted)</span></div>
+      <div class="vci-row"><span class="port">Packet 1</span><span class="vci">seq=1001, len=50</span><span class="arrow">bytes 1001–1050</span></div>
+      <div class="vci-row"><span class="port">Packet 2</span><span class="vci">seq=1051, len=100</span><span class="arrow">bytes 1051–1150</span></div>
+      <div class="vci-row"><span class="port">Packet 3</span><span class="vci">seq=1151, len=50</span><span class="arrow">bytes 1151–1200</span></div>
+    </div>
+    <p>Subsequent sequence numbers are determined mechanically once the ISN is agreed upon. Flow control algorithms govern this progression. The hard problem is <strong>choosing the ISN itself</strong>.</p>
+  </div>
+
+  <!-- SECTION 6: ISN PROBLEM + FORBIDDEN RANGE -->
+  <div class="section">
+    <div class="section-label">The Initial Sequence Number Problem &amp; Forbidden Range</div>
+
+    <h3>Why the ISN is the Hard Part</h3>
+    <p>Once the ISN is established, subsequent sequence numbers are deterministic. But the ISN itself must be chosen such that it does not collide with sequence numbers from a previous connection that are still alive in the network.</p>
+
+    <p>Scenario: Connection 1 uses ISN = X. The connection crashes partway through. Connection 2 is initiated. If Connection 2 also starts at ISN = X (or nearby), old packets from Connection 1 still in the network may be indistinguishable from new packets of Connection 2.</p>
+
+    <h3>Forbidden Range</h3>
+    <p>The sequence numbers used by Connection 1 within the packet lifetime window T define a <strong>forbidden range</strong> — a zone of sequence numbers that Connection 2 must not enter until T has elapsed and those packets are guaranteed dead.</p>
+
+    <div class="callout yellow">
+      Two strategies to avoid overlap with the forbidden range:
+      <br><br>
+      <strong>1. Wait:</strong> Do not initiate Connection 2 until T seconds have elapsed since Connection 1 ended. All of Connection 1's sequence numbers are then guaranteed dead.
+      <br><br>
+      <strong>2. Jump:</strong> Choose an ISN for Connection 2 that is sufficiently higher than Connection 1's highest sequence number, ensuring the two sequence number zones do not overlap even if Connection 2 starts immediately.
+    </div>
+
+    <p>The mechanism for selecting the ISN satisfying these constraints (commonly a clock-based ISN generator in TCP) will be detailed in the next lecture.</p>
+
+    <div class="callout green">
+      <strong>Summary of what Lec 12 establishes:</strong> The naive two-way handshake fails due to delayed duplicates. The correct solution is to bound packet lifetimes (via TTL/hop count in practice) and use sequence numbers as a virtual clock, ensuring no sequence number is reused within the maximum packet lifetime T. The ISN chosen at connection setup must fall outside the forbidden range of any still-live prior connection. Two formal requirements for sequence numbers (Tomlinson 1975): uniqueness per byte, and positive synchronisation between endpoints.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
