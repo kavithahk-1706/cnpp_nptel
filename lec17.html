@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 17 — Buffer Management & Congestion Control</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec16.html" class="nav-lec">← prev</a>
+        <a href="lec18.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- ── Header ── -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 17</span>
+      <span class="high-badge">★ High Priority</span>
+      <h1>Buffer Management &amp; Congestion Control</h1>
+      <p>Transport layer buffer dynamics, congestion detection, fairness, and the AIMD algorithm. Core TCP behaviour is rooted in this lecture — heavily examinable.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         PART 1 — DYNAMIC BUFFER MANAGEMENT
+    ═══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Part 1 — Dynamic Buffer Management</div>
+
+      <h3>The Rate Mismatch Problem</h3>
+      <p>At the receiver, the transport layer buffer sits between two processes running at independent rates: the <strong>network layer</strong> delivering incoming segments and the <strong>application</strong> consuming data via <code>read()</code> system calls. These rates are rarely equal.</p>
+      <p>If the network delivers at 1 Mbps but the application reads at only 10 Kbps, data accumulates in the transport buffer. Once the buffer is full, any further arriving segment must be dropped — even though the receiver machine is alive and the connection is intact. The solution is to <strong>prevent the sender from over-sending</strong> in the first place.</p>
+
+      <div class="callout yellow">
+        <strong>Key insight:</strong> The sender must dynamically track how much buffer space is actually free at the receiver and limit its window to that value. This is <em>flow control driven by buffer availability</em>, not just ACK timing.
+      </div>
+
+      <h3>Mechanism — Receiver Advertises Available Space</h3>
+      <p>In window-based (sliding window) flow control, the receiver piggybacks its current <strong>available buffer size</strong> onto every ACK it sends. The sender then sets its sending window to at most that advertised value. As the application reads data and frees buffer space, the receiver sends updated (larger) advertisements.</p>
+
+      <div class="callout green">
+        <strong>Formula:</strong> <code>Sender window size ≤ Receiver advertised buffer space</code>
+      </div>
+
+      <h3>Worked Example <a href="#" class="ts">07:55</a></h3>
+      <p>The following table traces a full exchange between sender A and receiver B, with an initial buffer grant of 4 segments, a mid-stream packet loss, and a zero-buffer advertisement. Segment size is assumed fixed.</p>
+
+      <p><em>📊 Visual diagram of the exact message sequence shown at timestamp 07:55 — refer to lecture slide for the annotated flow chart.</em></p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Direction</th>
+            <th>Message</th>
+            <th>Comments</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="port-num">1</td><td>A → B</td><td>&lt;request 8 buffers&gt;</td><td>A wants 8 segments worth of space</td></tr>
+          <tr><td class="port-num">2</td><td>B → A</td><td>&lt;ack=0, buf=4&gt;</td><td>B only has room for 4; grants 0–3</td></tr>
+          <tr><td class="port-num">3</td><td>A → B</td><td>&lt;seq=0, data=m0&gt;</td><td>A has 3 buffers left</td></tr>
+          <tr><td class="port-num">4</td><td>A → B</td><td>&lt;seq=1, data=m1&gt;</td><td>A has 2 buffers left</td></tr>
+          <tr><td class="port-num">5</td><td>A → B</td><td>&lt;seq=2, data=m2&gt; ✗</td><td><strong>Packet lost.</strong> A thinks 1 buffer remains</td></tr>
+          <tr><td class="port-num">6</td><td>B → A</td><td>&lt;ack=1, buf=3&gt;</td><td>Cumulative ACK for m0 &amp; m1; 3 slots free</td></tr>
+          <tr><td class="port-num">7</td><td>A → B</td><td>&lt;seq=3, data=m3&gt;</td><td>A sends within new window</td></tr>
+          <tr><td class="port-num">8</td><td>A → B</td><td>&lt;seq=4, data=m4&gt;</td><td></td></tr>
+          <tr><td class="port-num">9</td><td>A → B</td><td>&lt;seq=2, data=m2&gt;</td><td>Retransmitted after timeout — window of 3 exhausted</td></tr>
+          <tr><td class="port-num">10</td><td>B → A</td><td>&lt;ack=4, buf=0&gt;</td><td>All of m2–m4 received; <strong>buffer now full</strong>, app hasn't read yet</td></tr>
+          <tr><td class="port-num">11</td><td>A</td><td>— blocked —</td><td>A cannot send; buf=0</td></tr>
+          <tr><td class="port-num">12</td><td>B → A</td><td>&lt;ack=4, buf=1&gt;</td><td>App read one segment; 1 slot free</td></tr>
+          <tr><td class="port-num">13</td><td>A → B</td><td>&lt;seq=5, data=m5&gt;</td><td>A resumes</td></tr>
+          <tr><td class="port-num">14</td><td>A → B</td><td>&lt;seq=6, data=m6&gt;</td><td></td></tr>
+          <tr><td class="port-num">15</td><td>A</td><td>— blocked again —</td><td>window exhausted once more</td></tr>
+          <tr><td class="port-num">16</td><td>⋯</td><td>&lt;ack=6, buf=4&gt;</td><td>Potential deadlock if this ACK is lost</td></tr>
+        </tbody>
+      </table>
+
+      <h3>The Deadlock Problem</h3>
+      <p>When B sends <code>buf=0</code>, sender A stops transmitting and waits for a non-zero advertisement. If that follow-up advertisement is lost in the network, A waits indefinitely — a <strong>potential deadlock</strong>.</p>
+
+      <div class="callout pink">
+        <strong>Deadlock prevention:</strong> B must keep sending duplicate ACKs (with current buf value) after every timeout, even if it has received no new data from A. This ensures the connection recovers even if an advertisement ACK is dropped. ACKs must flow continuously.
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         PART 2 — CONGESTION CONTROL
+    ═══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Part 2 — Congestion Control</div>
+
+      <h3>Centralised Baseline: Max-Flow Min-Cut <a href="#" class="ts">14:41</a></h3>
+      <p>In a hypothetical centralised network, every link has a known capacity. To find the maximum achievable throughput between a source S and destination D, one applies the <strong>max-flow min-cut theorem</strong>: the bottleneck is the minimum cut across all paths. For example, a network whose minimum cut sums to 12 Mbps can never sustain more than 12 Mbps S→D regardless of path choices.</p>
+      <p>This gives an ideal upper bound. The difficulty is that the real internet is fully <strong>decentralised</strong> — no router has global network visibility, and flows enter and leave dynamically. Computing a min-cut on-the-fly is impractical.</p>
+
+      <h3>Congestion Signature: Buffer Overflow <a href="#" class="ts">20:59</a></h3>
+      <p>At any intermediate router, let <strong>λ</strong> = total incoming rate and <strong>μ</strong> = total outgoing capacity. If λ &gt; μ the buffer fills over time. Once full, arriving packets are dropped. In wired networks where channel-error losses are negligible, <strong>packet loss ≡ congestion signal</strong>.</p>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Congestion Control</div>
+          <div class="concept-desc">Prevent congestion from occurring — requires global state. Not feasible at internet scale.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Congestion Avoidance</div>
+          <div class="concept-desc">Detect congestion when it happens and react by reducing rate. Feasible in a decentralised setting. <strong>This is what the internet uses.</strong></div>
+        </div>
+      </div>
+
+      <h3>Revised Sending Rate Formula</h3>
+      <p>Previously, the sender's rate was bounded only by the receiver's flow control window (receiver rate). With congestion avoidance added:</p>
+
+      <div class="callout">
+        <strong>Sending rate = min(network rate, receiver rate)</strong><br/>
+        Where <em>receiver rate</em> comes from the advertised window (flow control), and <em>network rate</em> is the sender's estimate of what the network can sustain — probed incrementally.
+      </div>
+
+      <p>Since network rate cannot be known directly, the approach is: <em>gradually increase the rate until packet loss is observed, then reduce, then increase again</em>. The network rate is discovered empirically.</p>
+
+      <h3>Impact on Goodput and Delay <a href="#" class="ts">25:36</a></h3>
+      <p><em>📊 The "Network Congestion – Impact over Goodput and Delay" dual-graph diagram appears at timestamp 25:36. The left graph (goodput vs offered load) and right graph (delay vs offered load) together illustrate the congestion collapse region — worth reviewing visually in the lecture.</em></p>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Goodput (packets/sec)</div>
+          <div class="concept-desc">Rises with offered load up to link capacity, then <strong>drops sharply at congestion collapse</strong> — packets are dropped and retransmitted, wasting bandwidth on duplicates.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Delay (seconds)</div>
+          <div class="concept-desc">Stays low until onset of congestion, then <strong>spikes exponentially</strong> — buffers are full, retransmits queue up, end-to-end delivery time balloons.</div>
+        </div>
+      </div>
+
+      <div class="callout pink">
+        <strong>Congestion collapse:</strong> the regime where more offered load produces <em>less</em> useful throughput. Retransmitted copies of dropped packets flood the network, crowding out new data — a destructive feedback loop.
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         PART 3 — FAIRNESS
+    ═══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Part 3 — Fairness</div>
+
+      <h3>Why Fairness Matters <a href="#" class="ts">26:49</a></h3>
+      <p>Congestion control algorithms must be <strong>fair</strong> — otherwise some flows get starved while others monopolise the bottleneck. In a decentralised network, computing strict (hard) fairness requires full global information — again impractical. Instead, TCP targets <strong>max-min fairness</strong>.</p>
+
+      <h3>Max-Min Fairness — Definition</h3>
+      <div class="callout">
+        An allocation {λ₁, λ₂, …, λₙ} is <strong>max-min fair</strong> if the rate of any flow cannot be increased without decreasing the rate of at least one other flow that already has an equal or smaller allocation.
+      </div>
+      <p>Informally: you cannot make any flow better off without making some other flow worse off. It maximises the minimum allocation — it is fair to the weakest flows first.</p>
+
+      <h3>Max-Min Fair Allocation — Example <a href="#" class="ts">28:46</a></h3>
+      <p>Consider 4 flows (A, B, C, D) sharing a network with a single bottleneck link shared by all three of B, C, D simultaneously.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Flow</th>
+            <th>Bottleneck link shared with</th>
+            <th>Max-min fair allocation</th>
+            <th>Reasoning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">B</td>
+            <td>C, D (3 flows on worst link)</td>
+            <td class="proto-name">1/3 of capacity</td>
+            <td>Bottleneck link split equally among 3</td>
+          </tr>
+          <tr>
+            <td class="port-num">C</td>
+            <td>B, D</td>
+            <td class="proto-name">1/3 of capacity</td>
+            <td>Same bottleneck</td>
+          </tr>
+          <tr>
+            <td class="port-num">D</td>
+            <td>B, C</td>
+            <td class="proto-name">1/3 of capacity</td>
+            <td>Same bottleneck</td>
+          </tr>
+          <tr>
+            <td class="port-num">A</td>
+            <td>B only (on its non-bottleneck link)</td>
+            <td class="proto-name">2/3 of capacity</td>
+            <td>B used 1/3; remaining 2/3 available for A alone</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>This allocation is max-min fair: to give B more than 1/3 you must take from A; to give C more you must take from B or D. No improvement is possible without harming another flow.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         PART 4 — AIMD ALGORITHM
+    ═══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Part 4 — AIMD Algorithm</div>
+
+      <h3>Additive Increase Multiplicative Decrease <a href="#" class="ts">30:36</a></h3>
+      <p>Proposed by Chiu and Jain (1989). AIMD is the distributed algorithm that achieves convergence to max-min fairness without any centralised coordination.</p>
+
+      <div class="callout green">
+        <strong>Let w(t)</strong> = sending rate at time t, <strong>a</strong> = additive increment (a &gt; 0), <strong>b</strong> = multiplicative factor (0 &lt; b &lt; 1).<br/><br/>
+        <strong>No congestion detected:</strong> w(t+1) = w(t) + a &nbsp;&nbsp;(increase additively)<br/>
+        <strong>Congestion detected:</strong> w(t+1) = b · w(t) &nbsp;&nbsp;(decrease multiplicatively)
+      </div>
+
+      <h3>Why Not AIAD or MIMD? <a href="#" class="ts">31:54</a></h3>
+      <p>The AIMD design rationale is best understood by comparing all four variants on a two-user bandwidth-allocation plane. The axes represent user 1's bandwidth and user 2's bandwidth respectively. Two reference lines matter:</p>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Fairness Line</div>
+          <div class="concept-desc">The 45° diagonal — points where both users receive equal bandwidth. The optimal point lies on this line <em>and</em> on the efficiency line simultaneously.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Efficiency Line</div>
+          <div class="concept-desc">The line where the sum of both allocations equals 100% of link capacity. Points below = under-utilised; points above = congestion.</div>
+        </div>
+      </div>
+
+      <p><em>📊 The AIMD Design Rationale diagram (two flows example) appears at timestamps 31:54 and 34:04. The convergence path — zigzagging diagonally toward the optimal intersection — is best understood visually. Both slides are worth studying carefully.</em></p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Algorithm</th>
+            <th>On increase</th>
+            <th>On congestion</th>
+            <th>Trajectory behaviour</th>
+            <th>Converges to optimal?</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">AIAD</td>
+            <td>+a</td>
+            <td>−a</td>
+            <td>Parallel moves — oscillates along efficiency line</td>
+            <td class="port-num" style="color:#ff9dd4;">✗ No</td>
+          </tr>
+          <tr>
+            <td class="proto-name">MIMD</td>
+            <td>×c (c&gt;1)</td>
+            <td>×b (b&lt;1)</td>
+            <td>Radial moves — oscillates on efficiency line (different slope)</td>
+            <td class="port-num" style="color:#ff9dd4;">✗ No</td>
+          </tr>
+          <tr>
+            <td class="proto-name"><strong>AIMD</strong></td>
+            <td>+a</td>
+            <td>×b</td>
+            <td>Diagonal increase (45°), radial decrease (toward origin) — spiral inward toward optimal</td>
+            <td class="port-num" style="color:#99ffe8;">✓ Yes</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Geometric intuition:</strong> Additive increase moves both users' allocations by the same absolute amount (+a each), so it travels at 45° — toward the fairness line. Multiplicative decrease scales both down toward the origin, which also trends toward the fairness line. The combination creates a convergent spiral toward the intersection of the fairness line and efficiency line — the globally optimal point.
+      </div>
+
+      <h3>AIMD in TCP</h3>
+      <p>TCP uses AIMD to control the size of its <strong>congestion window (cwnd)</strong> — a second cap on the sender window alongside the receiver-advertised window. The effective sender window is <code>min(cwnd, recv_buf)</code>. The AIMD mechanism described here forms the foundation for TCP's slow start and congestion avoidance phases, which are covered in detail in later lectures.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SUMMARY
+    ═══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h3>Dynamic Buffer Management</h3>
+      <p>The transport-layer buffer at the receiver can fill up if the application reads slower than the network delivers. The receiver solves this by advertising its current free buffer space in every ACK. The sender window is capped at the advertised value. If the advertisement drops to 0, the sender blocks; if the follow-up non-zero advertisement is lost, a deadlock results. Prevention: receiver must retransmit buffer advertisements on timeout even without new data.</p>
+
+      <h3>Congestion Avoidance</h3>
+      <p>The internet cannot enforce hard rate limits from the centre. Instead, each end-host probes the network incrementally, treating packet loss as a congestion signal (λ &gt; μ at some intermediate buffer). The sending rate is constrained to <code>min(network rate, receiver rate)</code>. Network rate is estimated by gradual increase until loss, then reduction — an empirical control loop.</p>
+
+      <h3>Congestion Collapse</h3>
+      <p>Beyond the congestion onset point, goodput drops and delay spikes. Retransmissions of dropped packets compete with new data, further worsening congestion. This is the congestion collapse regime and motivates aggressive early detection.</p>
+
+      <h3>Max-Min Fairness</h3>
+      <p>A feasible fairness target for distributed networks: an allocation where no flow's rate can be raised without lowering a flow that is already at an equal or lesser allocation. It prioritises the worst-off flows and distributes remaining capacity upward.</p>
+
+      <h3>AIMD</h3>
+      <p>The mechanism that achieves max-min fairness in a decentralised setting. Rate increases additively (small fixed steps) and decreases multiplicatively (large proportional cut) on congestion. The geometric effect is convergence to the intersection of the fairness line and efficiency line — the globally optimal allocation. TCP uses AIMD to manage its congestion window.</p>
+    </div>
+
+  </div>
+</body>
+</html>

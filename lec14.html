@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lec 14 — Transport Layer IV: Reliability & Flow Control</title>
+  <link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec13.html" class="nav-lec">← prev</a>
+      <a href="lec15.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 14</span>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>Transport Layer — IV: Reliability &amp; Flow Control</h1>
+    <p style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;">Prof. Sandip Chakraborty · IIT Kharagpur · CNPP</p>
+    <a href="https://nptel.ac.in" class="video-link" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="section">
+    <div class="section-label">Overview</div>
+    <p>This lecture covers two core transport layer services: <strong>flow control</strong> (preventing the sender from overwhelming the receiver) and <strong>reliability</strong> (ensuring every byte sent is eventually received). These are implemented together in TCP. The lecture also explains <em>why</em> both the transport layer and the data link layer independently implement flow/error control, and introduces the ARQ family of algorithms starting with Stop-and-Wait.</p>
+  </div>
+
+  <!-- WHY RELIABILITY AT TRANSPORT LAYER -->
+  <div class="section">
+    <div class="section-label">The Problem: Unreliable Network Layer</div>
+    <p>IP (network layer) is a <strong>best-effort delivery service</strong> — it makes no guarantees. Intermediate router buffers overflow under heavy load, causing packet drops. The network layer doesn't regulate how fast data is pushed into it, so congestion and loss are routine.</p>
+    <p>The transport layer's job is to build a <strong>reliable, rate-aware channel</strong> on top of this inherently unreliable one. The two mechanisms that achieve this are:</p>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Flow Control</div>
+        <div class="concept-desc">Ensures the sender does not transmit faster than the receiver can consume. The sender continuously adjusts its rate based on receiver feedback.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Reliability (Error Control)</div>
+        <div class="concept-desc">Ensures every sent segment eventually arrives. Achieved by detecting loss and retransmitting. The receiver signals what it has received; the sender retransmits what was lost.</div>
+      </div>
+    </div>
+    <div class="callout green">
+      <strong>Abstraction:</strong> The application layer calls <code>rdt_send()</code> (reliable data transfer). The transport layer maps this down to <code>udt_send()</code> (unreliable datagram send) at the network interface, and adds sequence numbers + checksums + timers to paper over the unreliability.
+    </div>
+  </div>
+
+  <!-- WHY BOTH LAYERS -->
+  <div class="section">
+    <div class="section-label">Why Both Data Link Layer AND Transport Layer?</div>
+    <p>Flow/error control appear at two layers. They serve different scopes and neither alone is sufficient.</p>
+
+    <h3>Data Link Layer — Hop-by-Hop Flow Control</h3>
+    <p>Each link between adjacent nodes has its own DLL flow control. But this is strictly <strong>local</strong>. Consider the following path:</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">S → R1</span>
+        <span class="arrow">→</span>
+        <span class="vci">10 Mbps</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">R1 → R2</span>
+        <span class="arrow">→</span>
+        <span class="vci">5 Mbps</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">R2 → R3</span>
+        <span class="arrow">→</span>
+        <span class="vci">3 Mbps</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">R3 → D</span>
+        <span class="arrow">→</span>
+        <span class="vci">1 Mbps</span>
+      </div>
+    </div>
+
+    <p>The <strong>effective end-to-end rate is 1 Mbps</strong> (the bottleneck). But DLL flow control only negotiates per-hop — so S happily sends at 10 Mbps, R1 buffers 5 Mbps of excess, R2 buffers more, and each router eventually overflows and drops. Hop-by-hop control cannot tell S that the true end-to-end capacity is 1 Mbps.</p>
+    <div class="callout pink">
+      <strong>Conclusion:</strong> DLL-only flow control cannot prevent end-to-end buffer overflow. Transport layer flow control is <strong>essential</strong> to match the sender's rate to the actual receiver capacity.
+    </div>
+
+    <h3>Transport Layer — End-to-End Flow Control</h3>
+    <p>Now consider the reverse: end-to-end flow control only, no DLL control. The source is rate-limited to 1 Mbps (matching the receiver). But at an intermediate router, <em>multiple other flows</em> also arrive — say 2 Mbps and 5 Mbps on other ports — and the outgoing link is only 3 Mbps. Total incoming exceeds outgoing. Buffer overflow happens at that intermediate router regardless of what the source does.</p>
+    <div class="callout pink">
+      <strong>Conclusion:</strong> End-to-end control alone cannot prevent intermediate congestion caused by traffic from other sources. DLL-level hop-by-hop control is needed to <em>improve performance</em> by reducing congestion locally.
+    </div>
+
+    <h3>The Summary Table</h3>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Transport Layer (End-to-End)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Scope</span><span>Sender ↔ Receiver across entire internet path</span></div>
+          <div class="compare-row"><span class="label">Purpose</span><span>Ensure eventual delivery; match sender to receiver capacity</span></div>
+          <div class="compare-row"><span class="label">Status</span><span><strong>Essential</strong> — cannot be omitted</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Data Link Layer (Hop-by-Hop)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Scope</span><span>One link between adjacent nodes</span></div>
+          <div class="compare-row"><span class="label">Purpose</span><span>Reduce intermediate congestion; improve throughput</span></div>
+          <div class="compare-row"><span class="label">Status</span><span><strong>Performance optimization</strong> — improves but cannot guarantee reliability alone</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Recommended reading:</strong> <em>End-to-End Arguments in System Design</em> — Saltzer, Reed &amp; Clark (MIT). A foundational paper explaining why end-to-end guarantees belong at the endpoints, not in the network core. <a class="ts" href="#" target="_blank">16:03</a>
+    </div>
+  </div>
+
+  <!-- STOP AND WAIT -->
+  <div class="section">
+    <div class="section-label">Flow Control Algorithm 1 — Stop and Wait</div>
+
+    <h3>Error-Free Channel <a class="ts" href="#" target="_blank">17:02</a></h3>
+    <p>The simplest ARQ algorithm. The sender transmits exactly one frame, then <strong>halts and waits</strong> for the receiver's acknowledgement (ACK) before transmitting the next frame. On an error-free channel there are no losses, so the ACK always arrives and the process repeats.</p>
+    <div class="callout">
+      Send frame → wait for ACK → send next frame → wait for ACK → …
+    </div>
+
+    <h3>Noisy Channel <a class="ts" href="#" target="_blank">18:21</a></h3>
+    <p>On a real channel, frames can be lost or corrupted. Two mechanisms are added:</p>
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">Sequence Numbers</div>
+        <div class="interface-desc">Each frame is tagged with a sequence number so the receiver can identify which frame it received and what it expects next. The ACK carries the sequence number of the <em>next expected</em> frame (e.g., ACK 1 = "I got frame 0, send frame 1").</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">Timeout &amp; Retransmission</div>
+        <div class="interface-desc">After sending, the sender starts a timer. If no ACK arrives before timeout (frame was lost or ACK was lost), the sender retransmits the same frame. This is what makes it <em>reliable</em>.</div>
+      </div>
+    </div>
+
+    <h4>How many bits do sequence numbers need in Stop-and-Wait?</h4>
+    <p>Only <strong>1 bit</strong> (values 0 and 1) is sufficient. At any given time, only one frame can be outstanding in the network — the sender doesn't move on until the current frame is acknowledged. So the receiver only ever needs to distinguish the current expected frame from the last one. Sequence numbers alternate: 0, 1, 0, 1, …</p>
+    <div class="callout green">
+      ACK 1 = "received frame 0, expecting frame 1." ACK 0 = "received frame 1, expecting frame 0." This alternating ACK scheme also handles <strong>duplicate detection</strong>: if a frame is retransmitted and the receiver gets a duplicate, it recognises the sequence number and discards it.
+    </div>
+
+    <h3>Duplicate Frame Scenario (Key Exam Case)</h3>
+    <p>If the ACK is lost (not the data frame), the sender times out and retransmits frame N. The receiver receives a duplicate frame N. Because the receiver is now expecting frame N+1 (it already ACK'd frame N), it recognises the sequence number mismatch, discards the duplicate, and re-sends the ACK. No data corruption results.</p>
+  </div>
+
+  <!-- STATE MACHINE -->
+  <div class="section">
+    <div class="section-label">Stop-and-Wait ARQ — Sender State Machine <a class="ts" href="#" target="_blank">21:41</a></div>
+    <p>The sender FSM has two main states, alternating between waiting to send frame 0 and waiting to send frame 1. <em>(The slide shows this as a Kurose &amp; Ross FSM diagram — worth watching the visual at 21:41.)</em></p>
+
+    <div class="vci-box">
+      <div class="vci-row"><span class="vci">State: Wait for call 0 from above</span></div>
+      <div class="vci-row"><span class="port">Event</span><span class="arrow">→</span><span>App sends data → attach seq# 0 + checksum, udt_send(), start timer → move to "Wait for ACK 0"</span></div>
+      <div class="vci-row"><span class="port">In "Wait for ACK 0"</span><span class="arrow"></span><span></span></div>
+      <div class="vci-row"><span class="port">  corrupt pkt</span><span class="arrow">→</span><span>Stay in same state (wait again)</span></div>
+      <div class="vci-row"><span class="port">  timeout</span><span class="arrow">→</span><span>Retransmit frame 0, restart timer, stay</span></div>
+      <div class="vci-row"><span class="port">  ACK 1 received (good)</span><span class="arrow">→</span><span>Stop timer → move to "Wait for call 1 from above"</span></div>
+      <div class="vci-row"><span class="vci">State: Wait for call 1 from above</span></div>
+      <div class="vci-row"><span class="port">Event</span><span class="arrow">→</span><span>App sends data → attach seq# 1 + checksum, udt_send(), start timer → "Wait for ACK 1"</span></div>
+      <div class="vci-row"><span class="port">  ACK 0 received (good)</span><span class="arrow">→</span><span>Stop timer → back to "Wait for call 0 from above"</span></div>
+    </div>
+    <p>The state machine guarantees that flow control (one outstanding frame) and reliability (retransmit on timeout) are enforced simultaneously. This combined protocol is called <strong>ARQ — Automatic Repeat reQuest</strong>.</p>
+  </div>
+
+  <!-- PROBLEMS WITH STOP AND WAIT -->
+  <div class="section">
+    <div class="section-label">Problems with Stop-and-Wait <a class="ts" href="#" target="_blank">25:19</a></div>
+    <p>Stop-and-Wait is correct but <strong>extremely inefficient</strong>. The sender sits idle waiting for an ACK for every single frame. On a high-bandwidth or high-latency link, this wastes the vast majority of available capacity.</p>
+
+    <h4>Bidirectional Communication</h4>
+    <p>A bidirectional connection requires two independent Stop-and-Wait instances, doubling the inefficiency. The partial fix is <strong>piggybacking</strong> — attaching the ACK for the reverse direction onto the outgoing data frame (one combined DATA+ACK packet). This reduces traffic but still doesn't solve the fundamental one-frame-at-a-time bottleneck.</p>
+
+    <div class="callout pink">
+      <strong>Root problem:</strong> Only one frame can be in-flight at any time. The channel is idle while the sender waits for the ACK to travel back. This becomes catastrophic on long-distance or high-speed links (e.g., a 1 Gbps satellite link with 600ms RTT has ~75 MB of "wasted pipe" per ACK round-trip).
+    </div>
+  </div>
+
+  <!-- SLIDING WINDOW INTRO -->
+  <div class="section">
+    <div class="section-label">Solution — Sliding Window (Pipelined) Protocols <a class="ts" href="#" target="_blank">27:49</a></div>
+    <p>The solution is to allow <strong>multiple frames to be in-flight simultaneously</strong> without waiting for individual ACKs. This is the core idea of sliding window / pipelined protocols.</p>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Stop and Wait</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">In-flight</span><span>1 frame at a time</span></div>
+          <div class="compare-row"><span class="label">Channel use</span><span>Mostly idle; waiting for ACK</span></div>
+          <div class="compare-row"><span class="label">Seq# bits</span><span>1 bit (0 and 1)</span></div>
+          <div class="compare-row"><span class="label">Throughput</span><span>Very low on high-latency links</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Sliding Window (Pipelined)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">In-flight</span><span>W frames simultaneously (window size W)</span></div>
+          <div class="compare-row"><span class="label">Channel use</span><span>Continuous; ACKs flow back in parallel</span></div>
+          <div class="compare-row"><span class="label">Seq# bits</span><span>Larger (depends on window size)</span></div>
+          <div class="compare-row"><span class="label">Throughput</span><span>Much higher; utilises full link capacity</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="callout green">
+      Sliding window protocols are covered in detail in the next lecture. Two major variants exist: <strong>Go-Back-N (GBN)</strong> and <strong>Selective Repeat (SR)</strong> — both are important exam topics.
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Why Two Layers?</div>
+        <div class="concept-desc">Transport = essential end-to-end guarantee. Data link = hop-by-hop performance improvement. Neither alone is sufficient; both are needed.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Stop-and-Wait ARQ</div>
+        <div class="concept-desc">Send one frame, wait for ACK. 1-bit sequence numbers. Timeout triggers retransmission. Correct but bandwidth-inefficient — one outstanding frame at all times.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Sliding Window</div>
+        <div class="concept-desc">Send W frames before waiting for any ACK. Pipeline the channel. Much higher utilisation. Covered fully in Lec 15. Two types: Go-Back-N and Selective Repeat.</div>
+      </div>
+    </div>
+
+    <h4>Key Terms</h4>
+    <table class="port-table">
+      <thead>
+        <tr><th>Term</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">rdt_send()</td><td>Reliable data transfer send — transport layer abstraction</td></tr>
+        <tr><td class="proto-name">udt_send()</td><td>Unreliable datagram send — what actually goes to the network layer</td></tr>
+        <tr><td class="proto-name">ARQ</td><td>Automatic Repeat reQuest — class of reliability algorithms using sequence numbers + ACKs + retransmission</td></tr>
+        <tr><td class="proto-name">Piggybacking</td><td>Attaching an ACK onto an outgoing data frame to reduce overhead in bidirectional connections</td></tr>
+        <tr><td class="proto-name">Sequence Number</td><td>Per-frame identifier enabling the receiver to detect duplicates and signal what it expects next</td></tr>
+        <tr><td class="proto-name">Timeout</td><td>Sender-side timer; expiry triggers retransmission of the unacknowledged frame</td></tr>
+        <tr><td class="proto-name">Window Size (W)</td><td>Max number of unacknowledged frames allowed in-flight in sliding window protocols</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

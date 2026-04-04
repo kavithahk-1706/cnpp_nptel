@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lecture 13 — Transport Layer II: Connection (Contd.)</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec12.html" class="nav-lec">← prev</a>
+      <a href="lec14.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 13</span>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>Transport Layer – II: Connection (Contd.)</h1>
+    <p>Continuation of connection establishment — forbidden regions, ISN selection, self-clocking, three-way handshake, and connection release. Core TCP mechanics live here.</p>
+  </div>
+
+  <!-- RECAP -->
+  <div class="section">
+    <div class="section-label">Recap from Lec 12</div>
+    <p>The core problem: in a packet-switched network, packets can be arbitrarily delayed. A connection request from a <strong>previous, already-dead connection</strong> can show up as a perfectly valid-looking new request — the <strong>delayed duplicate problem</strong>.</p>
+    <p>The solution anchor: use <strong>byte sequence numbers</strong> as a virtual clock. A receiver can tell duplicates apart only if the ISN of a new connection doesn't collide with sequence numbers still alive from the old one.</p>
+    <div class="callout">
+      <strong>Key constraint:</strong> within any time window T (max packet lifetime in the network), no two bytes with the same sequence number should be simultaneously outstanding for the same source-destination-port pair.
+    </div>
+  </div>
+
+  <!-- FORBIDDEN REGION -->
+  <div class="section">
+    <div class="section-label">The Forbidden Region</div>
+    <h3>What It Is</h3>
+    <p>Plot sequence numbers on the Y-axis, time on the X-axis. A connection's sequence numbers trace an upward line as it sends data. Every byte at a given sequence number has a <strong>lifetime T</strong>. The band around that line within time T is the <strong>forbidden region</strong> of that connection.</p>
+    <p>If a new connection's ISN falls inside the forbidden region of a previous connection (same src-dst-port), the receiver cannot distinguish old bytes from new — ambiguity, corruption, bad.</p>
+    <div class="callout yellow">
+      <strong>Visual hint:</strong> The forbidden region diagram — sequence numbers vs. time, two overlapping shaded bands for Conn 1 and Conn 2 — appears at <a class="ts" href="#">04:48</a>. Sketching it yourself is worth two re-reads of the text.
+    </div>
+    <h3>Two Ways to Avoid Overlap</h3>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Shift in Time</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Wait long enough after Conn 1 crashes before starting Conn 2, so all Conn 1 bytes are guaranteed dead (exceeded lifetime T). Forbidden regions are temporally separated.</div></div>
+          <div class="compare-row"><div class="label">Downside</div><div>You have to sit idle and <em>wait</em>. Not practical.</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Shift in Sequence Number Space</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Choose an ISN for Conn 2 high enough above Conn 1's sequence numbers that forbidden regions don't overlap, even if Conn 2 starts immediately.</div></div>
+          <div class="compare-row"><div class="label">Preferred</div><div>No waiting. This is the approach TCP uses.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RATE PROBLEMS -->
+  <div class="section">
+    <div class="section-label">Rate Constraints on Sequence Number Growth</div>
+    <h3>The Fast Connection Problem <a class="ts" href="#">10:12</a></h3>
+    <p>If Conn 2 starts with a safe ISN but then sends data <strong>too fast</strong>, its sequence numbers race ahead and can wrap around into Conn 1's forbidden region from the other side — overlap created even though the ISN was chosen correctly.</p>
+    <h3>The Slow Connection Problem <a class="ts" href="#">12:33</a></h3>
+    <p>If Conn 2 sends <strong>too slowly</strong>, its sequence numbers creep up so gradually that by the time it reaches Conn 1's old range, those bytes from Conn 1 are <em>still alive</em> in the network. Overlap again.</p>
+    <div class="callout pink">
+      <strong>Conclusion:</strong> both too-fast and too-slow growth cause forbidden region overlaps. Sequence numbers must grow at a <strong>bounded rate</strong>.
+    </div>
+    <h3>Self-Clocking / ACK Clocking <a class="ts" href="#">13:30</a></h3>
+    <p>TCP enforces a bounded rate using the <strong>hardware clock</strong> of the local machine only — no cross-machine synchronisation required. The rule: <strong>at most one segment per clock tick</strong>. Clock ticks are adjusted based on received ACKs — every ACK triggers the next transmission. This is called <strong>self-clocking</strong>.</p>
+    <p>This also prevents the <strong>32-bit sequence number space</strong> (2³² values) from wrapping around faster than lifetime T. Application data is buffered at the transport layer; the transport layer picks bytes from the buffer and transmits at this bounded rate — not at the application's arbitrary generation rate.</p>
+    <div class="callout">
+      The full interaction between ISN selection and rate control will be clearer after the flow control lectures (ARQ). Hold that thought.
+    </div>
+  </div>
+
+  <!-- THREE-WAY HANDSHAKE -->
+  <div class="section">
+    <div class="section-label">Three-Way Handshake</div>
+    <h3>Why It's Needed <a class="ts" href="#">17:28</a></h3>
+    <p>The receiver does <strong>not</strong> store old sequence numbers from past connections. Each sender manages its own ISN. The three-way handshake lets both sides independently validate each other's ISNs through acknowledgement — <strong>positive synchronisation</strong> without shared state.</p>
+
+    <h3>Normal Case</h3>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Host 1</span><span class="arrow">→</span>
+        <span class="vci">SYN (seq = x)</span><span class="arrow">→</span>
+        <span class="port">Host 2</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Host 2</span><span class="arrow">→</span>
+        <span class="vci">SYN-ACK (ack = x, seq = y)</span><span class="arrow">→</span>
+        <span class="port">Host 1</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Host 1</span><span class="arrow">→</span>
+        <span class="vci">ACK (ack = y) + DATA</span><span class="arrow">→</span>
+        <span class="port">Host 2</span>
+      </div>
+    </div>
+    <p>Host 1 sends ISN = x. Host 2 ACKs x and proposes its own ISN = y (connections are bidirectional — both directions need ISNs). Host 1 validates the ACK, then ACKs y and starts sending data. Both directions are now synchronised.</p>
+
+    <h3>Case 1: Delayed Duplicate SYN <a class="ts" href="#">19:12</a></h3>
+    <p>An old SYN(x) from a crashed+restarted Host 1 arrives at Host 2. Host 2 sends SYN-ACK(x, y). Host 1 receives this, recognises it doesn't correspond to any current connection request, and sends a <strong>REJECT</strong>. Host 2 sees the reject → abandons the half-open connection. Handled cleanly.</p>
+
+    <h3>Case 2: Both SYN and ACK Are Delayed Duplicates <a class="ts" href="#">20:27</a></h3>
+    <p>Old SYN(x) → Host 2 sends SYN-ACK(x, y) → Host 1 sends REJECT (as above). Separately, an old ACK arrives at Host 2 claiming ack = z. But Host 2 proposed seq = y — z ≠ y → <strong>mismatch → Host 2 discards the stale ACK</strong>. Both sides correctly identify and discard the zombie exchange.</p>
+  </div>
+
+  <!-- CONNECTION RELEASE -->
+  <div class="section">
+    <div class="section-label">Connection Release</div>
+    <p>Releasing a connection avoids the ISN problem entirely, but introduces a different challenge: how do you shut down a bidirectional connection without losing in-flight data?</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Asymmetric Release</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>One party unilaterally sends a DR (Data Release) and closes. Done.</div></div>
+          <div class="compare-row"><div class="label">Problem</div><div>The other party may still have data to send. If it transmits after the first party closed, that data is lost permanently.</div></div>
+          <div class="compare-row"><div class="label">Verdict</div><div><strong>Data loss is possible.</strong> Simple, but unsafe.</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Symmetric Release</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Bidirectional connection = two independent unidirectional connections. Each direction released separately. Full connection closed only when both halves are done.</div></div>
+          <div class="compare-row"><div class="label">Protocol</div><div>Host 1: "I am done." Host 2: "I am done too." → Both halves released → connection closed.</div></div>
+          <div class="compare-row"><div class="label">Works when</div><div>Each side knows exactly when it finishes sending. Suited to fixed-size transfers.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>The Two Army Problem — Why Perfect Symmetric Release Is Impossible <a class="ts" href="#">28:23</a></h3>
+    <p>A white army sits in a valley. Two halves of a blue army sit on opposite hills — together they outnumber the white army, but only if they attack <em>simultaneously</em>. Messengers must cross the valley to coordinate, but the white army can intercept any messenger.</p>
+    <p>No finite exchange of messages can give <em>both</em> blue halves certainty that the other received the attack signal. Every "final confirmation" is itself unreliable, creating infinite regress. <strong>Consensus over an unreliable channel is provably impossible.</strong></p>
+    <div class="callout pink">
+      Mapping to networks: two hosts over an unreliable channel can never reach <em>guaranteed mutual certainty</em> about closing state. A provably correct symmetric release protocol <strong>cannot exist</strong>.
+    </div>
+
+    <h3>Practical Protocol: Symmetric + Timeouts <a class="ts" href="#">30:22</a></h3>
+    <p>We attempt symmetric release and fall back gracefully:</p>
+    <div class="vci-box">
+      <div class="vci-row"><span class="port">Host 1</span><span class="arrow">→</span><span class="vci">DR (Data Release)</span><span class="arrow">→</span><span class="port">Host 2 — starts timer</span></div>
+      <div class="vci-row"><span class="port">Host 2</span><span class="arrow">→</span><span class="vci">DR + ACK</span><span class="arrow">→</span><span class="port">Host 1 — starts timer</span></div>
+      <div class="vci-row"><span class="port">Host 1</span><span class="arrow">→</span><span class="vci">ACK → releases connection</span></div>
+      <div class="vci-row"><span class="port">Host 2</span><span class="arrow"></span><span class="vci">receives ACK → releases; or releases on timeout</span></div>
+    </div>
+
+    <h4>Failure Scenarios</h4>
+    <p><strong>Final ACK lost:</strong> Host 2 never receives it. Timer expires → Host 2 closes independently. No problem.</p>
+    <p><strong>DR from Host 2 lost:</strong> Host 1 times out on its own DR → retransmits. Host 2 replies again. Exchange completes.</p>
+    <p><strong>Both DR and ACK lost:</strong> Both hosts time out. Each retries N times. After N × T, both forcibly close. Some data loss is possible but connection terminates.</p>
+    <div class="callout">
+      <strong>Accepted trade-off:</strong> some residual data loss is possible and accepted. The goal is to <em>minimise</em> it via timeouts — not eliminate it, which is impossible. Performance over total correctness.
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+    <h3>Connection Establishment</h3>
+    <p>A new connection's forbidden region must not overlap with that of an old connection on the same src-dst-port. Overlap is avoided by either waiting (impractical) or choosing a sufficiently high ISN (TCP's approach). Sequence numbers must grow at a bounded rate — enforced by self/ACK-clocking using the local hardware clock. The three-way handshake gives both sides independent ISN validation and the ability to detect delayed duplicates by checking whether ACK numbers match what they actually sent.</p>
+    <h3>Connection Release</h3>
+    <p>Asymmetric release is simple but data-lossy. Symmetric release is cleaner — each unidirectional half is closed separately — but a perfect protocol for it is provably impossible on unreliable networks (Two Army Problem). In practice: attempt symmetric release with timeouts, fall back to independent forced closure after N retries. Residual data loss is accepted as unavoidable.</p>
+    <h3>What Comes Next</h3>
+    <p>Once the ISN is established via the three-way handshake, <strong>flow control and ARQ (Automatic Repeat reQuest)</strong> protocols maintain sequence numbers for all subsequent data segments. The hard part was the initial handshake; flow control picks up from there.</p>
+  </div>
+
+</div>
+</body>
+</html>

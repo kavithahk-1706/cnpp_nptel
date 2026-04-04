@@ -152,6 +152,9 @@ Yes — perfect analogy. Each VC node only stores "received this VCI on this por
 
 ---
 
+**TRAP QUESTION: Is DNS on UDP or TCP?**
+Primarily UDP but not exclusively. It switches to TCP when the message is too large for a UDP Datagram size or if it needs to transfer all its data to another server. UDP becomes too much of a risk for that so it switches to TCP since it's reliable.
+
 **Q: Port numbers are 16 bits — is that the same size as part of an IP address?**
 No, different things entirely. IP addresses are 32 bits (4 octets). Port numbers are 16 bits (2 octets). Port numbers live at the transport layer to identify applications/processes; IP addresses live at the network layer to identify hosts. Different layers, different sizes, don't conflate them.
 
@@ -254,3 +257,248 @@ Line mode: client buffers the entire input line locally and sends it in one go w
 
 **Q: IAC escape — how does 255 as data vs 255 as command work?**
 Rule: if you see 255 and the next byte is ALSO 255 → it's an escape sequence meaning "this 255 is literal data, pass it to the application." If 255 is followed by anything other than 255 → treat it as a command. Analogous to bit stuffing / character stuffing: same principle of using a special marker to distinguish control info from data that happens to look like control info.
+
+## Lecture 10 — Application Layer: SMTP, MIME, POP3, IMAP, SNMP
+
+---
+
+**Q: What is the UA and MTA in a Gmail context?**
+**UA (User Agent)** = the Gmail interface itself — the webpage or app the user interacts with to compose, read, and manage mail. The UA constructs the email's headers and body based on user input.
+**MTA (Mail Transfer Agent)** = Google's backend mail servers (e.g. smtp.gmail.com) — the actual delivery machinery the user never sees. The MTA acts as a **client** when initiating a connection to send mail outward, as a **server** when receiving incoming mail on port 25, and as a **relay** when forwarding mail as an intermediary between sender and receiver MTAs — receiving from one (server role) and forwarding to another (client role). Similar in behaviour to an HTTP proxy.
+
+---
+
+**Q: How does BCC work in terms of the email envelope vs header?**
+The envelope and header are separate constructs even when their data overlaps. The "To:" field in the **header** is human-readable metadata rendered by the UA for the recipient to see. The **envelope** is what the MTA actually uses to route the mail, and these two can differ. BCC is the classic example: a BCC'd address is present in the **envelope** (so the MTA knows to deliver there) but absent from the **header** (so visible recipients have no idea). The MTA routes purely based on the envelope and never reads the header.
+
+---
+
+**Q: What is the SMTP session flow step by step?**
+1. TCP connection established — client connects to server on port 25
+2. Server sends **220** — service ready (server announces itself first)
+3. Client sends **HELO** with its MTA domain — server responds **250 OK**
+4. Client sends **MAIL FROM:\<addr\>** — server responds **250 OK**
+5. Client sends **RCPT TO:\<addr\>** — server responds **250 OK**
+6. Client sends **DATA** — server responds **354** (positive intermediate: "go ahead, send the body")
+7. Client sends headers (From, To, Subject, Date), then a blank line, then the body, terminated by a lone dot on its own line
+8. Server responds **250** — mail accepted
+9. Client sends **QUIT** — server responds **221** — service closing
+
+Note: **220** is the server's opening greeting. **221** is only at the very end when closing. These are different and should not be confused.
+
+---
+
+**Q: What do SMTP status code ranges mean?**
+- **2xx** — success, command accepted and completed
+- **3xx** — positive intermediate; command accepted but more input needed (e.g. 354 after DATA)
+- **4xx** — temporary failure; try again later. MTA will queue and retry automatically (e.g. mailbox temporarily full)
+- **5xx** — permanent failure; do not retry. MTA bounces mail back to sender (e.g. 550 = user doesn't exist)
+
+The key distinction between 4xx and 5xx is **retry logic** — 4xx says come back later, 5xx says don't come back at all.
+
+---
+
+**Q: Can you manually run any protocol session via telnet?**
+Yes, but only for **text-based (ASCII-based) protocols** — ones where commands and responses are human-readable plaintext. Telnet provides a raw TCP connection and the server doesn't care whether it's talking to a proper client application or a human typing manually, as long as valid protocol messages are received. Works for SMTP, HTTP/1.1, POP3, IMAP, and FTP's control channel (port 21). Does NOT work for binary or encrypted protocols — HTTPS fails because the TLS handshake is cryptographic binary data that cannot be typed manually. FTP is a mixed case: control channel (port 21) is text-based and telnettable, data channel (port 20) can carry binary file content.
+
+---
+
+**Q: What is MIME and how does it relate to SMTP?**
+SMTP natively handles only **7-bit ASCII text**. MIME (Multipurpose Internet Mail Extensions) is an extension built on top of SMTP that enables non-ASCII content — images, audio, video, attachments — by encoding them into 7-bit ASCII for transmission. MIME is not a separate protocol and has no port of its own; it just adds header fields between the email header and the body describing what the body contains and how it is encoded. The analogy to NVT holds: just as NVT standardises between different terminal formats, MIME standardises between ASCII and non-ASCII so binary content can travel over an ASCII-only pipe.
+
+MIME header fields include: MIME-Version, Content-Type, Content-Transfer-Encoding, Content-ID, Content-Description.
+
+**Content-Transfer-Encoding types:**
+- **7-bit** — already plain ASCII, no conversion needed
+- **8-bit** — uses full 8 bits, still mostly text-ish
+- **binary** — raw binary, no conversion
+- **base64** — converts binary data into a 64-character ASCII alphabet; every 3 bytes → 4 ASCII characters; bloats size ~33% but safely travels over ASCII-only SMTP. Used for image/audio/video attachments
+- **quoted-printable** — for mostly-ASCII text with a few non-ASCII characters; only encodes the problematic characters as =XX (hex value); more efficient than base64 for near-ASCII content
+
+**Content-Type** multipart = email contains multiple distinct parts (e.g. a text body + image attachment + PDF), each with its own Content-Type and encoding. The multipart type bundles them together with boundary markers.
+
+Application-level restrictions (e.g. Gmail blocking .exe attachments or large videos) are the mail server's own policy decisions. MIME just provides the Content-Type label — what the server does with that label is entirely up to the server's configuration.
+
+---
+
+**Q: What ports do POP3 and IMAP run on?**
+- **POP3** — port **110**
+- **IMAP4** — port **143**
+- **SMTP** — port **25** (already in notes)
+- **SNMP** — port **161** (request/response), port **162** (traps)
+
+---
+
+**Q: What is the difference between POP3 and IMAP, and which does Gmail use?**
+**POP3 (Post Office Protocol):** Simple download model. Pulls all messages fully from server to client. Server is a temporary holding area — once downloaded, mail is typically deleted from server. Designed for single-device use. Cannot partially fetch; must download entire message to read anything. No server-side management.
+
+**IMAP4 (Internet Message Access Protocol):** Server is always the source of truth. Client is just a view that reflects server state. Supports partial fetch — metadata (sender, subject, preview) is fetched first to populate the inbox list; full body and attachments are fetched on demand only when a specific email is opened. Supports multi-device access, server-side folder management, header-only search, and selective sync. Gmail uses IMAP.
+
+**On-demand behaviour in Gmail (IMAP):** Opening Gmail fetches metadata for the most recent emails. Clicking an email fetches its full body. Navigating to older pages, switching folders, or searching triggers fresh server fetches for that specific content. Everything is on demand. Caching is a client-side implementation detail — Gmail caches previously fetched data locally so repeat access is faster; clearing cache forces fresh fetches from server, which is why first load after cache clear takes slightly longer.
+
+---
+
+**Q: What is SNMP and what are its components?**
+SNMP (Simple Network Management Protocol) has nothing to do with mail. It manages network devices (routers, switches, printers, hosts) at the application layer. Runs on **UDP** for low overhead. Two core functions: **monitor** (collect info about device health/state) and **control** (act on that info to fix or configure).
+
+**Components:**
+- **Agent** — software running on a managed device. Maintains local data about the device's configuration and state. Reports to the manager. Responds to queries and sends traps.
+- **Manager** — application (management station) used by network admin. Queries or modifies agent data. Looks up MIBs to know what objects exist before sending requests.
+- **MIB (Management Information Base)** — a text file on the agent describing what managed objects exist on that device and their structure, written in ASN.1 syntax. Acts as a schema/dictionary — static reference for the manager to know what questions it can ask. **MIB-2 (RFC 1213)** defines the standard baseline managed objects common to all TCP/IP devices. Vendor/device-specific extensions are defined in additional MIBs on top of this standard base.
+- **Managed Objects** — specific trackable/configurable properties of a device (e.g. CPU usage, interface status, packets dropped, bandwidth). Each is assigned a unique **OID (Object Identifier)** — a sequence of integers separated by dots (e.g. 1.3.6.1.2.1...) used by the manager to request specific data from the agent.
+
+---
+
+**Q: What are the SNMP operations and which fall under monitor vs control?**
+- **GET request** (manager→agent) — requests value of one or more managed objects → **monitor**
+- **GET NEXT request** (manager→agent) — requests next object in lexicographic OID order (useful for walking the MIB tree) → **monitor**
+- **GET response** (agent→manager) — response to GET, GET NEXT, or SET requests → **monitor**
+- **SET request** (manager→agent) — modifies value of one or more managed objects → **control**
+- **Trap** (agent→manager, port 162) — unsolicited alert pushed by agent about a specific event without waiting for a query → **monitor** (it conveys information about device state, not a change)
+
+SET request is the **only control operation**. Everything else is monitor. Traps are the only SNMP messages initiated by the agent without a prior request from the manager. Typical flow: agent fires trap about a critical event → manager evaluates → manager sends SET request to reconfigure the device.
+
+GET/GET NEXT/SET/GET response all use port **161** (request-response). Traps use port **162**.
+
+---
+
+**Q: What does lexicographic OID order mean?**
+Comparison happens position by position through the integer sequence. Similar to alphabetical ordering but for numbers. OID 1.3.6.1.2 comes before 1.3.6.1.10 because at the fifth position 2 < 10. GET NEXT uses this ordering to traverse the MIB tree sequentially without needing to know every OID in advance.
+
+---
+
+**Q: What are the SNMP versions?**
+- **SNMPv1** — community string (plaintext password) sent with every request. No encryption. Simple but completely insecure.
+- **SNMPv2c** — "c" stands for community; kept the insecure community string approach from v1 (security overhaul attempted but too complex, abandoned). Added 64-bit counters for high-speed interfaces (32-bit counters overflow on fast links), better error handling, and additional PDU types. Security problem unresolved.
+- **SNMPv3** — full security implemented: **integrity** (packets not tampered with), **authentication** (valid source verified), **privacy/confidentiality** (encryption). Maps to the CIA triad with availability swapped out for authentication — availability is a system-wide property not directly implementable in a protocol, whereas authentication is concretely actionable at the protocol level. Many devices support all three versions simultaneously.
+
+---
+
+## Lecture 11 — Transport Layer 1: Services
+
+---
+
+**Q: When they say data passes into the OS through the transport layer, what does that mean architecturally?**
+It means TCP/UDP is where the user space/kernel space boundary is crossed. When an application wants to send data, it makes a system call — that's the literal crossing point. TCP or UDP is the first thing in kernel space that receives it. "Through the transport layer" = through the user↔kernel gate. The physical implementation breakdown: NIC handles physical layer (+ parts of data link in wireless for speed), NIC drivers handle the MAC sublayer, OS kernel handles LLC (upper data link), full IP logic, and both TCP and UDP. Application layer sits in user space and interacts with the user directly.
+
+---
+
+**Q: What does LLC actually handle? I said it was error detection, CRC, parity checks.**
+That's wrong — CRC and framing belong to the MAC sublayer or physical layer. LLC's actual job in TCP/IP is **multiplexing** — identifying which network layer protocol (IP, ARP etc.) to hand the frame up to. In practice LLC is almost vestigial in modern TCP/IP ethernet because ethernet handles framing itself. For exam purposes: LLC = upper data link, handles multiplexing and flow control between data link and network layer.
+
+---
+
+**Q: Is there a formal interlayer between application and transport?**
+Not in TCP/IP. The one real thing that lives in that gap is **TLS/SSL** — handles encryption and session management, technically sits between application and transport. This is why the OSI model has separate session and presentation layers that TCP/IP just collapses into the application layer. Everything else (HTTP, FTP etc.) directly calls TCP/UDP via sockets.
+
+---
+
+**Q: How does the transport layer detect a packet dropped at the network layer if the drop happens below it?**
+Packet dropped at network layer → receiver transport layer sees nothing → no ACK sent → sender timeout expires → sender retransmits. The absence of ACK IS the signal. Additionally, 3 duplicate ACKs (same ACK number repeated) = fast retransmit signal, meaning packets after that point dropped but earlier ones arrived fine. TCP retransmits immediately without waiting for full timeout — this is called **fast retransmit.**
+
+---
+
+**Q: Does a webpage not load at all if a packet drops, or just that specific resource?**
+Depends on the HTTP version. HTTP/1.1 over TCP: one dropped packet stalls the entire connection, page hangs. HTTP/2 over TCP: mostly stalls due to head-of-line blocking — one dropped packet stalls the whole connection even for unrelated resources. HTTP/3 over QUIC (UDP-based): each resource stream is independent, one dropped packet only stalls that specific resource, rest of page loads fine. This is exactly why HTTP/3 exists.
+
+---
+
+**Q: Does a video wait for the entire file to reassemble before playing?**
+No — that would be unusable. Videos use **adaptive bitrate streaming (ABR)**. The video is pre-chunked server-side into small segments (a few seconds each). The player requests chunk by chunk, starts playing once it has the first few buffered, and keeps fetching ahead while you watch. The loading spinner = not enough chunks buffered ahead to play smoothly, not waiting for the whole file.
+
+---
+
+**Q: Is sliding window purely a reliability mechanism or also a flow control mechanism?**
+Both simultaneously. As a reliability mechanism: sender keeps unACKed segments in buffer, retransmits on timeout, uses sequence numbers. As a flow control mechanism: the window SIZE dynamically reflects receiver buffer availability via rwnd advertisement. Stop-and-wait is just sliding window with fixed window size 1 — reliable but inefficient because the pipe sits idle waiting for each ACK. Sliding window keeps the pipe full while maintaining reliability.
+
+---
+
+**Q: How does the sender know the receiver's buffer capacity? What does "advertise" mean?**
+Every TCP segment header has a **window size field.** When the receiver sends back an ACK, it fills this field with current free buffer space in bytes. So every ACK does two things simultaneously: "I received everything up to byte N" + "I currently have X bytes of free buffer space." Sender reads X and cannot have more than X bytes unacknowledged in flight. When buffer is full, receiver advertises window = 0, sender stops completely. When receiver processes data and frees buffer, it advertises a non-zero window, sender resumes.
+
+---
+
+**Q: What are the two factors that determine actual sliding window size?**
+- **rwnd (receiver window):** advertised by receiver in TCP header alongside ACK. Reflects free buffer space. Determined by OS buffer allocation for the connection and speed at which the application is consuming incoming data.
+- **cwnd (congestion window):** maintained by sender based on network conditions. Not directly observed — inferred from dropped packets (no ACK = congestion). Starts at 1 MSS, doubles per RTT in slow start, switches to linear growth (+1 MSS per RTT) after crossing ssthresh, drops on congestion detection.
+- **Effective window = min(rwnd, cwnd).** Both must cooperate — even if network is fine, slow receiver pulls window down via rwnd, and even if receiver has plenty of buffer, congested network pulls it down via cwnd.
+
+---
+
+**Q: cwnd doubles per ACK or per RTT?**
+Per RTT, not per ACK. In slow start every ACK adds 1 MSS to cwnd, but since you're sending N segments and receiving N ACKs, cwnd effectively doubles per round trip. Per ACK is slightly off and could cost marks in a numerical question.
+
+---
+
+**Q: What exactly does cwnd drop to when congestion is detected?**
+Depends on implementation. Two main variants:
+
+| | Timeout (complete silence) | 3 Duplicate ACKs |
+|---|---|---|
+| **TCP Tahoe** | drop to 1 MSS | drop to 1 MSS |
+| **TCP Reno** | drop to 1 MSS | drop to ssthresh (fast recovery) |
+
+Reno is smarter: 3 dup ACKs means some packets are still getting through so network isn't fully collapsed — no need to drop all the way to 1 MSS. Timeout means complete silence, so drop hard. Reno is the more common modern implementation.
+
+---
+
+**Q: Collision vs congestion — same thing?**
+Completely different. **Collision** = two devices transmitting simultaneously on the same physical medium, signals physically interfere and destroy each other. Layer 1/2 problem. Fixed by CSMA/CD (wired) and CSMA/CA (wireless). **Congestion** = too much traffic arriving at a router faster than it can forward, buffer fills, packets dropped. Network layer and above. Fixed by congestion control mechanisms in TCP. Collision is a physical medium problem; congestion is a capacity problem.
+
+---
+## Lecture 12 — Transport Layer 2: Connection Establishment
+
+---
+
+**Q: What makes delayed duplicate connection requests non-differentiable to the receiver?**
+In a naive two-way handshake, there is nothing in the packet itself that encodes when it was created or whether it belongs to a current or previous connection. If a client crashes and restarts, it may reuse the same initial sequence number or the protocol has no mechanism to encode "age." The receiver gets two structurally identical packets with no postmark or timestamp — it cannot distinguish between a zombie from a previous attempt and a legitimate retransmission. The receiver is stateless about the history of what it received; it only knows the packet arrived, not how long it spent in the network.
+
+---
+
+**Q: What does "performance-first" mean in the correctness vs performance tradeoff?**
+Correctness-first means adding a mechanism that always distinguishes delayed duplicates from new requests — airtight but slow and expensive in overhead. Performance-first means making the confusion scenario so statistically unlikely that it stops being a practical problem, without eliminating it mathematically. TCP does this via random Initial Sequence Numbers (ISNs): the ISN is a random 32-bit number, so the probability that a delayed duplicate from a previous connection shares the same ISN as a new connection is astronomically low. You are not solving the problem, you are making the bad outcome improbable enough to be acceptable.
+
+---
+
+**Q: How does ISN randomization actually cause the receiver to reject a delayed duplicate?**
+When a connection starts, both sides agree on a starting sequence number — the ISN. Every subsequent packet is numbered relative to that ISN. The receiver maintains a window of expected sequence numbers for the current connection. A delayed duplicate from a previous connection carries sequence numbers relative to a completely different ISN, so its numbers fall outside the current connection's expected window entirely. The receiver sees a sequence number that doesn't match anything it's waiting for and drops it. The mismatch exposes the zombie — not any explicit "old" label. This is why ISNs must be random: if both connections started from ISN 0, the old packet's sequence numbers might accidentally fall inside the new connection's window and get accepted as valid data.
+
+---
+
+**Q: How does restricting packet lifetime actually solve the delayed duplicate problem?**
+The other two solutions try to identify duplicates at the receiver and reject them. This solution prevents duplicates from existing at all. Every packet is given a maximum lifetime enforced by the network — if a packet has been roaming longer than this bound, intermediate routers kill it before it can reach the receiver. The receiver only ever sees the retransmission; the zombie never arrives. Additionally, the sender waits for one full maximum packet lifetime before reusing the same connection parameters, guaranteeing all stragglers from the old connection are dead before the new one begins.
+
+---
+
+**Q: Why do throwaway ports and unique global identifiers both fail — what's the common thread?**
+Both fail because they solve the problem through permanent exclusion. Throwaway ports permanently retire every used port number, and since port numbers are a finite 16-bit space (65535 values), the address space is eventually exhausted. Unique global identifiers permanently blacklist every used identifier, which requires persistent state tracking across system crashes — the algorithm must survive reboots and still guarantee no new identifier overlaps with any previously live one, which is infeasible overhead. Neither approach sets an expiry on used-up resources; they just write them off forever. Restricting packet lifetime is the opposite philosophy: reuse freely, but wait for provable death first.
+
+---
+
+**Q: What is the difference between TTL (hop count) and T (maximum packet lifetime)?**
+These are two different things operating at two different levels. TTL with hop count is the enforcement mechanism — what physically kills packets in the network. Every router decrements the hop count; if it hits zero, the packet is dropped. This happens at the network layer per packet in real time. T, the maximum packet lifetime, is a derived design parameter — the theoretical upper bound on how long any packet could possibly survive, calculated by analysing how TTL is configured and worst-case queuing delays. T is not enforced directly; it is the answer to "after what time is it safe to reuse a sequence number?" because after T seconds, TTL enforcement guarantees everything carrying that sequence number is dead.
+
+---
+
+**Q: Does hop count actually bound time? What about a packet stuck in a queue?**
+Hop count does not bound time — this is a known limitation. The hop count only decrements when a packet is forwarded by a router; it does not move while the packet sits in a queue. A packet with TTL 30 remaining could theoretically queue indefinitely without its hop count changing. Hop count specifically solves routing loops (bouncing forever between routers), not indefinite queuing. Queuing is bounded separately: router queues have a maximum size and active queue management algorithms like RED (Random Early Detection) probabilistically drop packets before queues fill completely. Residual edge cases are handled by ISN randomization. No single mechanism is airtight — hop count, queue management, and ISN randomization work collectively.
+
+---
+
+**Q: Why is restricted network design not feasible at internet scale?**
+Restricted network design requires a guaranteed maximum end-to-end delay across the entire network — meaning every router on every path would need to provide timing guarantees that can be summed or bounded. The internet is decentralized; no single entity owns or controls all routers, and no global enforcement of such guarantees is possible. It is a structural promise that nobody can make.
+
+---
+
+**Q: Why is timestamp-per-packet not feasible despite being the most theoretically clean solution?**
+Timestamp requires every router on earth to have synchronized clocks. Clock drift — the phenomenon where physical clocks on different machines run at slightly different speeds, so "60 seconds" on one machine is actually 60.003 seconds on another — compounds across internet scale into real desynchronization. One router might consider a packet alive while another considers it expired, making consistent enforcement impossible. Sequence numbers avoid this entirely because both sides agree on the numbering scheme upfront; no hardware clock is involved.
+
+---
+
+**Q: What is the virtual clock and how do sequence numbers act as one?**
+A virtual clock is the sequence number counter itself, incrementing at a fixed rate tied to real time regardless of whether packets are being sent. When a packet is sent, it is stamped with the current sequence number value — which is equivalent to stamping it with the current virtual time. The sequence number space is sized and the increment rate is chosen such that a full wraparound (reuse of a sequence number) takes longer than T seconds. By the time a sequence number would be reused, TTL has guaranteed that every packet ever stamped with it is dead. So reuse is safe. There is no hardware clock involved, which is why clock drift is not a problem.
+
+---
+
+**Q: Why must T account for acknowledgements and not just packets?**
+The delayed duplicate problem exists on both sides. The receiver cannot distinguish duplicate requests; but the sender also cannot distinguish acknowledgements. If a connection crashes and restarts, an acknowledgement for the original request might still be in the network — the sender cannot tell if it belongs to the old attempt or the new one. T must therefore be long enough to guarantee that not just the original packets but all acknowledgements associated with them have also been purged from the network. Only once both are guaranteed dead can sequence numbers be safely reused and any arriving acknowledgement be trusted to belong to a currently live connection.

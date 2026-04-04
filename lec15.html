@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 15 — Sliding Window Protocols</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec14.html" class="nav-lec">← prev</a>
+        <a href="lec16.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 15</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>Transport Layer V — Sliding Window Protocols</h1>
+      <p>Prof. Sandip Chakraborty &nbsp;·&nbsp; IIT Kharagpur</p>
+      <p><strong>Topics:</strong> Sliding window concept, Go-Back-N ARQ, Selective Repeat ARQ, window size bounds and derivations.</p>
+      <a href="https://nptel.ac.in" class="video-link" target="_blank">↗ NPTEL Video</a>
+    </div>
+
+    <!-- ── 1. MOTIVATION ── -->
+    <div class="section">
+      <div class="section-label">1 · Motivation — Why Not Stop-and-Wait?</div>
+      <p>Stop-and-wait (covered in Lec 14) allows only <strong>1 outstanding packet</strong> at a time. Sender transmits, then blocks until ACK arrives — severely under-utilising link capacity especially when propagation delay is large.</p>
+      <div class="callout yellow">
+        <strong>Core idea of sliding window:</strong> allow the sender to transmit multiple frames <em>in a pipeline</em> without waiting for individual ACKs, as long as the number of unacknowledged frames stays within a bounded <strong>window size</strong>.
+      </div>
+    </div>
+
+    <!-- ── 2. SLIDING WINDOW CONCEPT ── -->
+    <div class="section">
+      <div class="section-label">2 · Sliding Window — Key Concepts</div>
+
+      <h3>Sequence Numbers</h3>
+      <p>Every outbound segment carries a <strong>sequence number</strong>. For an <em>n</em>-bit sequence number field, the sequence space spans <strong>0 to 2<sup>n</sup> − 1</strong>. Numbers wrap around (circular queue fashion) — after the max, the next frame is numbered 0 again.</p>
+
+      <h3>Sender Window &amp; Receiver Window</h3>
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Sender Window</div>
+          <div class="concept-desc">The set of sequence numbers the sender is permitted to transmit without waiting for an ACK. Frames within the window can be sent in parallel.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Receiver Window</div>
+          <div class="concept-desc">The set of sequence numbers the receiver is prepared to accept. The receiver will not accept frames outside this window until earlier ones are acknowledged.</div>
+        </div>
+      </div>
+
+      <h3>Window Sliding Mechanism</h3>
+      <p>When the sender receives an ACK for the <em>lowest unacknowledged frame</em>, the sending window <strong>slides one position to the right</strong> — exposing the next sequence number that can now be sent. The receiver window slides correspondingly.</p>
+      <div class="callout">
+        <strong>Window size = 1:</strong> identical behaviour to stop-and-wait. As window size grows, parallelism increases and link utilisation improves.
+      </div>
+
+      <p class="callout green">📺 Visual: The sender/receiver window diagram at <a class="ts" href="#">03:01</a> is worth watching — it shows how the window slides as ACKs arrive. Highly recommended.</p>
+    </div>
+
+    <!-- ── 3. NOISY CHANNEL — OVERVIEW ── -->
+    <div class="section">
+      <div class="section-label">3 · Handling Loss — ARQ Variants</div>
+      <p>In a noisy channel, frames or ACKs can get lost. Like stop-and-wait, sliding window protocols use a <strong>timeout mechanism</strong>: if the timer for the oldest unacknowledged frame expires, the sender takes action. Two strategies exist:</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Go-Back-N ARQ</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">On timeout</div><div>Retransmit <strong>all</strong> frames currently in the sender window</div></div>
+            <div class="compare-row"><div class="label">Receiver</div><div>Accepts frames <strong>in order only</strong>. Discards any out-of-order frame.</div></div>
+            <div class="compare-row"><div class="label">Rx buffer</div><div>Size = 1 (no buffering of out-of-order frames)</div></div>
+            <div class="compare-row"><div class="label">Window size</div><div>≤ MAX_SEQ = 2<sup>n</sup> − 1</div></div>
+            <div class="compare-row"><div class="label">ACK type</div><div>Cumulative ACK</div></div>
+            <div class="compare-row"><div class="label">Simpler?</div><div>Yes — no out-of-order buffering needed</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Selective Repeat ARQ</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">On timeout</div><div>Retransmit <strong>only</strong> the lost/unacknowledged frame(s)</div></div>
+            <div class="compare-row"><div class="label">Receiver</div><div>Accepts frames <strong>out of order</strong>; buffers them</div></div>
+            <div class="compare-row"><div class="label">Rx buffer</div><div>Size = window size (must store out-of-order frames)</div></div>
+            <div class="compare-row"><div class="label">Window size</div><div>≤ (MAX_SEQ + 1) / 2 = 2<sup>n−1</sup></div></div>
+            <div class="compare-row"><div class="label">ACK type</div><div>NAK (Negative ACK) or SACK (Selective ACK)</div></div>
+            <div class="compare-row"><div class="label">Efficient?</div><div>Yes — avoids unnecessary retransmissions</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4. GO-BACK-N ── -->
+    <div class="section">
+      <div class="section-label">4 · Go-Back-N ARQ — In Depth</div>
+
+      <h3>Sender State — Three Parameters</h3>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">base</div>
+          <div class="concept-desc">Sequence number of the <em>oldest unacknowledged</em> frame. Window starts here.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">next_seq_num</div>
+          <div class="concept-desc">Next frame to transmit. Can send without waiting for ACK as long as <code>next_seq_num &lt; base + N</code>.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">N (window size)</div>
+          <div class="concept-desc">Maximum number of unacknowledged frames allowed simultaneously.</div>
+        </div>
+      </div>
+
+      <h3>Sender Logic (pseudocode)</h3>
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci">on data from app layer:</span></div>
+        <div class="vci-row"><span class="port" style="padding-left:16px">if next_seq_num &lt; base + N:</span></div>
+        <div class="vci-row"><span class="vci" style="padding-left:32px">→ send packet(next_seq_num)</span></div>
+        <div class="vci-row"><span class="vci" style="padding-left:32px">→ if base == next_seq_num: start_timer()</span></div>
+        <div class="vci-row"><span class="vci" style="padding-left:32px">→ next_seq_num++</span></div>
+        <div class="vci-row"><span class="port" style="padding-left:16px">else: refuse data (window full)</span></div>
+        <div class="vci-row"><span class="vci">on timeout:</span></div>
+        <div class="vci-row"><span class="port" style="padding-left:16px">→ restart_timer()</span></div>
+        <div class="vci-row"><span class="port" style="padding-left:16px">→ retransmit all frames from base to next_seq_num − 1</span></div>
+        <div class="vci-row"><span class="vci">on ACK(n) received (not corrupted):</span></div>
+        <div class="vci-row"><span class="port" style="padding-left:16px">→ base = n + 1  (slide window)</span></div>
+      </div>
+
+      <h3>Receiver Logic</h3>
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci">on packet received:</span></div>
+        <div class="vci-row"><span class="port" style="padding-left:16px">if not corrupted AND seq_num == expected_seq_num:</span></div>
+        <div class="vci-row"><span class="vci" style="padding-left:32px">→ deliver data to application</span></div>
+        <div class="vci-row"><span class="vci" style="padding-left:32px">→ send ACK(expected_seq_num)</span></div>
+        <div class="vci-row"><span class="vci" style="padding-left:32px">→ expected_seq_num++</span></div>
+        <div class="vci-row"><span class="port" style="padding-left:16px">else: discard frame, re-send ACK for last correctly received frame</span></div>
+      </div>
+
+      <div class="callout pink">
+        <strong>Key receiver behaviour:</strong> Go-Back-N receiver has NO buffer for out-of-order frames. If frame 2 is lost but frames 3 and 4 arrive, those are <strong>discarded</strong>. On retransmission, 2, 3, and 4 are all sent again. This is the "go back" part — wasteful but simple.
+      </div>
+
+      <p class="callout green">📺 The timeline walkthrough at <a class="ts" href="#">15:52</a> shows frames being sent, ACK loss, and the full window retransmission visually. Watch this.</p>
+
+      <h3>Window Size Constraint for Go-Back-N</h3>
+      <p>With an <em>n</em>-bit sequence number:</p>
+      <div class="callout">
+        <strong>MAX_SEQ = 2<sup>n</sup> − 1 &nbsp;→&nbsp; Window size W ≤ MAX_SEQ = 2<sup>n</sup> − 1</strong>
+      </div>
+      <p>You have <strong>2<sup>n</sup> distinct</strong> sequence numbers but the window size can only be <strong>2<sup>n</sup> − 1</strong>. Why not 2<sup>n</sup>?</p>
+
+      <h4>Why window ≠ MAX_SEQ + 1 — the ambiguity problem</h4>
+      <p>Scenario: MAX_SEQ = 3 (4 sequence numbers: 0–3), window size = 4 (= MAX_SEQ + 1).</p>
+      <ol style="padding-left:20px; color:var(--text); font-size:15px; line-height:2;">
+        <li>Sender transmits frames 0, 1, 2, 3.</li>
+        <li>Receiver receives all correctly and sends ACKs — but <strong>all ACKs are lost</strong>.</li>
+        <li>Receiver slides its window and now expects the <em>next batch starting from 0</em>.</li>
+        <li>Sender times out and <strong>retransmits frame 0</strong>.</li>
+        <li>Receiver sees frame 0 and thinks it's the new frame 0 — accepts it as new data. <strong>Wrong!</strong></li>
+      </ol>
+      <div class="callout pink">
+        With window = MAX_SEQ + 1, the sender and receiver windows can overlap perfectly after a full-window transmission + ACK loss, making it impossible to distinguish a retransmission from a new frame.
+      </div>
+      <p>With window = MAX_SEQ (= 3), after the same ACK loss: the sender retransmits only frames 0–2. The receiver is now expecting frame 3 — so it <strong>correctly identifies 0–2 as duplicates</strong> and discards them.</p>
+    </div>
+
+    <!-- ── 5. SELECTIVE REPEAT ── -->
+    <div class="section">
+      <div class="section-label">5 · Selective Repeat ARQ — In Depth</div>
+
+      <p>Selective Repeat fixes Go-Back-N's wastefulness. Instead of retransmitting the entire window on any loss, the sender <strong>selectively retransmits only the missing frames</strong>.</p>
+
+      <h3>Key Differences from Go-Back-N</h3>
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Receiver Buffers Out-of-Order Frames</div>
+          <div class="interface-desc">If frame 2 is lost but frame 3 arrives, frame 3 is stored in a buffer rather than discarded. When frame 2 is retransmitted and received, the receiver delivers 2 and 3 together in order.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">NAK / SACK Mechanism</div>
+          <div class="interface-desc">Receiver sends a <strong>Negative ACK (NAK)</strong> or <strong>Selective ACK (SACK)</strong> to explicitly tell the sender which frame is missing. In TCP, this is implemented as SACK options in the TCP header.</div>
+        </div>
+      </div>
+
+      <h3>Selective Repeat — Timeline Example</h3>
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci">Sender sends frame 0, frame 1</span><span class="arrow"> →</span></div>
+        <div class="vci-row"><span class="port">Receiver gets 0 and 1, sends cumulative ACK(2)</span><span class="arrow"> →</span></div>
+        <div class="vci-row"><span class="vci">Sender receives ACK(2), slides window, sends frame 2</span><span class="arrow"> →</span></div>
+        <div class="vci-row"><span class="port" style="color:var(--accent2)">Frame 2 LOST in channel</span></div>
+        <div class="vci-row"><span class="vci">Sender sends frame 3</span><span class="arrow"> →</span></div>
+        <div class="vci-row"><span class="port">Receiver gets frame 3 (out of order) → buffers it → sends NAK(2)</span><span class="arrow"> →</span></div>
+        <div class="vci-row"><span class="vci" style="color:var(--accent3)">Sender retransmits frame 2 ONLY</span></div>
+        <div class="vci-row"><span class="port">Receiver gets frame 2, delivers 2 + 3 in order</span></div>
+      </div>
+
+      <p class="callout green">📺 This exact timeline is shown at <a class="ts" href="#">30:04</a> in the lecture.</p>
+
+      <h3>Window Size Constraint for Selective Repeat</h3>
+      <p>With an <em>n</em>-bit sequence number (2<sup>n</sup> distinct values, MAX_SEQ = 2<sup>n</sup> − 1):</p>
+      <div class="callout">
+        <strong>Window size W ≤ (MAX_SEQ + 1) / 2 = 2<sup>n</sup> / 2 = 2<sup>n−1</sup></strong>
+      </div>
+      <p>For 3-bit sequence numbers (0–7, 8 values): max window size = 8/2 = <strong>4</strong>.</p>
+
+      <h4>Why is the Selective Repeat window size half of Go-Back-N's?</h4>
+      <p>Because SR receivers <strong>accept out-of-order frames</strong>, the ambiguity problem is worse. Scenario: MAX_SEQ = 3, window = 3 (one more than allowed).</p>
+      <ol style="padding-left:20px; color:var(--text); font-size:15px; line-height:2;">
+        <li>Sender sends 0, 1, 2. Receiver receives all — all ACKs lost.</li>
+        <li>Receiver window now expects frames 3, 0, 1 (window of 3 wrapping around).</li>
+        <li>Sender times out, retransmits frame 0.</li>
+        <li>Receiver is expecting frame 0 as part of the <em>next batch</em> — it <strong>accepts it as a new frame</strong>. Wrong!</li>
+      </ol>
+      <p>With window = 2 (= (3+1)/2): sender retransmits 0 and 1; receiver is expecting 2 and 3 — it <strong>correctly rejects 0 and 1</strong> as duplicates.</p>
+      <div class="callout pink">
+        The SR window must be ≤ half the sequence number space so that the sender's and receiver's windows <strong>never overlap</strong>, preventing old retransmitted frames from being mistaken for new ones.
+      </div>
+    </div>
+
+    <!-- ── 6. SUMMARY TABLE ── -->
+    <div class="section">
+      <div class="section-label">6 · Summary &amp; Formula Sheet</div>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Property</th>
+            <th>Go-Back-N ARQ</th>
+            <th>Selective Repeat ARQ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>On timeout / loss</td>
+            <td>Retransmit entire window</td>
+            <td>Retransmit only lost frame(s)</td>
+          </tr>
+          <tr>
+            <td>Receiver buffers out-of-order?</td>
+            <td><span class="tag tag-bad">No — discards them</span></td>
+            <td><span class="tag tag-good">Yes — stores in buffer</span></td>
+          </tr>
+          <tr>
+            <td>ACK mechanism</td>
+            <td>Cumulative ACK</td>
+            <td>NAK or SACK</td>
+          </tr>
+          <tr>
+            <td>Max window size (n-bit seq)</td>
+            <td class="port-num">2<sup>n</sup> − 1</td>
+            <td class="port-num">2<sup>n−1</sup></td>
+          </tr>
+          <tr>
+            <td>Bandwidth efficiency</td>
+            <td><span class="tag tag-bad">Lower (retransmits more)</span></td>
+            <td><span class="tag tag-good">Higher (minimal retransmit)</span></td>
+          </tr>
+          <tr>
+            <td>Implementation complexity</td>
+            <td><span class="tag tag-good">Simpler</span></td>
+            <td><span class="tag tag-bad">More complex (buffer mgmt)</span></td>
+          </tr>
+          <tr>
+            <td>TCP equivalent</td>
+            <td>Basic retransmit on timeout</td>
+            <td>TCP SACK option</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Key Formulas</h3>
+      <div class="two-col">
+        <div class="proto-card">
+          <div class="proto-layer">Go-Back-N</div>
+          <div class="proto-names">W ≤ 2<sup>n</sup> − 1</div>
+          <p style="font-size:13px; margin-top:6px; color:var(--muted)">n = bits in sequence number field<br>Sequence space = 2<sup>n</sup> distinct values<br>MAX_SEQ = 2<sup>n</sup> − 1</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Selective Repeat</div>
+          <div class="proto-names">W ≤ 2<sup>n</sup> / 2 = 2<sup>n−1</sup></div>
+          <p style="font-size:13px; margin-top:6px; color:var(--muted)">= (MAX_SEQ + 1) / 2<br>Half of Go-Back-N limit<br>Prevents old/new frame ambiguity</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 7. CONCEPT SUMMARY ── -->
+    <div class="section">
+      <div class="section-label">7 · Concept Summary</div>
+      <div class="callout green">
+        <strong>Sliding window</strong> enables pipelined transmission — sender keeps multiple frames "in flight" without waiting for each individual ACK, governed by a window size.<br><br>
+        <strong>Go-Back-N</strong>: simple, wasteful on loss — entire window retransmitted. Window ≤ 2<sup>n</sup>−1.<br><br>
+        <strong>Selective Repeat</strong>: efficient on loss — only missing frames retransmitted, but requires receiver buffer and NAK/SACK. Window ≤ 2<sup>n−1</sup>.<br><br>
+        <strong>Why the window size limits?</strong> Both limits prevent a retransmitted frame (old sequence number) from being confused with a new expected frame — the sequence number spaces of sender and receiver must not fully overlap after a worst-case ACK loss scenario.<br><br>
+        Next lecture: performance aspects of the transport layer, and how these mechanisms map onto actual TCP.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

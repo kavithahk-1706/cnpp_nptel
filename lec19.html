@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 19 — TCP I: Primitives | CNPP Notes</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec18.html" class="nav-lec">← prev</a>
+      <a href="lec20.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <!-- ── header ── -->
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 19</span>
+    <span class="high-badge">⬆ HIGH PRIORITY</span>
+    <h1>Transmission Control Protocol — I<br>Primitives</h1>
+    <p>Prof. Sandip Chakraborty · IIT Kharagpur · Transport Layer</p>
+    <a href="https://nptel.ac.in/courses/106105183" class="video-link" target="_blank">▶ Lecture Video (NPTEL)</a>
+  </div>
+
+  <!-- ── 1. WHY TCP ── -->
+  <div class="section">
+    <div class="section-label">Motivation</div>
+    <h3>What TCP Was Built To Solve</h3>
+    <p>TCP was specifically designed to provide <strong>reliable, end-to-end byte streaming over an unreliable internetwork</strong>. The IP-based network layer is fundamentally unreliable — routers can drop packets due to buffer overflow, and IP does nothing about it. TCP sits on top of this and handles reliability itself.</p>
+
+    <p>On top of that, the underlying network is <strong>heterogeneous</strong> — one path might cross a wireless hop, then a wired Ethernet segment, then an optical fiber cable, each with different protocols at the data link layer, different error rates, and different delay characteristics. TCP dynamically adapts to all of it and is robust to many kinds of failures.</p>
+
+    <div class="callout green">
+      <strong>Key stat:</strong> More than 80% of internet traffic uses TCP for end-to-end data transfer.
+    </div>
+  </div>
+
+  <!-- ── 2. HISTORY ── -->
+  <div class="section">
+    <div class="section-label">Protocol History</div>
+    <h3>TCP RFC Timeline <a href="https://nptel.ac.in/courses/106105183" class="ts">03:53</a></h3>
+    <p>TCP has a long evolutionary history. The <strong>RFC (Request for Comments)</strong> documents are published by the <strong>IETF (Internet Engineering Task Force)</strong>, the global body responsible for internet protocol standardization.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>RFC</th>
+          <th>What it added</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">RFC 793</td>
+          <td>Original TCP specification — September 1981</td>
+        </tr>
+        <tr>
+          <td class="port-num">RFC 1122</td>
+          <td>Clarifications and bug fixes to base TCP</td>
+        </tr>
+        <tr>
+          <td class="port-num">RFC 1323</td>
+          <td>TCP extensions for high performance</td>
+        </tr>
+        <tr>
+          <td class="port-num">RFC 2018</td>
+          <td>TCP SACK — Selective Acknowledgement (uses selective repeat instead of go-back-N)</td>
+        </tr>
+        <tr>
+          <td class="port-num">RFC 2581</td>
+          <td>TCP congestion control algorithm</td>
+        </tr>
+        <tr>
+          <td class="port-num">RFC 3168</td>
+          <td>Explicit Congestion Notification (ECN)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 3. SERVICE MODEL ── -->
+  <div class="section">
+    <div class="section-label">Service Model</div>
+    <h3>TCP Connection Properties <a href="https://nptel.ac.in/courses/106105183" class="ts">05:40</a></h3>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Full Duplex</div>
+        <div class="concept-desc">Both hosts can send and receive data simultaneously over a single TCP connection. Host A → B and B → A at the same time.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Point to Point</div>
+        <div class="concept-desc">TCP is strictly between two endpoints. It does <strong>not</strong> support multicasting (one to group) or broadcasting (one to all).</div>
+      </div>
+    </div>
+
+    <h4>Socket — The TCP Endpoint Abstraction</h4>
+    <p>In Unix-based systems, a TCP connection is represented as a <strong>socket</strong> — what the generic transport layer model called a "logical pipe." A socket is uniquely identified by a <strong>6-tuple</strong>:</p>
+
+    <div class="socket-tuple">
+      <span class="tuple-part tuple-ip">Source IP</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-port">Source Port</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-socket">Source ISN</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-ip">Dest IP</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-port">Dest Port</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-part tuple-socket">Dest ISN</span>
+    </div>
+
+    <p style="font-size:13px; color: var(--muted);">ISN = Initial Sequence Number. This 6-tuple is the full identity of the connection from both ends.</p>
+
+    <p>Once a socket is established, hosts interact with it using <strong>write()</strong> (to send data into the socket) and <strong>read()</strong> (to pull data out of the receive buffer). The transport layer handles reliable delivery; the network layer handles routing to the correct IP.</p>
+  </div>
+
+  <!-- ── 4. INETD ── -->
+  <div class="section">
+    <div class="section-label">Unix Implementation Detail</div>
+    <h3>inetd — Internet Daemon <a href="https://nptel.ac.in/courses/106105183" class="ts">08:17</a></h3>
+    <p>In Unix, a single super-daemon process called <strong>inetd (internet daemon)</strong> runs continuously, listening on multiple well-known ports simultaneously. It avoids having to keep every protocol daemon running at all times.</p>
+
+    <div class="callout">
+      <strong>How it works:</strong> inetd listens on a port (e.g., port 80 for HTTP). When the first incoming connection arrives, inetd <strong>forks</strong> — creates a child process with a new process ID — and starts the relevant daemon (e.g., <code>httpd</code> for HTTP, <code>ftpd</code> for FTP at port 21). That daemon then manages the socket for the duration of the connection.
+    </div>
+  </div>
+
+  <!-- ── 5. BYTE STREAM ── -->
+  <div class="section">
+    <div class="section-label">Core Abstraction</div>
+    <h3>TCP is a Byte Stream, Not a Message Stream <a href="https://nptel.ac.in/courses/106105183" class="ts">09:44</a></h3>
+    <p>Every byte in a TCP connection has its own unique <strong>32-bit sequence number</strong>. TCP does not preserve message boundaries — it does not care how many <code>write()</code> calls the sender made or how big each chunk was.</p>
+
+    <div class="callout pink">
+      <strong>Critical point:</strong> Message boundaries are not preserved end-to-end. The receiver has no way of knowing how data was originally chunked by the sender.
+    </div>
+
+    <h4>Concrete Example <a href="https://nptel.ac.in/courses/106105183" class="ts">09:44</a></h4>
+    <p>Host B sends three segments to Host A: bytes 100–200 (100 bytes), 201–250 (50 bytes), and 251–400 (150 bytes). Segments 2 and 3 get lost. When Host B retransmits, the flow control algorithm may cause it to resend as two 100-byte segments (201–300 and 301–400) — a completely different segmentation. TCP retransmits <strong>bytes</strong>, not the original segments.</p>
+
+    <div class="callout green">
+      <strong>💡 Visual diagram at 09:44</strong> — the slide shows the three-segment byte layout with segment 2 and 3 dropped, and how retransmission works as a byte range not a segment copy. Worth watching.
+    </div>
+
+    <h4>Write vs Read Chunk Mismatch</h4>
+    <p>The sender may write in 512-byte chunks; the receiver may read in 1024-byte chunks. TCP accommodates both silently — the application at the receiving end has no knowledge of how data was written on the sending side.</p>
+
+    <p>TCP can also <strong>accumulate data from several write() calls into one segment</strong> or <strong>split one write() call into multiple segments</strong> depending on flow and congestion control state.</p>
+  </div>
+
+  <!-- ── 6. HEADER ── -->
+  <div class="section">
+    <div class="section-label">Protocol Mechanics</div>
+    <h3>TCP Header Structure <a href="https://nptel.ac.in/courses/106105183" class="ts">15:46</a></h3>
+    <p>A TCP segment = <strong>20-byte fixed header</strong> + optional fields + data (payload). Control-only segments (SYN, FIN) carry no data.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Size</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Source Port</td>
+          <td class="port-num">16 bits</td>
+          <td>Identifies sending application/process</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Destination Port</td>
+          <td class="port-num">16 bits</td>
+          <td>Identifies receiving application/process</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Sequence Number</td>
+          <td class="port-num">32 bits</td>
+          <td>Byte-level sequence number of the first data byte in this segment</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Acknowledgement Number</td>
+          <td class="port-num">32 bits</td>
+          <td>Next expected byte from the other side (cumulative ACK)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Header Length</td>
+          <td class="port-num">4 bits</td>
+          <td>Length of the TCP header in 32-bit words</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Flag Bits</td>
+          <td class="port-num">6–9 bits</td>
+          <td>Control flags — see below</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Window Size</td>
+          <td class="port-num">16 bits</td>
+          <td>Receiver-advertised available buffer space (for flow control)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Checksum</td>
+          <td class="port-num">16 bits</td>
+          <td>Error detection over header + data</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Urgent Pointer</td>
+          <td class="port-num">16 bits</td>
+          <td>Offset to urgent data — bypasses normal FIFO queue</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Options</td>
+          <td class="port-num">Variable</td>
+          <td>Optional extensions (e.g., MSS, timestamps)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Data</td>
+          <td class="port-num">Variable</td>
+          <td>Payload from the upper layer (application data)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Control Flag Bits</h4>
+    <div class="three-col">
+      <div class="interface-card">
+        <div class="interface-title">SYN</div>
+        <div class="interface-desc">Connection initiation. Set in the handshake messages to establish a new TCP connection.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">FIN</div>
+        <div class="interface-desc">Connection termination. Signals that this side has finished sending. Used in the connection teardown process.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">ACK</div>
+        <div class="interface-desc">Acknowledgement. The Acknowledgement Number field is valid — indicates bytes received up to ACK# - 1.</div>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Urgent Pointer detail:</strong> The transport layer queue is a FIFO structure. Normally, bytes are sent in order. If an application marks data as urgent (via socket programming), TCP creates a segment immediately with the urgent bit set, bypassing the normal queue order. The urgent pointer field points to the offset of the last urgent byte in the segment.
+    </div>
+  </div>
+
+  <!-- ── 7. SEQ / ACK NUMBERS ── -->
+  <div class="section">
+    <div class="section-label">Sequence &amp; Acknowledgement</div>
+    <h3>32-bit Byte Sequence Numbers <a href="https://nptel.ac.in/courses/106105183" class="ts">18:37</a></h3>
+    <p>Every byte on a TCP connection has its own 32-bit sequence number. TCP uses <strong>sliding window-based flow control</strong> at the byte level.</p>
+
+    <div class="callout green">
+      <strong>Example:</strong> If the ACK number received is <code>31245</code>, it means the receiver has correctly received all bytes up to and including byte <code>31244</code>, and it is now expecting byte <code>31245</code>. This is a <strong>cumulative acknowledgement</strong> — one ACK confirms all bytes before it.
+    </div>
+
+    <p>The acknowledgement number always points to the <strong>next expected byte</strong>, not the last received byte. This is standard cumulative ACK behavior — if ACK = N, bytes 0 through N−1 are confirmed received.</p>
+  </div>
+
+  <!-- ── 8. SEGMENT FORMATION ── -->
+  <div class="section">
+    <div class="section-label">Segment Construction</div>
+    <h3>How TCP Segments Are Formed <a href="https://nptel.ac.in/courses/106105183" class="ts">20:22</a></h3>
+    <p>Segment size is constrained by two parameters:</p>
+
+    <div class="two-col">
+      <div class="proto-card">
+        <div class="proto-layer">Constraint 1</div>
+        <div class="proto-card-title">IP Payload Limit</div>
+        <div class="proto-card-desc" style="font-size:13px; color:var(--muted); margin-top:4px;">Maximum data that can go into an IP fragment: <strong>65,515 bytes</strong>. TCP segment cannot exceed this.</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Constraint 2</div>
+        <div class="proto-card-title">MTU — Maximum Transmission Unit</div>
+        <div class="proto-card-desc" style="font-size:13px; color:var(--muted); margin-top:4px;">The max frame size on a link. Different per technology (Wi-Fi, Ethernet, optical). Often the tighter constraint in practice.</div>
+      </div>
+    </div>
+
+    <h4>Path MTU Discovery <a href="https://nptel.ac.in/courses/106105183" class="ts">25:07</a></h4>
+    <p>Modern TCP uses <strong>Path MTU Discovery</strong>, a mechanism implemented inside <strong>ICMP (Internet Control Message Protocol)</strong> at the network layer. It discovers the MTU of every link along the path from source to destination, then takes the <strong>minimum</strong> — because a packet cannot exceed the smallest MTU on any link in the path.</p>
+
+    <div class="callout">
+      <strong>Example:</strong> If path links support 512 B → 1 KB → 1 KB → 256 B, the path MTU is 256 bytes. TCP must not send segments larger than that.
+    </div>
+
+    <h4>Maximum Segment Size (MSS)</h4>
+    <p>MSS is established during the <strong>TCP connection setup phase</strong> using the path MTU discovery result (and other parameters like available buffer size). It is the largest amount of data (excluding header) that TCP will put in a single segment.</p>
+
+    <h4>Segment Size Decision Algorithm <a href="https://nptel.ac.in/courses/106105183" class="ts">25:07</a></h4>
+    <p>After each received ACK (which also carries the current receiver advertised window size), the sender checks:</p>
+
+    <div class="callout yellow">
+      <strong>If receiver window &lt; MSS</strong> → construct a single segment (can't fill an MSS-sized segment anyway).<br><br>
+      <strong>If receiver window ≥ MSS</strong> → create as many full MSS-sized segments as the window allows.<br><br>
+      <strong>If sender buffer has very little data</strong> → don't wait for a full MSS worth of data to accumulate. Send what's available. Waiting would unnecessarily delay small messages.
+    </div>
+
+    <div class="callout green">
+      <strong>💡 Sender buffer + window diagram at 23:10</strong> — shows the dynamic window (min of congestion window and receiver window), how write() calls fill the buffer, and how segments are carved out of it. Good one to watch.
+    </div>
+  </div>
+
+  <!-- ── 9. DESIGN CHALLENGES ── -->
+  <div class="section">
+    <div class="section-label">Design Challenges</div>
+    <h3>What TCP's Design Has to Handle <a href="https://nptel.ac.in/courses/106105183" class="ts">28:56</a></h3>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Dynamic Segment Construction</div>
+        <div class="concept-desc">Retransmissions don't guarantee the same segments — a lost 50-byte + 150-byte pair may be retransmitted as two 100-byte segments. TCP handles bytes, not segments.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Out-of-Order Delivery</div>
+        <div class="concept-desc">IP decides routing per-packet, and load balancing can send different packets on different paths. TCP segments can arrive out of order and the receiver must handle them correctly.</div>
+      </div>
+    </div>
+
+    <h4>Out-of-Order Handling — The Smart Approach</h4>
+    <p>Naively applying go-back-N here would waste bandwidth: "received something out of order → discard everything after the gap → wait for full retransmission." TCP is smarter:</p>
+
+    <div class="callout">
+      The receiver <strong>buffers out-of-order segments</strong>. When the missing bytes arrive and fill the gap, the entire contiguous block is now valid. The receiver sends a cumulative ACK for the whole range. The sender stops retransmitting and advances its window. Network resources saved.
+    </div>
+
+    <p><strong>Example:</strong> Receiver has bytes 100–120 and 151–500 (gap at 121–150). When the retransmitted segment arrives covering bytes 121–160, the receiver chops out 121–150, inserts it, now has 100–500 contiguously. Cumulative ACK for byte 501 sent. Sender stops immediately.</p>
+  </div>
+
+  <!-- ── 10. FLOW CONTROL INTRO ── -->
+  <div class="section">
+    <div class="section-label">Flow Control</div>
+    <h3>Window Size Field <a href="https://nptel.ac.in/courses/106105183" class="ts">32:10</a></h3>
+    <p>TCP uses a <strong>variable-size sliding window protocol</strong> for flow control. The <strong>16-bit window size field</strong> in the TCP header is how the receiver tells the sender how much buffer space it currently has available.</p>
+
+    <div class="tag-row">
+      <span class="tag tag-good">Window = 0 → sender must stop (receiver buffer full)</span>
+      <span class="tag tag-good">Window &gt; 0 → sender may transmit up to that many bytes</span>
+    </div>
+
+    <p>The <strong>final TCP acknowledgement</strong> is always a combination of two things: the <strong>acknowledgement number</strong> (what bytes have been received) and the <strong>advertised window size</strong> (how much more can be sent). The sender uses both to tune its transmission rate.</p>
+
+    <p>The actual sender window size is:</p>
+    <div class="callout green">
+      <strong>Sender Window = min(Congestion Window, Receiver Advertised Window)</strong><br>
+      <span style="font-size:13px;">Congestion window grows additively (AIMD), receiver window reflects available buffer. The tighter one wins.</span>
+    </div>
+
+    <p>Detailed sliding window and flow/congestion control algorithms will be covered in the next lecture.</p>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">Summary</div>
+    <h3>Concepts at a Glance</h3>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Concept</th>
+          <th>Key Point</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">TCP Purpose</td>
+          <td>Reliable byte stream over unreliable, heterogeneous internetwork</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Connection Type</td>
+          <td>Full duplex, point-to-point only (no multicast/broadcast)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Socket 6-tuple</td>
+          <td>Src IP + Src Port + Src ISN + Dst IP + Dst Port + Dst ISN</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Byte Stream</td>
+          <td>Message boundaries NOT preserved; every byte has a 32-bit sequence number</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Segment</td>
+          <td>20-byte fixed header + optional + data; variable size, not fixed</td>
+        </tr>
+        <tr>
+          <td class="proto-name">ACK Number</td>
+          <td>Next expected byte (cumulative); if ACK = N, bytes 0…N−1 are confirmed received</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Segment Size Limits</td>
+          <td>IP payload cap (65515 B) and path MTU (discovered via ICMP); MSS set at connection setup</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Retransmission</td>
+          <td>Byte ranges retransmitted, not original segments — segmentation can change</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Flow Control</td>
+          <td>16-bit receiver-advertised window size; sender window = min(cwnd, rwnd)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Out-of-Order</td>
+          <td>Buffered by receiver; cumulative ACK sent once gap is filled</td>
+        </tr>
+        <tr>
+          <td class="proto-name">inetd</td>
+          <td>Unix super-daemon; listens on well-known ports, forks to spawn protocol daemons on first connection</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout yellow">
+      <strong>Next lecture covers:</strong> Sliding window-based flow control in TCP in detail.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

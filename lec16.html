@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 16 — Transport Layer Performance</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec15.html" class="nav-lec">← prev</a>
+      <a href="lec17.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <!-- ── HEADER ── -->
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 16</span>
+    <span class="high-badge">⚡ HIGH PRIORITY</span>
+    <h1>Transport Layer Performance</h1>
+    <p>How BDP drives window size decisions, protocol selection, and the mechanics of how the application layer actually hands data to the transport layer — including buffer design.</p>
+    <a href="https://www.youtube.com/watch?v=placeholder_lec16" class="video-link" target="_blank">▶ Watch Lecture</a>
+  </div>
+
+  <!-- ── RECAP ── -->
+  <div class="section">
+    <div class="section-label">Quick Recap</div>
+    <p>Last lecture covered connection establishment and ARQ protocols for flow control and reliability — Stop and Wait, Go Back N, and Selective Repeat. This lecture is all about <strong>performance implications</strong>: what parameters should you tune, and how do you even pick the right protocol in the first place?</p>
+  </div>
+
+  <!-- ── PART 1: BDP ── -->
+  <div class="section">
+    <div class="section-label">Part 1 — Bandwidth Delay Product</div>
+    <a href="https://www.youtube.com/watch?t=80" class="ts" target="_blank">01:20</a>
+
+    <h3>What is BDP?</h3>
+    <p><strong>Bandwidth Delay Product (BDP)</strong> = Link Bandwidth × Link (one-way) Delay. It tells you how much data can be "in flight" in the network at any given time — think of it as the volume of the pipe between sender and receiver.</p>
+
+    <div class="callout yellow">
+      <strong>Pipe analogy:</strong> Latency = the <em>length</em> of the pipe. Bandwidth = the <em>cross-sectional area</em> of the pipe. BDP = bandwidth × latency = the total <em>volume</em> of data the pipe can hold.
+    </div>
+
+    <h4>Worked Example</h4>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">Link Bandwidth</td><td class="port-num">50 Kbps</td></tr>
+        <tr><td class="proto-name">One-way Delay</td><td class="port-num">250 ms</td></tr>
+        <tr><td class="proto-name">BDP</td><td class="port-num">50 Kbps × 250 ms = 12.5 Kbit</td></tr>
+        <tr><td class="proto-name">Segment Size (assumed)</td><td class="port-num">1000 bits</td></tr>
+        <tr><td class="proto-name">BDP in segments</td><td class="port-num">12.5 segments</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Round Trip Time (RTT)</h3>
+    <p>When you send a segment and wait for its ACK, the total wait is one <strong>Round Trip Time (RTT)</strong>. RTT = 2 × one-way latency. So in the example above, RTT covers the time to transmit data to receiver <em>and</em> get the ACK back.</p>
+    <p>During one RTT, the maximum segments that can be outstanding (unacknowledged) in the network = <strong>2 × BDP in segments = 2 × 12.5 = 25 segments</strong>.</p>
+
+    <div class="callout green">
+      <strong>Why 25 and not 12.5?</strong> There are two pipes in a two-way communication — one carrying data from sender to receiver (12.5 segments), and one carrying ACKs back (those ACKs correspond to 12.5 segments sitting in the receiver buffer). Total outstanding = 12.5 + 12.5 = 25.
+    </div>
+
+    <div class="callout pink">
+      ⚠️ <strong>Visual hint:</strong> The lecturer draws this as a dual-pipe diagram at <strong>06:25</strong> in the video — a "W segments" stack on the sender side, data filling the forward pipe, and ACKs filling the return pipe simultaneously. Highly recommended to watch if this isn't clicking.
+    </div>
+  </div>
+
+  <!-- ── PART 2: WINDOW SIZE ── -->
+  <div class="section">
+    <div class="section-label">Part 2 — BDP Implication on Window Size</div>
+    <a href="https://www.youtube.com/watch?t=736" class="ts" target="_blank">12:16</a>
+
+    <h3>Optimal Sender Window Size</h3>
+    <p>Let <strong>BD</strong> = number of segments equivalent to the BDP (i.e., BDP expressed as a segment count). The <strong>sender window size (swnd)</strong> that gives maximum link utilization is:</p>
+
+    <div class="callout" style="font-size:17px; text-align:center;">
+      <strong>w = 2BD + 1</strong>
+    </div>
+
+    <p>The +1 accounts for the ACK of the first segment that just arrived at the sender — the link is filled with 2BD segments (data pipe + ACK pipe) and one acknowledgement has just been received but not yet processed. Setting the window to exactly this value ensures the link is <em>always</em> busy transmitting data — maximum utilization with no idle time.</p>
+
+    <h3>Connecting Window Size to Sequence Number Space</h3>
+    <p>Once you fix <em>w</em> from BDP, you can derive the required number of sequence number bits <em>n</em>. The constraints from the ARQ protocols are:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Protocol</th>
+          <th>Max Window Size</th>
+          <th>Derive n from w</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Go Back N</td>
+          <td class="port-num">2<sup>n−1</sup></td>
+          <td>Set 2<sup>n−1</sup> ≥ w → solve for n</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Selective Repeat</td>
+          <td class="port-num">2<sup>n</sup> / 2</td>
+          <td>Set 2<sup>n</sup>/2 ≥ w → solve for n</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>This is the practical workflow: compute BDP → compute optimal w = 2BD + 1 → figure out minimum bits needed for your sequence number field given the ARQ protocol you chose.</p>
+  </div>
+
+  <!-- ── PART 3: PROTOCOL DESIGN CHOICE ── -->
+  <div class="section">
+    <div class="section-label">Part 3 — BDP and Protocol Design Choice</div>
+    <a href="https://www.youtube.com/watch?t=823" class="ts" target="_blank">13:43</a>
+
+    <h3>The Protocol Selection Problem</h3>
+    <p>BDP doesn't just tell you the window size — it tells you <em>which class of protocol</em> to even bother with. The key comparison is: <strong>segment size vs. BDP</strong>.</p>
+
+    <h4>Case Study: When Sliding Window is Pointless</h4>
+    <table class="port-table">
+      <thead>
+        <tr><th>Parameter</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">Link Bandwidth</td><td class="port-num">1 Mbps</td></tr>
+        <tr><td class="proto-name">One-way Delay</td><td class="port-num">1 ms</td></tr>
+        <tr><td class="proto-name">BDP</td><td class="port-num">1 Mbps × 1 ms = 1 Kbit = 128 bytes</td></tr>
+        <tr><td class="proto-name">Segment Size</td><td class="port-num">1 KB = 1024 bytes</td></tr>
+        <tr><td class="proto-name">Segment vs BDP</td><td class="port-num">1024 bytes >> 128 bytes (8× larger)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout pink">
+      <strong>Result:</strong> The segment is 8× bigger than the pipe can hold. Even one segment can't fully fit in the link. Sending multiple segments in parallel provides <em>zero</em> advantage — you can't exploit parallelism if you can't even saturate the pipe with one segment. Sliding window overhead (sender buffer, receiver buffer, sequence numbers) is all cost and no benefit here.
+    </div>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Sliding Window ARQ</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Higher overhead: must maintain sender window, receiver window, sequence number field</div></div>
+          <div class="compare-row"><div>Only useful when segment size &lt; BDP (parallelism helps)</div></div>
+          <div class="compare-row"><div>Wrong choice when segment >> BDP</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Stop and Wait</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Minimal overhead: no sender/receiver windows, trivial sequence number (1 bit)</div></div>
+          <div class="compare-row"><div>Send one segment, wait for ACK, repeat</div></div>
+          <div class="compare-row"><div><strong>Correct choice when segment >> BDP</strong></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <strong>Decision rule:</strong> If segment size &gt; BDP → use Stop and Wait. If segment size &lt;&lt; BDP → use sliding window and set w = 2BD + 1 for max utilization.
+    </div>
+  </div>
+
+  <!-- ── PART 4: APP-TRANSPORT INTERFACING SENDER ── -->
+  <div class="section">
+    <div class="section-label">Part 4 — Application–Transport Interfacing: Sender Side</div>
+    <a href="https://www.youtube.com/watch?t=1052" class="ts" target="_blank">17:32</a>
+
+    <h3>How the Sender Side Actually Works</h3>
+    <p>The example is from Linux (function names are hypothetical — for design intuition only).</p>
+
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">APPLICATION (User Space)</div>
+        <div class="impl-impl">write() / send()</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Transport Buffer (Kernel)</div>
+        <div class="impl-impl">connection-specific queue</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">Transmission Rate Control</div>
+        <div class="impl-impl">triggered periodically by flow control</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">TportSend()</div>
+        <div class="impl-impl">pulls from buffer, sends to IP</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-phys">Network Layer (IP)</div>
+        <div class="impl-impl">next layer down</div>
+      </div>
+    </div>
+
+    <h4>Key Design Points</h4>
+    <p>The application may generate data at 10 Mbps while the Transmission Rate Control module determines the optimal send rate as only 2 Mbps (dictated by the flow control algorithm and current window size). These rates are <strong>asynchronous</strong> — there must be an intermediate buffer to absorb the difference.</p>
+
+    <p>Each connection gets its own <strong>connection-specific source buffer</strong> (Transport Buffer - Sender) because different connections are treated independently — they may have different flow control states, different receivers, different window sizes.</p>
+
+    <div class="callout yellow">
+      <strong>write() is a blocking call.</strong> The application calls write()/send() to push data into the transport buffer. This call blocks the port until the <em>complete data</em> is written into the transport buffer. If the buffer fills up (app is generating faster than TRC can drain it), the transport layer blocks the application from writing further — preventing buffer overflow.
+    </div>
+  </div>
+
+  <!-- ── PART 5: APP-TRANSPORT INTERFACING RECEIVER ── -->
+  <div class="section">
+    <div class="section-label">Part 5 — Application–Transport Interfacing: Receiver Side</div>
+    <a href="https://www.youtube.com/watch?t=1299" class="ts" target="_blank">21:39</a>
+
+    <h3>How the Receiver Side Works</h3>
+
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">APPLICATION (User Space)</div>
+        <div class="impl-impl">read() / recv()</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Transport Buffer - Receiver (Kernel)</div>
+        <div class="impl-impl">per-port queue</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">CheckBuffer()</div>
+        <div class="impl-impl">sends interrupt when data arrives</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-phys">TportRecv() ← Data from IP</div>
+        <div class="impl-impl">routes to correct port queue</div>
+      </div>
+    </div>
+
+    <p><strong>TportRecv()</strong> receives a segment from IP, reads the port number in the transport header, and deposits the data into the correct buffer for that port (each port = one application). <strong>CheckBuffer()</strong> watches the buffer and fires an interrupt when data becomes available.</p>
+
+    <div class="callout yellow">
+      <strong>read()/recv() is also a blocking call.</strong> If the buffer is empty when the application calls read(), the call blocks at the port and waits. The moment data arrives, CheckBuffer() sends an interrupt, the call unblocks, reads the full data from the buffer, and returns to the application.
+    </div>
+
+    <div class="callout">
+      <strong>Symmetry summary:</strong>
+      Sender's write() blocks → when buffer is <strong>full</strong>.
+      Receiver's read() blocks → when buffer is <strong>empty</strong>.
+    </div>
+  </div>
+
+  <!-- ── PART 6: BUFFER POOL ── -->
+  <div class="section">
+    <div class="section-label">Part 6 — Organizing the Transport Buffer Pool</div>
+    <a href="https://www.youtube.com/watch?t=1444" class="ts" target="_blank">24:04</a>
+
+    <h3>Three Ways to Organize Buffers</h3>
+    <p>The transport layer buffer is a <em>software</em> buffer (in kernel memory). How you organize it matters for memory efficiency and implementation complexity.</p>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">(a) Pool of Fixed-Size Buffers</div>
+        <div class="concept-desc">One buffer = one segment. Buffer size = segment size. Simple and fast to allocate/deallocate. Works perfectly when all segments are the same size. Wastes space if segment sizes are widely varied — a small segment wastes most of its fixed-size slot.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">(b) Chained Fixed-Size Buffers</div>
+        <div class="concept-desc">Buffers are linked-list nodes of fixed size. Variable-sized segments are spread across multiple chained nodes (like a linked list). More flexible, but space is still wasted if sizes vary widely. Using very small buffers means needing many nodes per segment — adds implementation complexity.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">(c) Variable-Size Buffers</div>
+        <div class="concept-desc">Buffer size matches segment size dynamically. Best memory utilization — no wasted space. Disadvantage: dynamic memory allocation is complex; buffer space management must handle arbitrary sizes. Implementation is significantly harder.</div>
+      </div>
+    </div>
+
+    <h3>Single Large Circular Buffer (Preferred for Heavy Load)</h3>
+    <a href="https://www.youtube.com/watch?t=1541" class="ts" target="_blank">25:41</a>
+    <p>One large circular buffer per connection. Segments of different sizes are written sequentially into the circular space. Unused space at the tail is available for the next incoming segment. This is a good choice when connections are <strong>heavily loaded</strong> — the circular structure means memory is reused efficiently without fragmentation.</p>
+
+    <div class="callout green">
+      <strong>Practical note:</strong> The right buffer design depends on the application. Fixed-size is simple and fast. Variable-size is memory-efficient. Circular buffer is great under heavy sustained load. No universally correct answer — it's a tradeoff.
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <h3>BDP Cheat Sheet</h3>
+    <table class="port-table">
+      <thead>
+        <tr><th>Concept</th><th>Formula / Rule</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">Bandwidth Delay Product</td><td class="port-num">BDP = Bandwidth × One-way Delay</td></tr>
+        <tr><td class="proto-name">RTT</td><td class="port-num">RTT = 2 × one-way latency</td></tr>
+        <tr><td class="proto-name">Max outstanding segments</td><td class="port-num">2 × BD (BD = BDP in segments)</td></tr>
+        <tr><td class="proto-name">Optimal window size</td><td class="port-num">w = 2BD + 1</td></tr>
+        <tr><td class="proto-name">Go Back N seq. bits</td><td class="port-num">w ≤ 2<sup>n−1</sup> → find minimum n</td></tr>
+        <tr><td class="proto-name">Selective Repeat seq. bits</td><td class="port-num">w ≤ 2<sup>n</sup>/2 → find minimum n</td></tr>
+        <tr><td class="proto-name">Protocol choice rule</td><td class="port-num">segment >> BDP → Stop &amp; Wait; segment &lt;&lt; BDP → Sliding Window</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Interfacing Summary</h3>
+    <p>The application and transport layer interact through blocking system calls and per-connection buffers. write()/send() blocks when the sender buffer is full; read()/recv() blocks when the receiver buffer is empty. A Transmission Rate Control module sits in kernel space and paces the actual sending rate based on the flow control algorithm's window size decision.</p>
+
+    <h3>Coming Next</h3>
+    <p>Lecture 17 covers <strong>congestion control</strong> — the third major transport layer service after connection establishment and flow control — followed by a detailed look at TCP and UDP implementations.</p>
+  </div>
+
+</div>
+</body>
+</html>

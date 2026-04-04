@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 18 — Transport Layer Primitives | CNPP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec17.html" class="nav-lec">← prev</a>
+        <a href="lec19.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- ── Header ── -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 18</span>
+      <span class="med-badge">medium priority</span>
+      <h1>Transport Layer Primitives</h1>
+      <p>A synthesis lecture tying together all transport layer services — multiplexing, connection management, flow control, reliability, and congestion control — into a coherent end-to-end protocol model. Sets up the TCP deep-dive that follows.</p>
+    </div>
+
+    <!-- ── 1. The Problem: Multiplexing at Scale ── -->
+    <div class="section">
+      <div class="section-label">1 — The Problem</div>
+      <h3>Multiplexing Applications Across Machines</h3>
+      <p>A single physical machine runs multiple applications simultaneously (multitasking). Over the network, any application on any machine must be able to communicate with any specific application on any other machine. Two distinct identification problems arise:</p>
+
+      <div class="domain-grid">
+        <div class="domain-card">
+          <div class="domain-title">Which machine?</div>
+          <div class="domain-desc">Solved at the <strong>network layer</strong> using the <strong>IP address</strong> (32-bit). Every host on the internet has a unique IP address that routers use to forward packets.</div>
+        </div>
+        <div class="domain-card">
+          <div class="domain-title">Which application on that machine?</div>
+          <div class="domain-desc">Solved at the <strong>transport layer</strong> using the <strong>port number</strong> (16-bit). Each running application is bound to a port; the OS uses it to demultiplex incoming segments to the right process.</div>
+        </div>
+      </div>
+
+      <p>The transport layer header therefore always carries a <strong>source port</strong> and a <strong>destination port</strong>. This is how a segment arriving at a host is routed to the correct application process — not just the correct host.</p>
+    </div>
+
+    <!-- ── 2. The Logical Pipe & 6-Tuple ── -->
+    <div class="section">
+      <div class="section-label">2 — Logical Pipe</div>
+      <h3>The End-to-End Logical Pipe (Socket)</h3>
+      <p>The transport layer defines a <strong>logical pipe</strong> between two communicating transport entities. Physically, packets travel through the network layer (unreliable); logically, the transport layer presents a reliable, ordered channel to the application above.</p>
+
+      <p>This logical pipe must be <strong>uniquely identified</strong>. IP address + port alone is not sufficient — if a machine crashes and restarts, a new connection on the same {src IP, src port, dst IP, dst port} quadruple must be distinguishable from any delayed duplicates of the old connection. Therefore the transport layer uses a <strong>6-tuple</strong>:</p>
+
+      <div class="socket-tuple">
+        <div class="tuple-ip tuple-part">Src IP</div>
+        <div class="tuple-plus">+</div>
+        <div class="tuple-port tuple-part">Src Port</div>
+        <div class="tuple-plus">+</div>
+        <div class="tuple-port tuple-part">Src ISN</div>
+        <div class="tuple-plus">+</div>
+        <div class="tuple-ip tuple-part">Dst IP</div>
+        <div class="tuple-plus">+</div>
+        <div class="tuple-port tuple-part">Dst Port</div>
+        <div class="tuple-plus">+</div>
+        <div class="tuple-port tuple-part">Dst ISN</div>
+        <div class="tuple-eq">=</div>
+        <div class="tuple-socket tuple-part">Socket</div>
+      </div>
+
+      <p>The inclusion of <strong>Initial Sequence Numbers (ISN)</strong> on both sides ensures that even if the same {IP, port} pair is reused after a crash, any delayed duplicates from the prior connection (which carry the old ISN) cannot be mistakenly accepted. In Unix terminology, this logical pipe is called a <strong>socket</strong>.</p>
+
+      <div class="callout green">
+        <strong>Key rule:</strong> When selecting an ISN, it must not fall within the <em>forbidden region</em> — the range of sequence numbers still potentially in flight from a previous connection sharing the same 4-tuple. This prevents delayed duplicate confusion after a restart.
+      </div>
+    </div>
+
+    <!-- ── 3. Transport Primitives ── -->
+    <div class="section">
+      <div class="section-label">3 — Primitives</div>
+      <h3>Hypothetical Transport Layer API</h3>
+      <p>To write network applications, the OS exposes transport layer services through a set of primitives (system calls). A minimal client-server example (client sends "hello server", server replies "I am fine") requires five primitives:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Primitive</th>
+            <th>Side</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name"><strong>LISTEN</strong></td>
+            <td><span class="transport tcp-badge">Server</span></td>
+            <td>Places the server in a waiting state — ready to accept an incoming connection. A machine not in LISTEN state cannot accept connections.</td>
+          </tr>
+          <tr>
+            <td class="proto-name"><strong>CONNECT</strong></td>
+            <td><span class="transport udp-badge">Client</span></td>
+            <td>Initiates end-to-end connection establishment (e.g., 3-way handshake in TCP). Blocks until the connection is established or times out.</td>
+          </tr>
+          <tr>
+            <td class="proto-name"><strong>SEND</strong></td>
+            <td><span class="transport both-badge">Both</span></td>
+            <td>Passes data to the transport layer for transmission. Only valid in the ESTABLISHED state — calling SEND before connection setup is an error.</td>
+          </tr>
+          <tr>
+            <td class="proto-name"><strong>RECEIVE</strong></td>
+            <td><span class="transport both-badge">Both</span></td>
+            <td>Retrieves data from the transport layer's receiver buffer. The application blocks here until data is available. Also only valid in ESTABLISHED state.</td>
+          </tr>
+          <tr>
+            <td class="proto-name"><strong>DISCONNECT</strong></td>
+            <td><span class="transport both-badge">Both</span></td>
+            <td>Initiates connection teardown once data transfer is complete. Executed synchronously with timeout (asynchronous closure is not implementable on an unreliable channel).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout pink">
+        <strong>Stateful protocol:</strong> The transport layer must remember the current state of each pipe. A SEND call before CONNECT has been completed is invalid. The protocol enforces this via state — only in ESTABLISHED state are SEND/RECEIVE permitted.
+      </div>
+    </div>
+
+    <!-- ── 4. State Transition Diagram ── -->
+    <div class="section">
+      <div class="section-label">4 — State Machine</div>
+      <h3>Transport Layer Protocol — State Transition Diagram</h3>
+      <p>The lifecycle of a transport connection is modelled as a finite state machine. Transitions are triggered by either executing a primitive or receiving a segment from the peer. <em>(Refer Slide Time: 15:50 — the slide diagram is worth studying directly.)</em></p>
+
+      <div class="callout yellow">
+        <strong>Visual diagram present at 15:50.</strong> The state diagram from Tanenbaum &amp; Wetherell (Computer Networks, 5th Ed.) is shown on-screen. Strongly recommended to pause and trace both client (solid line) and server (dotted line) paths through the diagram.
+      </div>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>Meaning</th>
+            <th>Transition Trigger</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">IDLE</td>
+            <td>No active connection. Initial and final resting state.</td>
+            <td>Client: execute CONNECT → Active Est. Pending. Server: receive conn. req. segment → Passive Est. Pending.</td>
+          </tr>
+          <tr>
+            <td class="port-num">ACTIVE EST. PENDING</td>
+            <td>Client has initiated connection; waiting for acceptance.</td>
+            <td>Receive "connection accepted" segment → ESTABLISHED</td>
+          </tr>
+          <tr>
+            <td class="port-num">PASSIVE EST. PENDING</td>
+            <td>Server has received a connection request; executing handshake.</td>
+            <td>Execute CONNECT primitive (complete handshake) → ESTABLISHED</td>
+          </tr>
+          <tr>
+            <td class="port-num">ESTABLISHED</td>
+            <td>Connection is live. SEND and RECEIVE are permitted.</td>
+            <td>Client executes DISCONNECT → Active Disc. Pending. Server receives disc. request → Passive Disc. Pending.</td>
+          </tr>
+          <tr>
+            <td class="port-num">ACTIVE DISC. PENDING</td>
+            <td>Client has initiated teardown; waiting for server acknowledgement.</td>
+            <td>Receive disconnection acknowledgement → IDLE</td>
+          </tr>
+          <tr>
+            <td class="port-num">PASSIVE DISC. PENDING</td>
+            <td>Server has received a teardown request; executing DISCONNECT.</td>
+            <td>Execute DISCONNECT primitive → IDLE</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 5. Segment / Packet / Frame Terminology ── -->
+    <div class="section">
+      <div class="section-label">5 — Terminology</div>
+      <h3>Segment vs Packet vs Frame</h3>
+      <p>These terms have been used interchangeably in earlier lectures (acceptable when the concept being discussed — e.g., flow control — applies at multiple layers). From here on, use layer-specific terminology:</p>
+
+      <div class="stack">
+        <div class="stack-layer layer-app">
+          <span class="layer-name">Application</span>
+          <span class="layer-desc">data / message</span>
+        </div>
+        <div class="stack-layer layer-trans">
+          <span class="layer-name">Transport</span>
+          <span class="layer-desc">→ <strong>Segment</strong> (TCP) / Datagram (UDP)</span>
+        </div>
+        <div class="stack-layer layer-net">
+          <span class="layer-name">Network</span>
+          <span class="layer-desc">→ <strong>Packet</strong> / Datagram (IP)</span>
+        </div>
+        <div class="stack-layer layer-dl">
+          <span class="layer-name">Data Link</span>
+          <span class="layer-desc">→ <strong>Frame</strong></span>
+        </div>
+        <div class="stack-layer layer-phys">
+          <span class="layer-name">Physical</span>
+          <span class="layer-desc">→ bits / signals</span>
+        </div>
+      </div>
+
+      <p>Each layer takes the unit from the layer above as its <strong>payload</strong>, prepends its own header, and passes the enlarged unit down. The term "frame" has been used in the flow control discussion at the data link layer, but flow control mechanisms exist at both the transport and data link layers — hence the acceptable informal overlap.</p>
+    </div>
+
+    <!-- ── 6. Complete Transport Layer Process Flow ── -->
+    <div class="section">
+      <div class="section-label">6 — Full Protocol Flow</div>
+      <h3>Combining All Transport Layer Services</h3>
+      <p>A complete connection-oriented transport protocol synthesises four components in sequence:</p>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">1 — Connection Establishment</div>
+          <div class="concept-desc">Select ISN avoiding the forbidden region. Exchange ISNs with peer via handshake (e.g., 3-way). Socket = 6-tuple including both ISNs.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">2 — Flow Control &amp; Reliability</div>
+          <div class="concept-desc">ARQ protocols (Go-Back-N / Selective Repeat) use sequence numbers to detect loss and retransmit. Receiver advertises buffer capacity to prevent overflow.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">3 — Congestion Control</div>
+          <div class="concept-desc">AIMD (Additive Increase, Multiplicative Decrease) dynamically adjusts sender rate. On congestion (packet loss), rate is halved; otherwise, linearly increased.</div>
+        </div>
+      </div>
+
+      <h4>Sender Rate Formula</h4>
+      <div class="callout">
+        <strong>sender_rate = min(network_rate, receiver_advertised_rate)</strong>
+        <br><br>
+        The network rate is estimated and managed by AIMD. The receiver rate is explicitly advertised in each acknowledgement. The sender always respects the lower of the two constraints — this couples flow control and congestion control.
+      </div>
+
+      <h4>AIMD Behaviour Over Time</h4>
+      <p>The sender rate vs. time graph (Refer Slide Time: 24:45 — drawn live on screen, worth watching) shows the following pattern:</p>
+      <div class="callout green">
+        Rate starts low → increases linearly (additive increase) → saturates at receiver advertised rate → packet loss detected → rate drops sharply (multiplicative decrease, e.g., halved) → cycle repeats. If receiver advertises a new rate, saturation point shifts. Result: rate oscillates in a sawtooth pattern, but remains bounded and fair.
+      </div>
+
+      <div class="callout yellow">
+        <strong>Diagram at 24:45.</strong> The sender rate vs. time graph is drawn live on the blackboard. The intersection of the increasing sender rate curve with the receiver advertised rate line, and the sudden drops on loss detection, are clearly visible. Recommended to view directly.
+      </div>
+
+      <h4>Connection Closure</h4>
+      <p>Once data transfer is complete, the DISCONNECT primitive is executed. As established in prior lectures, <strong>synchronous closure with timeout</strong> is used — asynchronous closure (both sides independently closing without acknowledgement) cannot be implemented reliably over an unreliable channel in a distributed system.</p>
+    </div>
+
+    <!-- ── Summary ── -->
+    <div class="section">
+      <div class="section-label">Summary</div>
+      <h3>Lecture Summary</h3>
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Addressing</div>
+          <div class="interface-desc">IP address → identifies host (network layer). Port number → identifies application (transport layer). Together as a 6-tuple (with ISNs) → uniquely identifies a socket/logical pipe.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Stateful Protocol</div>
+          <div class="interface-desc">The transport layer must track connection state. SEND/RECEIVE are only valid in ESTABLISHED state. State transitions are driven by executing primitives or receiving segments from the peer.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Primitives</div>
+          <div class="interface-desc">LISTEN → CONNECT → SEND/RECEIVE → DISCONNECT. The OS exposes these as system calls (sockets API). Applications interact with the transport layer exclusively through these primitives.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Terminology</div>
+          <div class="interface-desc">Segment (transport) → Packet/Datagram (network) → Frame (data link). Each layer encapsulates the layer above as payload and prepends its own header.</div>
+        </div>
+      </div>
+
+      <div class="callout green">
+        <strong>What's next:</strong> Lecture 19 onwards dives into TCP in detail — the real-world implementation of everything discussed here. ~80% of global internet traffic uses TCP. The concepts from Lectures 13–18 map directly onto TCP's design decisions.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
