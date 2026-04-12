@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 25 — Socket Programming II</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec24.html" class="nav-lec">← prev</a>
+        <a href="lec26.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- Header -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 25</span>
+      <span class="med-badge">medium priority</span>
+      <h1>Socket Programming — II</h1>
+      <p>Continuation of socket programming: TCP server and client implementation, iterative vs. concurrent (fork-based) servers, and the <code>select()</code> system call for I/O multiplexing.</p>
+      <p><strong>Note:</strong> This lecture is heavily demo-driven. The entire second half involves live C code walkthroughs and terminal demos. Understanding the concepts is more important than memorising the code syntax, but you should be able to reason through what each system call does.</p>
+    </div>
+
+    <!-- Section 1: TCP Socket Basics -->
+    <div class="section">
+      <div class="section-label">Part 1 — TCP Server &amp; Client</div>
+
+      <h3>TCP vs UDP Socket Types</h3>
+      <p>The core difference when switching from UDP to TCP at the socket creation step is the socket type argument:</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">UDP Socket</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Type</span><span><code>SOCK_DGRAM</code></span></div>
+            <div class="compare-row"><span class="label">Protocol</span><span>Connectionless</span></div>
+            <div class="compare-row"><span class="label">No</span><span>connect/accept calls needed</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">TCP Socket</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Type</span><span><code>SOCK_STREAM</code></span></div>
+            <div class="compare-row"><span class="label">Protocol</span><span>Connection-oriented</span></div>
+            <div class="compare-row"><span class="label">Yes</span><span>connect() and accept() required</span></div>
+          </div>
+        </div>
+      </div>
+
+      <p>Both use <code>AF_INET</code> as the protocol family and <code>0</code> as the protocol field (letting the OS choose the appropriate protocol for the socket type).</p>
+
+      <h3>TCP Server — Step-by-Step Flow</h3>
+      <p>The TCP server setup follows a fixed sequence of system calls. Each step has a distinct purpose.</p>
+
+      <div class="impl-stack">
+        <div class="impl-row">
+          <div class="impl-layer impl-app"><code>socket(AF_INET, SOCK_STREAM, 0)</code></div>
+          <div class="impl-impl">Create socket fd</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-trans"><code>serverAddr.sin_family / sin_addr / sin_port</code></div>
+          <div class="impl-impl">Init server address struct</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-net"><code>bind(socketfd, &amp;serverAddr, sizeof(serverAddr))</code></div>
+          <div class="impl-impl">Attach socket to port</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-dl"><code>listen(socketfd, 5)</code></div>
+          <div class="impl-impl">Mark socket as passive; set backlog</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-phys"><code>accept(socketfd, &amp;clientAddr, &amp;cliLen)</code></div>
+          <div class="impl-impl">Block until client connects; returns new fd</div>
+        </div>
+      </div>
+
+      <div class="callout green">
+        <strong>Key insight — two file descriptors on the server:</strong> The original <code>socketfd</code> (the listening socket) remains open to accept future connections. <code>accept()</code> returns a <em>new</em> child file descriptor (<code>childfd</code>) that is used exclusively for send/recv with that specific client. This separation is what makes concurrent handling possible.
+      </div>
+
+      <h3>listen() — The Backlog Parameter</h3>
+      <p><code>listen(socketfd, 5)</code> — the second argument (here, 5) sets the <strong>backlog</strong>: the maximum number of incoming connection requests that can queue up while the server is busy handling an existing connection. If more connections arrive than the backlog limit, they are dropped.</p>
+
+      <h3>setsockopt — SO_REUSEADDR</h3>
+      <p>The <code>setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, ...)</code> call allows a port to be reused immediately after a previous process releases it. Without this, the OS may hold the port in TIME_WAIT state and reject the bind call on restart.</p>
+
+      <h3>INADDR_ANY</h3>
+      <p>Setting <code>serverAddr.sin_addr.s_addr = htonl(INADDR_ANY)</code> instructs the socket to accept connections on <em>any</em> available network interface of the local machine, rather than binding to one specific IP.</p>
+
+      <h3>TCP Client — Step-by-Step Flow</h3>
+      <p>The client is simpler — it does not bind or listen. It takes the server hostname and port from command-line arguments, resolves the hostname using <code>gethostbyname()</code>, and initiates the connection.</p>
+
+      <div class="impl-stack">
+        <div class="impl-row">
+          <div class="impl-layer impl-app"><code>socket(AF_INET, SOCK_STREAM, 0)</code></div>
+          <div class="impl-impl">Create socket fd</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-trans"><code>gethostbyname(hostname)</code></div>
+          <div class="impl-impl">Resolve hostname → IP</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-net"><code>connect(socketfd, &amp;serverAddr, sizeof(serverAddr))</code></div>
+          <div class="impl-impl">Initiates TCP 3-way handshake</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-dl"><code>send(socketfd, buf, bufLen+1, 0)</code></div>
+          <div class="impl-impl">Send data to server</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-phys"><code>recv(socketfd, recvBuf, bufLen, 0)</code></div>
+          <div class="impl-impl">Receive server's response</div>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        <strong>Observation from the demo</strong> <a href="#" class="ts">~11:00</a>: The server always binds to a fixed well-known port (e.g. 2444), but each client connection uses a <em>random ephemeral port</em> on its side (e.g. 47676, 47678, 47680). This is the same behaviour seen in UDP.
+      </div>
+
+      <div class="callout pink">
+        <strong>Practical demo — TCP server + client</strong> <a href="#" class="ts">00:57–14:06</a>: The instructor codes, compiles, and runs both the TCP server (<code>tcpserver.c</code>) and client (<code>tcpclient.c</code>) live. Server echoes back whatever message it receives ("Hello there!!"). Watching this is strongly recommended for understanding the flow visually.
+      </div>
+    </div>
+
+    <!-- Section 2: Iterative Server -->
+    <div class="section">
+      <div class="section-label">Part 2 — Iterative vs Concurrent Servers</div>
+
+      <h3>Iterative Server</h3>
+      <p>The basic TCP server implementation from Part 1 is called an <strong>iterative server</strong>. The server runs a single <code>while(1)</code> loop: accept one connection → complete all send/recv for that connection → close it → only then accept the next.</p>
+
+      <div class="callout pink">
+        <strong>Problem:</strong> The <code>accept()</code> call is a <strong>blocking call</strong> — the process halts there until a client connects. Once a connection is accepted, the process is further blocked inside the send/recv loop. All other incoming clients queue up in the backlog. If the server is slow (or the current client keeps the connection open), every other client <strong>starves</strong>. This does not scale.
+      </div>
+
+      <h4>How Iterative Server Works — Summary</h4>
+      <p><code>listen()</code> puts the socket in a passive/listening state and sets the backlog size. <code>accept()</code> blocks until a queued connection exists and returns a new connected socket fd. All other connections arriving during send/recv processing are backlogged. Once the current client is fully handled, the loop comes back to <code>accept()</code>. Client requests are executed <strong>one at a time, serially</strong>.</p>
+
+      <h3>Concurrent Server using fork()</h3>
+      <p>To handle multiple clients in parallel, the server creates a <strong>child process</strong> for each accepted connection using the <code>fork()</code> system call (an OS-level call that duplicates the current process).</p>
+
+      <div class="callout green">
+        <strong>fork() behaviour:</strong> In the <strong>parent process</strong>, <code>fork()</code> returns the child's PID (a non-zero value). In the <strong>child process</strong>, <code>fork()</code> returns <code>0</code>. This allows an <code>if (fork() == 0)</code> check to split execution paths.
+      </div>
+
+      <h4>Concurrent Server Logic</h4>
+      <p>After <code>accept()</code> returns the new child file descriptor, the server immediately calls <code>fork()</code>. The child process inherits the child fd, closes the original listening socket (it doesn't need it), and handles all send/recv for that client. The parent process closes the child fd (it doesn't need it) and immediately loops back to call <code>accept()</code> again — without waiting for the child to finish. The send/recv blocking now happens inside the child process, not the parent. Result: the parent can accept new connections in parallel with child processes handling existing ones.</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Iterative Server</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Concurrency</span><span>None — one client at a time</span></div>
+            <div class="compare-row"><span class="label">Blocking</span><span>Entire process blocks on send/recv</span></div>
+            <div class="compare-row"><span class="label">Complexity</span><span>Simple</span></div>
+            <div class="compare-row"><span class="label">Use case</span><span>Low-traffic, simple servers</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Concurrent (fork) Server</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Concurrency</span><span>Full — each client gets a child process</span></div>
+            <div class="compare-row"><span class="label">Blocking</span><span>Only child blocks; parent free to accept</span></div>
+            <div class="compare-row"><span class="label">Complexity</span><span>Moderate (OS process management)</span></div>
+            <div class="compare-row"><span class="label">Use case</span><span>High-traffic servers (e.g. web servers)</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        <strong>Zombie problem with fork():</strong> If a parent process terminates or is killed while child processes are still running, those children become <strong>zombie processes</strong> — they've finished execution but their entry remains in the process table. This is a resource management concern with fork-based servers.
+      </div>
+
+      <div class="callout pink">
+        <strong>Practical demo — fork server</strong> <a href="#" class="ts">22:38–27:28</a>: The instructor compiles <code>tcpserver_fork.c</code>, runs it on port 2555, and connects multiple clients from separate terminal tabs simultaneously, showing that connections at different ports (53218, 53220, 53222...) are all accepted and handled in parallel.
+      </div>
+    </div>
+
+    <!-- Section 3: select() -->
+    <div class="section">
+      <div class="section-label">Part 3 — The select() System Call</div>
+
+      <h3>Motivation — Peer-to-Peer Chat Application</h3>
+      <p>Consider a P2P chat application where every user runs their own TCP server. A user must simultaneously listen on a socket (incoming messages from peers) <em>and</em> read from standard input (keyboard — their own typed messages). In UNIX, both are file descriptors: a socket is a file descriptor, and standard input (STDIN) is also a file descriptor. The problem is that both inputs are <strong>asynchronous</strong> — a message from a peer can arrive while you are mid-sentence. How do you watch both at once without blocking on either?</p>
+
+      <h3>select() — Synchronous I/O Multiplexing</h3>
+      <p><code>select()</code> is an OS-level system call that monitors <em>multiple file descriptors simultaneously</em> and notifies the caller which ones are ready for I/O. It provides <strong>synchronous I/O multiplexing over asynchronous inputs</strong>.</p>
+
+      <div class="callout green">
+        <strong>Key advantage over fork():</strong> No child processes are created. No zombie problem. A single process can manage many connections efficiently using <code>select()</code>.
+      </div>
+
+      <h3>select() Signature</h3>
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="vci"><code>int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout);</code></span>
+        </div>
+      </div>
+
+      <h4>Parameters</h4>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">nfds</div>
+          <div class="proto-names">Highest-numbered fd in any of the three sets, plus 1</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">readfds</div>
+          <div class="proto-names">Set of fds to watch for readability</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">writefds</div>
+          <div class="proto-names">Set of fds to watch for write availability</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">exceptfds</div>
+          <div class="proto-names">Set of fds to watch for exceptional conditions</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">timeout</div>
+          <div class="proto-names">Max time to block. NULL = block indefinitely</div>
+        </div>
+      </div>
+
+      <h4>The Three File Descriptor Sets</h4>
+      <div class="domain-grid">
+        <div class="domain-card">
+          <div class="domain-title">readfds</div>
+          <div class="domain-desc">Watched to detect when data is available to read. A fd in this set "fires" when <code>recv()</code> would not block.</div>
+        </div>
+        <div class="domain-card">
+          <div class="domain-title">writefds</div>
+          <div class="domain-desc">Watched to detect when space is available to write. A fd fires when <code>send()</code> would not block.</div>
+        </div>
+      </div>
+      <div class="domain-grid" style="margin-top:0">
+        <div class="domain-card">
+          <div class="domain-title">exceptfds</div>
+          <div class="domain-desc">Watched for exceptional/error conditions on the file descriptor.</div>
+        </div>
+        <div class="domain-card">
+          <div class="domain-title">fd_set type</div>
+          <div class="domain-desc">An internal bitmap structure. Each bit corresponds to one file descriptor number. Manipulated with macros.</div>
+        </div>
+      </div>
+
+      <h4>The Timeout (struct timeval)</h4>
+      <p><code>select()</code> blocks until one of three things happens: a watched fd becomes ready, a signal interrupts the call, or the timeout expires. The timeout is specified in seconds and microseconds:</p>
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci"><code>struct timeval { long tv_sec; /* seconds */ long tv_usec; /* microseconds */ };</code></span></div>
+      </div>
+      <p>Passing <code>NULL</code> for timeout means block indefinitely until an fd becomes ready.</p>
+
+      <h3>fd_set Macros</h3>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">FD_ZERO(&amp;set)</div>
+          <div class="proto-names">Initialise / clear all bits in the fd_set</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">FD_SET(fd, &amp;set)</div>
+          <div class="proto-names">Add file descriptor fd to the set</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">FD_ISSET(fd, &amp;set)</div>
+          <div class="proto-names">Test if fd is set (i.e. has an event). Use after select() returns.</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">FD_CLR(fd, &amp;set)</div>
+          <div class="proto-names">Remove fd from the set (e.g. when closing a connection)</div>
+        </div>
+      </div>
+
+      <h3>Return Values of select()</h3>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Returns -1</div>
+          <div class="proto-names">Error occurred — check errno</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Returns 0</div>
+          <div class="proto-names">Timeout expired — no fd became ready</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Returns &gt; 0</div>
+          <div class="proto-names">Number of file descriptors with pending events (ready to read/write or have exceptions)</div>
+        </div>
+      </div>
+
+      <h3>How select() Works Internally</h3>
+      <p>Internally, <code>select()</code> loops over all file descriptors in the set and calls each fd's <strong>poll method</strong>. The poll method adds the calling thread to that fd's wait queue and reports which events (readable, writable, exception) currently apply. If any fd already matches the requested condition, <code>select()</code> returns immediately after updating the fd sets. If none match, <code>select()</code> sleeps until either the timeout expires or an event wakes it up via the wait queue mechanism.</p>
+
+      <h3>select()-based Server Logic (simplified)</h3>
+      <p>The select-based server maintains an array of active file descriptors (<code>fds[]</code>). On each iteration of the outer while loop: initialize the <code>fd_set</code> with <code>FD_ZERO</code>, add the listening socket and all active client fds using <code>FD_SET</code>, call <code>select()</code>. When <code>select()</code> returns, check using <code>FD_ISSET</code>: if the listening socket is set, call <code>accept()</code> to accept the new connection and add it to <code>fds[]</code>. If any existing client fd is set, call <code>recv()</code> on it to read available data and then <code>send()</code> back. If <code>recvLen == 0</code>, the client has closed the connection — call <code>FD_CLR</code> to remove it from the set and close the fd.</p>
+
+      <div class="callout green">
+        <strong>select() vs fork() — the tradeoff:</strong> fork() creates true OS-level parallelism (multiple processes running simultaneously) but has overhead and the zombie problem. select() handles multiple connections from a single process using event-driven I/O — no child processes, no zombies, more resource-efficient. Both break the blocking problem of iterative servers.
+      </div>
+
+      <div class="callout pink">
+        <strong>Practical demo — select server</strong> <a href="#" class="ts">35:55–40:51</a>: The instructor codes and runs <code>tcpserver_select.c</code> on port 2666. Multiple client connections are handled. When a client disconnects, the server prints "closing" and removes that fd from the set. Also demonstrates a connection refused error when connecting to a port with no running server.
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h3>Three TCP Server Variants</h3>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Iterative Server</div>
+          <div class="concept-desc">Accept → recv/send loop → close → repeat. One client at a time. Simple but does not scale. All other clients block in the backlog queue.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Concurrent (fork) Server</div>
+          <div class="concept-desc">Accept → fork() → child handles send/recv, parent immediately loops back to accept(). True parallelism via OS processes. Zombie process management required.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">select() Server</div>
+          <div class="concept-desc">Single process monitors all fds simultaneously via the select() multiplexer. No forking, no zombies. Event-driven: only processes a fd when data is actually available.</div>
+        </div>
+      </div>
+
+      <h3>Key Terms</h3>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">SOCK_STREAM</div>
+          <div class="proto-names">TCP socket type — connection-oriented, reliable, ordered byte stream</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">backlog</div>
+          <div class="proto-names">Max number of pending (unaccepted) connections the OS will queue</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">blocking call</div>
+          <div class="proto-names">accept(), recv() — process halts until the operation completes</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">fork()</div>
+          <div class="proto-names">OS syscall to duplicate process. Returns child PID to parent, 0 to child</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">select()</div>
+          <div class="proto-names">Synchronous I/O multiplexer — monitors multiple fds from one process</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">fd_set</div>
+          <div class="proto-names">Bitmap structure representing a set of file descriptors to monitor</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">STDIN</div>
+          <div class="proto-names">Standard input file descriptor (keyboard input) — also an fd in UNIX</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">SO_REUSEADDR</div>
+          <div class="proto-names">Socket option to allow reuse of a port immediately after process exit</div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Exam focus areas:</strong> Know the TCP server call sequence (socket → bind → listen → accept → recv/send). Understand why iterative servers fail at scale. Know what fork() returns in parent vs. child and how that enables concurrent handling. Know what select() is, what its three fd sets do, what the macros (FD_ZERO, FD_SET, FD_ISSET) mean, and how to interpret its return value.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

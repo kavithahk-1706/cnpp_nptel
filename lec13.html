@@ -68,7 +68,7 @@
     <h3>The Fast Connection Problem <a class="ts" href="#">10:12</a></h3>
     <p>If Conn 2 starts with a safe ISN but then sends data <strong>too fast</strong>, its sequence numbers race ahead and can wrap around into Conn 1's forbidden region from the other side — overlap created even though the ISN was chosen correctly.</p>
     <h3>The Slow Connection Problem <a class="ts" href="#">12:33</a></h3>
-    <p>If Conn 2 sends <strong>too slowly</strong>, its sequence numbers creep up so gradually that by the time it reaches Conn 1's old range, those bytes from Conn 1 are <em>still alive</em> in the network. Overlap again.</p>
+    <p>Conn 1 starts first. If it sends data <strong>too slowly</strong>, its sequence numbers creep up so gradually that the ISN sequence that Conn 2 THOUGHT to be safe, will ultimately be reached by Conn 1 if its MSL isn't expired by that time, leading to overlap.</p>
     <div class="callout pink">
       <strong>Conclusion:</strong> both too-fast and too-slow growth cause forbidden region overlaps. Sequence numbers must grow at a <strong>bounded rate</strong>.
     </div>
@@ -95,12 +95,12 @@
       </div>
       <div class="vci-row">
         <span class="port">Host 2</span><span class="arrow">→</span>
-        <span class="vci">SYN-ACK (ack = x, seq = y)</span><span class="arrow">→</span>
+        <span class="vci">SYN-ACK (ack = x+1, seq = y)</span><span class="arrow">→</span>
         <span class="port">Host 1</span>
       </div>
       <div class="vci-row">
         <span class="port">Host 1</span><span class="arrow">→</span>
-        <span class="vci">ACK (ack = y) + DATA</span><span class="arrow">→</span>
+        <span class="vci">ACK (ack = y+1) + DATA</span><span class="arrow">→</span>
         <span class="port">Host 2</span>
       </div>
     </div>

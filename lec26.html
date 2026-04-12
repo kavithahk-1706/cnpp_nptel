@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 26 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec25.html" class="nav-lec">← prev</a>
+      <a href="lec27.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 26 <span class="med-badge">medium priority</span></div>
+    <h1>Network Layer I — Introduction</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This lecture opens the network layer module. It covers what the network layer does, why it exists, and what makes it fundamentally different from the layers below and above it. The core topics are: best-effort datagram delivery, the routing problem in a decentralised graph network, the hierarchical architecture of the internet (LAN → AS → ISP tiers), and the two foundational requirements of IP addressing — uniquely identifying a network and a host within it.</p>
+    <div class="callout yellow">
+      <strong>Context:</strong> We've covered application layer and transport layer. Network layer (Layer 3) is the third from the top. This lecture is purely conceptual groundwork — actual IP addressing and routing protocols come in subsequent lectures.
+    </div>
+  </div>
+
+  <!-- WHAT THE NETWORK LAYER DOES -->
+  <div class="section">
+    <div class="section-label">Network Layer — Role and Services <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~00:44</a></div>
+    <div class="callout green">
+      <strong>Primary objective:</strong> Deliver a data packet from any source host to any destination host across a multi-hop network. The network layer provides <strong>best-effort, unreliable datagram delivery</strong> — it tries its hardest, but guarantees nothing.
+    </div>
+    <p>The data unit at the network layer is called a <strong>datagram</strong>. The word "unreliable" is not a design flaw — it is an intentional choice. In a packet-switched network, intermediate buffers can fill up and drop packets. Reliability (retransmission, ordering, flow control) is deliberately pushed up to the transport layer (TCP), keeping the network layer simple and fast.</p>
+
+    <h3>What the Network Layer Does vs What It Doesn't</h3>
+    <div class="compare">
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ Network Layer handles</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">addressing</span>Uniquely identify every host globally</div>
+          <div class="compare-row"><span class="label">routing</span>Decide the next hop at every intermediate router</div>
+          <div class="compare-row"><span class="label">forwarding</span>Move datagram from input port to correct output port</div>
+          <div class="compare-row"><span class="label">delivery model</span>Best-effort, unreliable</div>
+        </div>
+      </div>
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Network Layer does NOT handle</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">reliability</span>No retransmission — that's TCP's job</div>
+          <div class="compare-row"><span class="label">ordering</span>Packets may arrive out of order — transport handles it</div>
+          <div class="compare-row"><span class="label">flow control</span>Delegated entirely to transport layer</div>
+          <div class="compare-row"><span class="label">congestion ctrl</span>Signalled to transport; managed there</div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Services the Network Layer Sits Between</h4>
+    <p>The <strong>data link layer</strong> (L2) provides single-hop delivery — it gets a frame from one node to the immediately adjacent node that is directly connected. The network layer uses this service repeatedly across multiple hops to achieve end-to-end delivery across an arbitrarily large graph of routers.</p>
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">Application</div>
+        <div class="impl-impl">user space</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Transport (TCP/UDP)</div>
+        <div class="impl-impl">reliability, ports</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">Network (IP) ← we are here</div>
+        <div class="impl-impl">addressing, routing</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">Data Link</div>
+        <div class="impl-impl">one-hop delivery</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-phys">Physical</div>
+        <div class="impl-impl">signal transmission</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROUTING PROBLEM -->
+  <div class="section">
+    <div class="section-label">The Routing Problem — Network as a Graph <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~05:27</a></div>
+    <p>Model the entire internet as a graph: nodes are routers (L3 switches), edges are the links (wired or wireless) between them. A source and destination are connected via multiple possible paths through this graph.</p>
+    <div class="callout green">
+      <strong>Routing</strong> is the process of deciding, at every intermediate router, what the correct <em>next hop</em> should be for a packet with a given destination address. This decision is made in a completely <strong>decentralised</strong> way — there is no central coordinator that can see the whole graph.
+    </div>
+
+    <h4>Why not just use shortest-path (minimum hops)?</h4>
+    <p>Minimum hop count is the most obvious metric but not always optimal. The minimum-hop path might have very low link capacity. Routing all traffic down one narrow path causes congestion and degrades performance. Other metrics — bandwidth, latency, load — can serve as link weights instead.</p>
+
+    <h4>Why can't we just run Dijkstra centrally?</h4>
+    <p>In theory, if you had the entire topology and link characteristics as a central graph, you could run Dijkstra's or Bellman-Ford to compute optimal paths. In practice this is impossible at internet scale — the internet is decentralised, no single entity owns or monitors every router. Each router must compute its own next-hop independently using <strong>routing protocols</strong> that exchange partial topology information with neighbours.</p>
+
+    <div class="callout">
+      <strong>Routing protocol</strong> = the distributed algorithm that lets individual routers collectively agree on paths without any central coordinator. The design of these protocols is the central problem of the network layer.
+    </div>
+
+    <h4>Two primary requirements for network layer to work:</h4>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">1. Addressing</div>
+        <div class="concept-desc">Every host must be uniquely identifiable by a globally meaningful address. The address must encode both which network the host belongs to and which host within that network — analogous to a postal address with city + house number.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">2. Routing</div>
+        <div class="concept-desc">Given a destination address, every intermediate router must be able to decide the next hop. Routing protocols distribute topology information so each router can make this decision locally without global knowledge.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- POSTAL MAIL ANALOGY -->
+  <div class="section">
+    <div class="section-label">Postal Mail Analogy — Hierarchical Forwarding <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~14:15</a></div>
+    <p>The entire packet delivery model in the network mirrors how physical postal mail works. A postal address is hierarchical: name → building → locality → city → pin code → state → country. At each level, the postal system only needs to understand the next coarser level to forward correctly. The letter does not need a complete map of every route — it just moves toward increasingly specific destinations.</p>
+    <div class="callout green">
+      Internet routing follows the same principle. An IP address encodes a <strong>network identifier</strong> and a <strong>host identifier</strong>. Routers in the middle of the internet only need to understand the network part — once the packet reaches the right network, the local router delivers it to the specific host.
+    </div>
+    <p>Example: Sandip Chakraborty, CSE-331K, Dept. of CSE, IIT Kharagpur, West Bengal, India — the postal system forwards India → West Bengal → Kharagpur → IIT KGP → CSE dept → office number. Exact same principle, exact same hierarchy.</p>
+  </div>
+
+  <!-- INTERNET ARCHITECTURE -->
+  <div class="section">
+    <div class="section-label">Internet Architecture — Hierarchical Organisation <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~16:09</a></div>
+    <p>The internet is organised in a strict hierarchy of networks. Understanding this hierarchy is essential for understanding why IP addressing looks the way it does.</p>
+
+    <h3>Bottom-up build: from lab to global internet</h3>
+    <div class="domain-grid">
+      <div class="domain-card">
+        <div class="domain-title">LAN (Local Area Network)</div>
+        <div class="domain-desc">A set of devices sharing a common L3 gateway. Devices within a LAN are directly connected via L2 switches. Example: SW Lab 1 at IIT KGP — all machines connected through one L2 switch, forming a single broadcast domain.</div>
+      </div>
+      <div class="domain-card">
+        <div class="domain-title">Department Network</div>
+        <div class="domain-desc">Multiple LANs (e.g. SW Lab 1, SW Lab 2, faculty network, research labs) connected via L3 routers. Each LAN is its own broadcast domain; the L3 router connects them. Example: CSE Network or EEE Network at IIT KGP.</div>
+      </div>
+      <div class="domain-card">
+        <div class="domain-title">Institution Network</div>
+        <div class="domain-desc">Multiple department networks connected via L3 routers form the institution's complete network. Example: IIT KGP Network = CSE + EEE + Mechanical + Admin + Hostel networks all connected.</div>
+      </div>
+      <div class="domain-card">
+        <div class="domain-title">ERNET / Regional Network</div>
+        <div class="domain-desc">Multiple institution networks connected together. ERNET (Education and Research Network of India) is the government initiative connecting all IITs, central universities, and research institutes. IIT KGP, IIT Bombay, IIT Kanpur etc. all connect here.</div>
+      </div>
+    </div>
+
+    <p>Above ERNET, you have national-level ISPs (Airtel, BSNL, Vodafone in India). Multiple national ISPs are connected globally via <strong>Internet Exchange Points (IXPs)</strong> — physical interconnects where traffic passes between national backbones. The transatlantic fiber cables under the Atlantic Ocean are a real-world example of an IXP connecting European and US national networks.</p>
+  </div>
+
+  <!-- AUTONOMOUS SYSTEMS -->
+  <div class="section">
+    <div class="section-label">Autonomous Systems (AS) <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~20:55</a></div>
+    <div class="callout green">
+      <strong>Autonomous System (AS):</strong> A set of LANs under a single administrative domain, identified by a globally unique <strong>AS number</strong>, where routing policy is controlled by a single administrator.
+    </div>
+    <p>The key property of an AS is that the routing <em>policy</em> — the metric used to define "best path" — is chosen by the AS administrator and can differ from one AS to another. Inside an AS, a consistent routing policy is applied. Between ASes, a separate inter-domain routing protocol (BGP) is used.</p>
+
+    <h4>Why routing policy matters</h4>
+    <p>If you could represent the whole internet as one graph and run Dijkstra, the metric you choose as edge weight determines everything. Different network operators have different priorities — some optimise for latency, some for cost, some for bandwidth. The AS model allows each operator to independently choose their internal metric while still connecting to the global internet. This is not a technical limitation — it is a deliberate design for administrative autonomy.</p>
+
+    <div class="callout">
+      India's AS graph is maintained and visualised at <strong>labs.apnic.net/vizas/#IN</strong>. Central nodes (high-connectivity ASes like ERNET, Airtel backbone) provide transit to edge ASes (individual institutions, small ISPs). Worth checking out once.
+    </div>
+  </div>
+
+  <!-- ISP TIERS -->
+  <div class="section">
+    <div class="section-label">ISP Tier Architecture <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~24:12</a></div>
+    <p>Internet Service Providers are organised into three tiers. Each tier gets connectivity from the tier above and provides it to the tier below.</p>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Tier 3 — Local ISP</div>
+        <div class="concept-desc">The ISP that directly connects end users. Gets service from Tier 2. Examples: IIT KGP campus network, Airtel home broadband, a company's internal network. The end user's last-mile connection.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Tier 2 — Regional ISP</div>
+        <div class="concept-desc">Connects multiple Tier 3 networks. Gets service from Tier 1. Examples: ERNET India, state-level BSNL networks. Regional ISPs can peer with each other directly (private peering) to reduce costs.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Tier 1 — National/Transit ISP</div>
+        <div class="concept-desc">Country-level backbone. Connects to other national ISPs via IXPs (Internet Exchange Points). No one above them — they peer globally with each other. Examples: Bharti Airtel backbone, major US telecom carriers.</div>
+      </div>
+    </div>
+
+    <h4>Private Peering</h4>
+    <p>When two ISPs (typically at the same tier) establish a direct connection between themselves and agree to exchange traffic directly without going through an upstream provider. This reduces transit costs and can improve routing efficiency. The reduced pricing you sometimes see when transferring data between two users on the same carrier (e.g. Airtel-to-Airtel) often reflects a private peering relationship.</p>
+
+    <h4>Point of Presence (PoP)</h4>
+    <p>A special-purpose edge network that consumes service but does not provide it to others. Examples include military networks and private government networks — they connect to the backbone but are not transit providers for anyone else.</p>
+
+    <h4>Packet path across the hierarchy (example: IIT KGP → Google USA)</h4>
+    <div class="callout green">
+      Your machine → IIT KGP LAN → IIT KGP AS → ERNET India → Bharti Airtel → (IXP / transatlantic cable) → US national ISP → Google's regional ISP → Google's AS → Google server.
+      <br><br>
+      Exact mirror of: your local post office → regional office → central post office India → international → US central → US regional → local → door.
+    </div>
+  </div>
+
+  <!-- IP ADDRESSING BASICS -->
+  <div class="section">
+    <div class="section-label">IP Addressing — Basic Principles <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~30:13</a></div>
+    <p>For routing to work in this hierarchical architecture, every host's address must encode two things simultaneously:</p>
+    <div class="socket-tuple">
+      <span class="tuple-ip">Network Identifier</span>
+      <span class="tuple-plus">+</span>
+      <span class="tuple-port">Host Identifier</span>
+      <span class="tuple-eq">=</span>
+      <span class="tuple-socket">IP Address</span>
+    </div>
+
+    <div class="callout">
+      <strong>Why this two-part structure is essential:</strong> A router in the middle of the internet does not need to know about every individual host — that would require storing billions of entries. It only needs to know which <em>network</em> to forward toward. Once the packet reaches the destination network, the local router handles the final hop to the specific host. Two-level lookup, just like postal delivery.
+    </div>
+
+    <h4>Routing decisions use the network part; local delivery uses the host part</h4>
+    <p>Intermediate routers read the <strong>network identifier</strong> from the destination IP and forward accordingly — they don't care about the host part at all. Only the final-hop router (directly connected to the destination network) looks at the <strong>host identifier</strong> to deliver to the specific machine.</p>
+
+    <div class="callout yellow">
+      <strong>Coming up in the next lecture:</strong> The actual structure of IP addresses — how the network/host split is defined (classful addressing vs CIDR), the 32-bit format, subnet masks, and how routers use this to make forwarding decisions.
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">network layer</div>
+        <div class="proto-names">Best-effort datagram delivery</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Unreliable by design. Tries its best. Reliability is TCP's problem.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">datagram</div>
+        <div class="proto-names">Unit of data at L3</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">What the network layer calls a packet.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">routing</div>
+        <div class="proto-names">Decentralised next-hop decisions</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Every router independently decides the next hop for each destination. No central coordinator.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">autonomous system</div>
+        <div class="proto-names">Administrative routing domain</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">A set of LANs under one admin with a unique AS number and consistent routing policy.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">ISP tiers</div>
+        <div class="proto-names">Tier 1 → 2 → 3 → end user</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Hierarchical service chain. Tier 1s peer globally at IXPs. Tier 3s serve end users.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">IP address</div>
+        <div class="proto-names">Network ID + Host ID</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Must identify both which network and which host. Two-level for two-level forwarding.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

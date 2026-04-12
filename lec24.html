@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 24 — Socket Programming I</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec23.html" class="nav-lec">← prev</a>
+      <a href="lec25.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 24</span>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>Socket Programming — I</h1>
+    <p>Prof. Sandip Chakraborty · IIT Kharagpur · NPTEL</p>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=0" class="video-link" target="_blank">▶ Watch Lecture</a>
+  </div>
+
+  <!-- SECTION 1 -->
+  <div class="section">
+    <div class="section-label">Protocol Stack Placement</div>
+    <h3>Connecting the Network Stack to the OS</h3>
+    <p>The TCP/IP protocol stack is concretely embedded inside the operating system. Understanding where each layer lives is the foundation of socket programming.</p>
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">Application (APP1, APP2, …)</div>
+        <div class="impl-impl">User Space</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Transport (TCP / UDP)</div>
+        <div class="impl-impl">Kernel Space</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">Network (IP)</div>
+        <div class="impl-impl">Kernel Space</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">Data Link — upper part (MAC + LLC)</div>
+        <div class="impl-impl">Kernel Space</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-phys">Physical + lower Data Link</div>
+        <div class="impl-impl">Hardware (NIC)</div>
+      </div>
+    </div>
+    <div class="callout green">
+      <strong>Key point:</strong> Application code lives in <strong>user space</strong>. To use the network stack, it must cross into kernel space via <strong>system calls</strong> — the UNIX mechanism for requesting kernel operations from user-space programs. The full kernel network stack implementation is at <code>/usr/src/linux/net/</code>.
+    </div>
+  </div>
+
+  <!-- SECTION 2 -->
+  <div class="section">
+    <div class="section-label">Core Concept</div>
+    <h3>What is a Socket?</h3>
+    <p>A <strong>socket</strong> is a logical pipe — an endpoint of an end-to-end connection between two processes on (potentially different) machines.</p>
+    <div class="callout">
+      <strong>Definition:</strong> A socket is a logical connection from one process to another, creating an end-to-end pipe identified by the 5-tuple: <strong>(src IP, src port, dst IP, dst port, protocol)</strong>.
+    </div>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">IP Address</span>
+        <span class="arrow">→</span>
+        <span class="vci">Uniquely identifies the machine on the network (Network Layer)</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Port Number</span>
+        <span class="arrow">→</span>
+        <span class="vci">Identifies the specific process/application on that machine (Transport Layer)</span>
+      </div>
+    </div>
+    <p>Example: A browser on <code>202.141.81.2:8081</code> talking to an HTTP server at <code>203.12.23.43:8080</code> — the socket is the logical pipe joining these two endpoints. Multiple such pipes can co-exist, each identified by a different port combination.</p>
+  </div>
+
+  <!-- SECTION 3 -->
+  <div class="section">
+    <div class="section-label">Socket Types</div>
+    <h3>Three Kinds of Sockets</h3>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">SOCK_STREAM — Stream Socket</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Protocol</span> TCP</div>
+          <div class="compare-row"><span class="label">Nature</span> Reliable, connection-oriented</div>
+          <div class="compare-row"><span class="label">Use case</span> File transfer, HTTP — delivery guarantees needed</div>
+          <div class="compare-row"><span class="label">Data I/O</span> <code>read()</code> / <code>write()</code></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">SOCK_DGRAM — Datagram Socket</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Protocol</span> UDP</div>
+          <div class="compare-row"><span class="label">Nature</span> Unreliable, connectionless</div>
+          <div class="compare-row"><span class="label">Use case</span> VoIP, streaming, DNS — low latency over guarantees</div>
+          <div class="compare-row"><span class="label">Data I/O</span> <code>recvfrom()</code> / <code>sendto()</code></div>
+        </div>
+      </div>
+    </div>
+    <div class="callout yellow">
+      <strong>Raw Socket (SOCK_RAW):</strong> Bypasses the transport layer entirely and interacts directly with the IP layer. Not covered in detail in this lecture.
+    </div>
+  </div>
+
+  <!-- SECTION 4 -->
+  <div class="section">
+    <div class="section-label">Socket API</div>
+    <h3>Server-Side Call Sequence</h3>
+    <table class="port-table">
+      <thead>
+        <tr><th>System Call</th><th>Purpose</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name"><code>socket()</code></td>
+          <td>Create socket; returns a socket file descriptor</td>
+          <td>Args: domain, type, protocol</td>
+        </tr>
+        <tr>
+          <td class="proto-name"><code>bind()</code></td>
+          <td>Bind socket to a port on this machine</td>
+          <td>Associates fd with a <code>sockaddr_in</code> struct</td>
+        </tr>
+        <tr>
+          <td class="proto-name"><code>listen()</code></td>
+          <td>Put socket in passive listening state</td>
+          <td>Backlog param = max queued pending connections</td>
+        </tr>
+        <tr>
+          <td class="proto-name"><code>accept()</code></td>
+          <td>Accept incoming connection; returns a <em>new</em> socket fd for that client</td>
+          <td>Blocks until client connects; triggers TCP 3-way handshake</td>
+        </tr>
+        <tr>
+          <td class="proto-name"><code>send()</code> / <code>recv()</code></td>
+          <td>Transfer data</td>
+          <td>Or <code>read()</code> / <code>write()</code> for stream sockets</td>
+        </tr>
+        <tr>
+          <td class="proto-name"><code>close()</code></td>
+          <td>Tear down connection and free socket</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Client-Side Call Sequence</h3>
+    <table class="port-table">
+      <thead>
+        <tr><th>System Call</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name"><code>socket()</code></td>
+          <td>Create client-side socket endpoint</td>
+        </tr>
+        <tr>
+          <td class="proto-name"><code>connect()</code></td>
+          <td>Initiate connection to server IP:port — fires TCP 3-way handshake</td>
+        </tr>
+        <tr>
+          <td class="proto-name"><code>send()</code> / <code>recv()</code></td>
+          <td>Transfer data</td>
+        </tr>
+        <tr>
+          <td class="proto-name"><code>close()</code></td>
+          <td>Close the connection</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout pink">
+      <strong>Why no bind/listen on the client?</strong> The server must publicly announce a fixed port so clients can reach it. The client only ever initiates outward — it does not need to be findable. The OS assigns the client a random ephemeral port automatically at runtime.
+    </div>
+
+    <h4>Active Open vs Passive Open</h4>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Server</div>
+        <div class="proto-names">Passive Open</div>
+        <p style="font-size:13px;margin-top:6px;">Announces address, remains permanently in listening state waiting for incoming connections. Driven by <code>listen()</code> + <code>accept()</code>.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Client</div>
+        <div class="proto-names">Active Open</div>
+        <p style="font-size:13px;margin-top:6px;">Opens a connection only when data transfer is needed. Driven by <code>connect()</code>. Connection is always client-initiated.</p>
+      </div>
+    </div>
+
+    <h4>Why accept() Returns a New Socket FD</h4>
+    <p>The original listening socket must stay open to receive future clients. When a client connects, <code>accept()</code> creates a brand-new socket fd dedicated to that specific client's logical pipe. All data transfer for that client uses the new fd. This is how the server handles multiple simultaneous clients — one fd per client.</p>
+  </div>
+
+  <!-- SECTION 5 -->
+  <div class="section">
+    <div class="section-label">API Details</div>
+    <h3>socket() Parameters</h3>
+    <p><code>int s = socket(domain, type, protocol);</code></p>
+    <table class="port-table">
+      <thead>
+        <tr><th>Parameter</th><th>Typical Value</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">domain</td>
+          <td class="port-num">AF_INET</td>
+          <td>IPv4 addressing</td>
+        </tr>
+        <tr>
+          <td class="proto-name">type</td>
+          <td class="port-num">SOCK_STREAM / SOCK_DGRAM</td>
+          <td>TCP or UDP socket respectively</td>
+        </tr>
+        <tr>
+          <td class="proto-name">protocol</td>
+          <td class="port-num">0</td>
+          <td>Let OS choose appropriate protocol for the given socket type</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>struct sockaddr_in Fields</h3>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">sin_family</span>
+        <span class="arrow">→</span>
+        <span class="vci">Address family — set to <code>AF_INET</code> for IPv4</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">sin_addr.s_addr</span>
+        <span class="arrow">→</span>
+        <span class="vci"><code>INADDR_ANY</code> — OS auto-selects the machine's active network interface address. Can also be set to a specific IP if needed.</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">sin_port</span>
+        <span class="arrow">→</span>
+        <span class="vci">Port number — must be converted to network byte order: <code>htons(port)</code></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 6 -->
+  <div class="section">
+    <div class="section-label">Host vs Network Byte Order</div>
+    <h3>Endianness and Why htons() is Mandatory</h3>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Little Endian</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Order</span> Least significant byte stored first (low address)</div>
+          <div class="compare-row"><span class="label">Example</span> 0A0B0C0D → memory: 0D, 0C, 0B, 0A</div>
+          <div class="compare-row"><span class="label">CPUs</span> x86, x86-64 — most modern PCs</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Big Endian — Network Standard</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Order</span> Most significant byte stored first (low address)</div>
+          <div class="compare-row"><span class="label">Example</span> 0A0B0C0D → memory: 0A, 0B, 0C, 0D</div>
+          <div class="compare-row"><span class="label">CPUs</span> SPARC, older MIPS; chosen as network byte order</div>
+        </div>
+      </div>
+    </div>
+    <div class="callout pink">
+      <strong>The problem:</strong> A little-endian machine sends bytes in reversed order. A big-endian receiver reads them in its own (forward) order — the value is silently misinterpreted. No error is thrown.
+    </div>
+    <div class="callout green">
+      <strong>The fix:</strong> Network byte order is standardised as big-endian. Convert <em>before</em> transmitting with <code>htons()</code> (16-bit, e.g. port numbers) or <code>htonl()</code> (32-bit, e.g. IP addresses). Convert <em>after</em> receiving with <code>ntohs()</code> / <code>ntohl()</code>. Always do this — skipping it is silent corruption.
+    </div>
+  </div>
+
+  <!-- SECTION 7 -->
+  <div class="section">
+    <div class="section-label">Data Transfer</div>
+    <h3>Send/Receive Functions by Socket Type</h3>
+    <table class="port-table">
+      <thead>
+        <tr><th>Type</th><th>Receive</th><th>Send</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">SOCK_STREAM (TCP)</td>
+          <td><code>read(newsockfd, buf, size)</code></td>
+          <td><code>write(newsockfd, msg, len)</code></td>
+          <td>Use the <em>new</em> fd from <code>accept()</code></td>
+        </tr>
+        <tr>
+          <td class="proto-name">SOCK_DGRAM (UDP)</td>
+          <td><code>recvfrom(sock, buf, size, 0, &amp;from, &amp;len)</code></td>
+          <td><code>sendto(sock, msg, len, 0, &amp;addr, addrlen)</code></td>
+          <td>Addresses passed explicitly per call — no connection</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout yellow">
+      <strong>UDP shortcut:</strong> No <code>connect()</code> or <code>accept()</code>. Server: bind → recvfrom loop. Client: socket → sendto. That's it.
+    </div>
+  </div>
+
+  <!-- SECTION 8: DEMO -->
+  <div class="section">
+    <div class="section-label">Practical Demo</div>
+    <h3>UDP Server–Client Live Demo <a href="https://www.youtube.com/watch?v=placeholder&t=1537" class="ts">▶ 25:37</a></h3>
+    <div class="callout pink">
+      <strong>⚠ Code walkthrough — watch the video.</strong> From 25:37, the lecturer opens and runs actual C code in a terminal (UDP server + client, same machine). Server code at 26:05, client code at 29:37, live execution at 32:00. Following along visually is significantly more effective than reading a transcript of this part.
+    </div>
+
+    <h4>UDP Server (udpserver.c) — Step by Step</h4>
+    <div class="vci-box">
+      <div class="vci-row"><span class="port">socket()</span><span class="arrow">→</span><span class="vci">AF_INET, SOCK_DGRAM, 0</span></div>
+      <div class="vci-row"><span class="port">sockaddr_in</span><span class="arrow">→</span><span class="vci">AF_INET, INADDR_ANY, htons(port from argv)</span></div>
+      <div class="vci-row"><span class="port">bind()</span><span class="arrow">→</span><span class="vci">Bind socket to specified port</span></div>
+      <div class="vci-row"><span class="port">setsockopt()</span><span class="arrow">→</span><span class="vci">SO_REUSEADDR — allows port reuse across connections</span></div>
+      <div class="vci-row"><span class="port">recvfrom() loop</span><span class="arrow">→</span><span class="vci">Wait for data; client address automatically populated in clientAddr struct</span></div>
+      <div class="vci-row"><span class="port">sendto()</span><span class="arrow">→</span><span class="vci">Echo data back to client using clientAddr from recvfrom()</span></div>
+    </div>
+
+    <h4>UDP Client (udpclient.c) — Step by Step</h4>
+    <div class="vci-box">
+      <div class="vci-row"><span class="port">socket()</span><span class="arrow">→</span><span class="vci">AF_INET, SOCK_DGRAM, 0</span></div>
+      <div class="vci-row"><span class="port">gethostbyname()</span><span class="arrow">→</span><span class="vci">Resolve server hostname ("localhost") to IP</span></div>
+      <div class="vci-row"><span class="port">sockaddr_in</span><span class="arrow">→</span><span class="vci">Set server IP + port from command-line args</span></div>
+      <div class="vci-row"><span class="port">sendto()</span><span class="arrow">→</span><span class="vci">Send "Hello there!!" directly — no connect() needed</span></div>
+      <div class="vci-row"><span class="port">recvfrom()</span><span class="arrow">→</span><span class="vci">Receive echoed reply from server</span></div>
+    </div>
+
+    <div class="callout green">
+      <strong>Ephemeral ports observed in demo:</strong> The client never calls <code>bind()</code>, so the OS assigns a random available port at runtime. Multiple runs of the same client show different source ports (<code>43036</code>, <code>60026</code>, <code>34170</code>, <code>47378</code>…). This is standard and expected for any unbound client socket.
+    </div>
+  </div>
+
+  <!-- SECTION 9: SUMMARY + MCQs -->
+  <div class="section">
+    <div class="section-label">Summary</div>
+    <h3>Key Takeaways</h3>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">What</div>
+        <div class="proto-names">Socket = Logical Pipe</div>
+        <p style="font-size:13px;margin-top:6px;">Software abstraction for process-to-process communication identified by the 5-tuple (src IP, src port, dst IP, dst port, protocol).</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">How</div>
+        <div class="proto-names">System Calls (UNIX)</div>
+        <p style="font-size:13px;margin-top:6px;">Server: socket → bind → listen → accept. Client: socket → connect. TCP 3-way handshake fires inside connect/accept. UDP skips both.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Types</div>
+        <div class="proto-names">Stream vs Datagram</div>
+        <p style="font-size:13px;margin-top:6px;">SOCK_STREAM = TCP = reliable, connection-oriented. SOCK_DGRAM = UDP = unreliable, connectionless. Determines which calls and I/O functions to use.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Gotcha</div>
+        <div class="proto-names">Byte Order Conversion</div>
+        <p style="font-size:13px;margin-top:6px;">Always <code>htons()</code> port numbers into <code>sockaddr_in</code>. Always <code>ntohs()</code> when reading from network. Skipping this = silent corruption between different-endian machines.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Next (Lecture 25):</strong> TCP server and client demo, and concurrent vs iterative server variants.
+    </div>
+
+    <h4>MCQ Checkpoints</h4>
+    <div class="callout yellow">
+      <strong>Q:</strong> Which calls are absent in a UDP server but present in a TCP server?<br/>
+      <strong>A:</strong> <code>listen()</code> and <code>accept()</code> — UDP has no connection establishment.
+    </div>
+    <div class="callout yellow">
+      <strong>Q:</strong> Why does <code>accept()</code> return a new socket file descriptor?<br/>
+      <strong>A:</strong> To maintain separate logical pipes for each simultaneously connected client, while the original listening socket stays open for future connections.
+    </div>
+    <div class="callout yellow">
+      <strong>Q:</strong> What is network byte order and why is it needed?<br/>
+      <strong>A:</strong> Network byte order is big-endian — a universal standard ensuring machines with different endianness (e.g. little-endian x86 vs big-endian SPARC) don't misinterpret multi-byte values like port numbers and IP addresses.
+    </div>
+    <div class="callout yellow">
+      <strong>Q:</strong> What does the backlog parameter in <code>listen()</code> control?<br/>
+      <strong>A:</strong> The maximum number of connection requests queued while the server is processing. E.g. <code>listen(sockfd, 5)</code> allows up to 5 pending connections before new ones are refused.
+    </div>
+    <div class="callout yellow">
+      <strong>Q:</strong> Why does a UDP client use a different source port on every run?<br/>
+      <strong>A:</strong> The client never calls <code>bind()</code>, so the OS picks a random available ephemeral port at runtime. Each execution gets a new one.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

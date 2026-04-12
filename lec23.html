@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 23 — User Datagram Protocol | CNPP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec22.html" class="nav-lec">← prev</a>
+        <a href="lec24.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 23</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>User Datagram Protocol</h1>
+      <p>Transport layer's "fast and loose" option — plus QUIC, the protocol that's quietly eating TCP's lunch.</p>
+    </div>
+
+    <!-- WHY UDP EXISTS -->
+    <div class="section">
+      <div class="section-label">Motivation</div>
+      <h3>Why UDP? TCP's Overhead Problem</h3>
+      <p>TCP is reliable and correct, but reliability comes at a cost. For many real-world applications, that cost is unacceptable. Three specific overheads make TCP impractical in certain scenarios:</p>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Connection Overhead</div>
+          <div class="concept-desc">Every TCP session requires a 3-way handshake to open and another exchange to close. For a short DNS request-response, you're burning 6 messages just on setup and teardown — before sending a single byte of actual data.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Retransmission Blocking</div>
+          <div class="concept-desc">TCP's reliability mechanism blocks new data when a packet is lost. The stream stalls waiting for a retransmission, which increases latency for subsequent packets even if they arrived fine.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Slow Start</div>
+          <div class="concept-desc">TCP's congestion control forces the sender to begin at a tiny congestion window and ramp up slowly. On high-speed links with short-lived flows (e.g. HTTP), the connection closes before the window ever reaches operating capacity.</div>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        <strong>Bottom line:</strong> For short-lived, latency-sensitive, or loss-tolerant applications, TCP's overhead costs more than it saves. UDP strips all of that out.
+      </div>
+    </div>
+
+    <!-- UDP OVERVIEW -->
+    <div class="section">
+      <div class="section-label">Protocol Overview</div>
+      <h3>UDP — User Datagram Protocol</h3>
+      <p>UDP is essentially a <strong>thin wrapper over the IP layer</strong>. It passes IP's services directly to the application, adding only the minimum transport-layer functionality: port-based multiplexing and a basic integrity check.</p>
+
+      <div class="compare">
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">UDP Features</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Type</div><div>Connectionless — no handshake, no setup, no teardown</div></div>
+            <div class="compare-row"><div class="label">Reliability</div><div>None — datagrams may be lost, duplicated, or reordered</div></div>
+            <div class="compare-row"><div class="label">Flow Ctrl</div><div>None — sender transmits at any rate</div></div>
+            <div class="compare-row"><div class="label">Congestion</div><div>None — no slow start, no window adjustment</div></div>
+            <div class="compare-row"><div class="label">Ordering</div><div>None — packets delivered in arrival order, not send order</div></div>
+            <div class="compare-row"><div class="label">Speed</div><div>Fast — no state, no handshake delay</div></div>
+          </div>
+        </div>
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">What UDP Does NOT Do (vs TCP)</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Connect</div><div>No connection establishment (no SYN/SYN-ACK/ACK)</div></div>
+            <div class="compare-row"><div class="label">ACK</div><div>No acknowledgement mechanism</div></div>
+            <div class="compare-row"><div class="label">Buffer</div><div>No send buffer — data goes out immediately</div></div>
+            <div class="compare-row"><div class="label">Retransmit</div><div>No retransmission on loss</div></div>
+            <div class="compare-row"><div class="label">Order</div><div>No sequence tracking or in-order delivery</div></div>
+            <div class="compare-row"><div class="label">Handshake</div><div>No knowledge of whether the server is even running</div></div>
+          </div>
+        </div>
+      </div>
+
+      <p>If the application needs any of the above, it must implement them itself at the application layer. UDP simply provides the pipe.</p>
+    </div>
+
+    <!-- UDP HEADER -->
+    <div class="section">
+      <div class="section-label">Header Structure</div>
+      <h3>UDP Header</h3>
+      <p>Compared to TCP's 20-60 byte header, the UDP header is a fixed <strong>8 bytes</strong> with exactly four fields:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Size</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Source Port</td>
+            <td class="port-num">16 bits</td>
+            <td>Port number of the sending application (identifies the sender's socket)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Destination Port</td>
+            <td class="port-num">16 bits</td>
+            <td>Port number of the receiving application (identifies the target socket)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Length</td>
+            <td class="port-num">16 bits</td>
+            <td>Total length of UDP header + data in bytes. Required since there is no stream boundary — receiver must know where the datagram ends.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Checksum</td>
+            <td class="port-num">16 bits</td>
+            <td>Error detection. Even though UDP is unreliable, the receiver still needs to verify the data was not corrupted in transit.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Note:</strong> The simplicity of the UDP header is one of the reasons UDP is faster — there is simply less to process at both ends.
+      </div>
+    </div>
+
+    <!-- CHECKSUM -->
+    <div class="section">
+      <div class="section-label">Checksum Mechanics</div>
+      <h3>Internet Checksum</h3>
+      <p>The checksum is a <strong>hash function</strong> applied to the message: <code>f(M) = C</code>. The resulting fixed-size value C is stored in the header. At the receiver, the same function is applied to the received data and compared against C. A mismatch means corruption occurred.</p>
+
+      <h4>What the Checksum Protects Against</h4>
+      <p>The internet checksum detects <strong>hardware/signal faults</strong> — bit flips introduced during analog-to-digital conversion, modulation/demodulation, or physical transmission errors. It is <strong>not</strong> a cryptographic mechanism and does not protect against deliberate tampering or security attacks.</p>
+
+      <h4>How It's Computed — The Simple Method</h4>
+      <p>The internet checksum avoids expensive cryptographic hash functions (too slow for per-packet computation). Instead:</p>
+      <div class="callout green">
+        Divide the entire message into fixed-size blocks → perform <strong>one's complement addition</strong> across all blocks → the result is the checksum. Simple, fast, sufficient for error detection.
+      </div>
+
+      <h4>The Pseudo Header</h4>
+      <p>Both TCP and UDP compute their checksum over three components: <strong>transport header + data + a pseudo header</strong>. The pseudo header is <em>never transmitted</em> — it exists only for checksum computation and is discarded immediately after.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Pseudo Header Field</th><th>Source</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="proto-name">Source IP</td><td>IP header</td><td rowspan="4" style="vertical-align:middle;">Validates critical routing fields end-to-end. IP routers re-compute their own IP-level checksum at every hop, so the IP checksum alone cannot guarantee these fields are intact from source to destination.</td></tr>
+          <tr><td class="proto-name">Destination IP</td><td>IP header</td></tr>
+          <tr><td class="proto-name">Protocol</td><td>IP header</td></tr>
+          <tr><td class="proto-name">Reserved bits (8)</td><td>IP header</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout pink">
+        <strong>Why bother?</strong> Routers strip, process, and re-attach the IP header at every hop. A faulty router could silently corrupt the source/destination IP. Since TCP/UDP headers are end-to-end (never modified by routers), including the pseudo header in the checksum gives transport layer a second, independent check on those critical IP fields.
+      </div>
+    </div>
+
+    <!-- APPLICATIONS -->
+    <div class="section">
+      <div class="section-label">Use Cases</div>
+      <h3>Applications That Use UDP</h3>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Protocol</th><th>Domain</th><th>Why UDP</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">DNS</td>
+            <td>Domain resolution</td>
+            <td>Single request-response; TCP handshake overhead would dominate. If no response, sender simply retries.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">BOOTP / DHCP</td>
+            <td>Network configuration</td>
+            <td>Short messaging for device configuration. Speed matters more than reliability.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">TFTP</td>
+            <td>File transfer</td>
+            <td>Lightweight protocol for transferring small files. Simplicity is the design goal.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">SNMP</td>
+            <td>Network management</td>
+            <td>UDP packets cut through congestion better than TCP — TCP would throttle itself during congestion, but SNMP needs to get management data <em>through</em> a congested network to diagnose it.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">QUIC</td>
+            <td>Advanced transport</td>
+            <td>Uses UDP for direct IP access, then implements reliability/security/flow control in the application layer itself.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- QUIC -->
+    <div class="section">
+      <div class="section-label">Modern Protocol</div>
+      <h3>QUIC — Quick UDP Internet Connections</h3>
+      <p>Developed by Google (first published at SIGCOMM 2017). QUIC is a next-generation transport protocol built on top of UDP that reimplements TCP's useful features (reliability, flow control, congestion control, ordering) at the application layer, while fixing TCP's fundamental structural problems.</p>
+
+      <h4>Stack Comparison</h4>
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Traditional HTTPS over TCP</div>
+          <div class="concept-desc">
+            <div class="stack" style="max-width:100%;">
+              <div class="stack-layer layer-app"><span class="layer-name">HTTP / HTTPS</span></div>
+              <div class="stack-layer layer-trans"><span class="layer-name">SSL / TLS (Encryption)</span></div>
+              <div class="stack-layer layer-trans"><span class="layer-name">TCP</span></div>
+              <div class="stack-layer layer-net"><span class="layer-name">IP</span></div>
+            </div>
+            Encryption is a separate layer on top of TCP. Two handshakes required: TCP + TLS.
+          </div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">QUIC Stack</div>
+          <div class="concept-desc">
+            <div class="stack" style="max-width:100%;">
+              <div class="stack-layer layer-app"><span class="layer-name">HTTP</span></div>
+              <div class="stack-layer layer-trans"><span class="layer-name">QUIC (incl. encryption)</span></div>
+              <div class="stack-layer layer-dl"><span class="layer-name">UDP</span></div>
+              <div class="stack-layer layer-net"><span class="layer-name">IP</span></div>
+            </div>
+            Encryption is built into QUIC. No separate TLS/SSL layer. Every QUIC packet is end-to-end encrypted by default.
+          </div>
+        </div>
+      </div>
+
+      <h3>QUIC Feature 1 — 0-RTT Connection</h3>
+      <p>TCP requires a new 3-way handshake for every connection. QUIC dramatically reduces this overhead using a credential-caching mechanism:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Scenario</th><th>Handshake Type</th><th>What Happens</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">First ever connection</td>
+            <td><span class="transport tcp-badge">1-RTT</span></td>
+            <td>Client sends inchoate CHLO → server rejects with security credential → client sends complete CHLO + encrypted request → server sends SHLO + encrypted response. 1 round trip required.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Subsequent connections (same server)</td>
+            <td><span class="transport both-badge">0-RTT</span></td>
+            <td>Client already has server's credential from last time. Sends complete CHLO + encrypted request immediately. No waiting for credential exchange.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Server credential changed</td>
+            <td><span class="transport tcp-badge">1-RTT</span></td>
+            <td>Server rejects complete CHLO and sends updated credential. Client reinitates with new credential. Falls back to 1-RTT for this one session only.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout green">
+        <strong>Key terminology:</strong> CHLO = Client Hello (credential exchange message). SHLO = Server Hello. RTT = Round Trip Time.
+      </div>
+
+      <h3>QUIC Feature 2 — Multi-Streaming + Head-of-Line Blocking Free</h3>
+      <p>This is QUIC's most significant architectural improvement over TCP. Understanding it requires knowing what head-of-line (HoL) blocking is:</p>
+
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Head-of-Line Blocking (TCP's problem)</div>
+          <div class="interface-desc">
+            <p>HTTP/2 (and SPDY before it) multiplexes multiple request-response streams over a <em>single TCP connection</em> to avoid per-stream handshakes. But TCP guarantees in-order delivery. If one packet in one stream is lost, TCP halts delivery of <em>all</em> streams waiting for that single packet — even if the other streams' packets arrived safely. One lost packet blocks everything.</p>
+          </div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">QUIC's Solution</div>
+          <div class="interface-desc">
+            <p>QUIC runs multiple streams over a single <em>UDP</em> connection. UDP has no in-order requirement — it simply passes packets upward as they arrive. QUIC itself handles per-stream sequencing. A lost packet in stream 1 only blocks stream 1; streams 2 and 3 continue unaffected. Each stream gets independent flow and congestion control.</p>
+          </div>
+        </div>
+      </div>
+
+      <h4>Evolution of Multi-streaming</h4>
+      <div class="callout">
+        <strong>HTTP/1.1:</strong> Separate TCP connection per request → many handshakes, many slow starts.<br>
+        <strong>HTTP/2 / SPDY:</strong> Multiplex over one TCP → single handshake, but HoL blocking introduced.<br>
+        <strong>QUIC (HTTP/3):</strong> Multiplex over one UDP → single handshake, no HoL blocking, independent stream control.
+      </div>
+
+      <h3>QUIC Feature 3 — Packet Sequence Numbers (Not Byte Sequence)</h3>
+      <p>TCP uses byte sequence numbers, which creates an ambiguity problem during retransmission: a retransmitted packet has the same sequence number as the original. This leads to the "retransmission ambiguity problem" and forces TCP to use duplicate ACKs carefully.</p>
+      <p>QUIC assigns a <strong>new sequence number to every transmitted packet</strong>, including retransmissions. This means:</p>
+      <div class="tag-row">
+        <span class="tag tag-good">No duplicate sequence numbers</span>
+        <span class="tag tag-good">No retransmission ambiguity</span>
+        <span class="tag tag-good">No duplicate ACK mechanism needed</span>
+        <span class="tag tag-good">Simpler loss detection</span>
+      </div>
+
+      <h3>QUIC — Built-in Security</h3>
+      <p>Unlike TCP where encryption is layered on via TLS/SSL, QUIC has end-to-end encryption as a core design property. Every packet is encrypted. No separate security negotiation phase is needed because security credentials are exchanged during the QUIC handshake itself.</p>
+
+      <div class="callout green">
+        <strong>Deployment status:</strong> QUIC is already deployed in Chromium-based browsers. Google services (YouTube, Google Drive, etc.) run on QUIC. It is the basis of HTTP/3 and is likely the future of internet transport, potentially displacing TCP for most web traffic.
+      </div>
+    </div>
+
+    <!-- SUMMARY TABLE -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+      <h3>TCP vs UDP vs QUIC at a Glance</h3>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Property</th><th>TCP</th><th>UDP</th><th>QUIC</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="proto-name">Connection</td><td>3-way handshake</td><td>None</td><td>0-RTT (after first)</td></tr>
+          <tr><td class="proto-name">Reliability</td><td>Yes</td><td>No</td><td>Yes (per-stream)</td></tr>
+          <tr><td class="proto-name">Ordering</td><td>Yes (byte stream)</td><td>No</td><td>Yes (per stream, packet-based)</td></tr>
+          <tr><td class="proto-name">Flow Control</td><td>Yes</td><td>No</td><td>Yes (per stream)</td></tr>
+          <tr><td class="proto-name">Congestion Ctrl</td><td>Yes (slow start)</td><td>No</td><td>Yes (no slow start penalty)</td></tr>
+          <tr><td class="proto-name">Encryption</td><td>Needs TLS layer</td><td>None</td><td>Built-in, mandatory</td></tr>
+          <tr><td class="proto-name">HoL Blocking</td><td>Yes</td><td>No</td><td>No</td></tr>
+          <tr><td class="proto-name">Multiplexing</td><td>No (HTTP/2 workaround)</td><td>No</td><td>Yes (native multi-stream)</td></tr>
+          <tr><td class="proto-name">Runs over</td><td>IP</td><td>IP</td><td>UDP → IP</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- KEY CONCEPTS -->
+    <div class="section">
+      <div class="section-label">Exam Concepts</div>
+      <h3>Key Definitions to Know</h3>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Internet Checksum</div>
+          <div class="concept-desc">Error detection mechanism using one's complement addition over fixed-size message blocks. Not cryptographic — detects signal/hardware faults, not attacks. Used in both TCP and UDP.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Pseudo Header</div>
+          <div class="concept-desc">A temporary structure (Source IP + Dest IP + Protocol + Reserved bits, all from the IP header) included in checksum computation but never transmitted. Provides end-to-end validation of critical routing fields.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Head-of-Line Blocking</div>
+          <div class="concept-desc">When a single lost/delayed packet causes an entire TCP stream (and all multiplexed sub-streams) to stall, even when packets for other streams have already arrived.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">0-RTT Handshake</div>
+          <div class="concept-desc">QUIC's mechanism where a returning client reuses cached server credentials to begin sending encrypted data immediately, eliminating handshake round-trip latency for repeat connections.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPCOMING NOTE -->
+    <div class="section">
+      <div class="callout yellow">
+        <strong>Next up:</strong> Socket programming — practical demos on how to access transport layer protocols and write network applications. The prof explicitly mentions demos. <a class="ts" href="#" title="Timestamp reference">~37:00</a> onwards likely involves code walkthroughs; worth watching the video for the socket API practical.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

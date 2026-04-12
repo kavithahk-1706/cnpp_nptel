@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 27 — IP Addressing (IPv4) I: Classful Addressing</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec26.html" class="nav-lec">← prev</a>
+      <a href="lec28.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">Lecture 27</div>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>IP Addressing (IPv4) I — Classful Addressing</h1>
+    <p>Prof. Sandip Chakraborty · IIT Kharagpur · Network Layer II</p>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=0" class="video-link" target="_blank">▶ Watch on NPTEL</a>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="section">
+    <div class="section-label">Overview</div>
+    <p>IPv4 uses a <strong>32-bit address</strong> to uniquely identify a host on the internet. The address is hierarchically split into a <strong>network part</strong> (identifies which network the host belongs to) and a <strong>host part</strong> (identifies the specific host within that network) — analogous to a postal address. This lecture covers the original <strong>classful addressing</strong> scheme, its limitations, and the introductory concepts behind the modern replacement: <strong>CIDR</strong>.</p>
+    <div class="callout yellow">
+      Classful addressing is <strong>not used today</strong>, but it is the conceptual foundation for all IP addressing. Understand it before CIDR makes complete sense.
+    </div>
+  </div>
+
+  <!-- DOTTED DECIMAL NOTATION -->
+  <div class="section">
+    <div class="section-label">Dotted Decimal Notation</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=493" class="ts">08:13</a>
+    <p>The 32-bit IPv4 address is divided into four <strong>8-bit chunks (octets)</strong>, each represented as a decimal integer separated by dots.</p>
+    <div class="callout green">
+      Each octet spans <strong>0–255</strong> (since 2<sup>8</sup> − 1 = 255). Example: <strong>203.110.30.42</strong>
+    </div>
+    <p>To convert: read each 8-bit group as a binary integer, express in decimal, join with dots. The maximum value per octet is all-1s = 255; the minimum is all-0s = 0.</p>
+  </div>
+
+  <!-- CLASSFUL ADDRESSING -->
+  <div class="section">
+    <div class="section-label">Classful Addressing — The Five Classes</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=258" class="ts">04:18</a>
+    <p>The entire 32-bit address space is divided into five classes identified by the <strong>leading bits</strong> (prefix). The prefix encoding is a <strong>prefix-free code</strong> — no class identifier is a prefix of another, so a simple bit-scan unambiguously identifies the class.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Leading Bits</th>
+          <th>Network Bits</th>
+          <th>Host Bits</th>
+          <th>Address Range</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">A</td>
+          <td class="port-num">0</td>
+          <td>8 (7 usable)</td>
+          <td>24</td>
+          <td>1.0.0.0 – 127.255.255.255</td>
+          <td>Unicast — large networks</td>
+        </tr>
+        <tr>
+          <td class="proto-name">B</td>
+          <td class="port-num">10</td>
+          <td>16 (14 usable)</td>
+          <td>16</td>
+          <td>128.0.0.0 – 191.255.255.255</td>
+          <td>Unicast — medium networks</td>
+        </tr>
+        <tr>
+          <td class="proto-name">C</td>
+          <td class="port-num">110</td>
+          <td>24 (21 usable)</td>
+          <td>8</td>
+          <td>192.0.0.0 – 223.255.255.255</td>
+          <td>Unicast — small networks</td>
+        </tr>
+        <tr>
+          <td class="proto-name">D</td>
+          <td class="port-num">1110</td>
+          <td colspan="2">— (no network/host split)</td>
+          <td>224.0.0.0 – 239.255.255.255</td>
+          <td>Multicast</td>
+        </tr>
+        <tr>
+          <td class="proto-name">E</td>
+          <td class="port-num">1111</td>
+          <td colspan="2">— (reserved)</td>
+          <td>240.0.0.0 – 255.255.255.255</td>
+          <td>Reserved for future use</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Class identification trick:</strong> Scan bits left-to-right. First 0 → Class A. First 10 → Class B. First 110 → Class C. First 1110 → Class D. First 1111 → Class E. Implemented in hardware as a bit-shift + logical AND.
+    </div>
+
+    <h3>Usable Network Bits</h3>
+    <p>Some leading bits within the network field are consumed by the class identifier itself, leaving fewer bits for actual network numbering:</p>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Class A</div>
+        <div class="proto-names">8 − 1 = 7 network bits</div>
+        <p style="font-size:13px;margin-top:6px;">Leading bit "0" is fixed. 7 bits remain → 128 possible networks.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Class B</div>
+        <div class="proto-names">16 − 2 = 14 network bits</div>
+        <p style="font-size:13px;margin-top:6px;">Leading bits "10" are fixed. 14 bits remain → 16,384 possible networks.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Class C</div>
+        <div class="proto-names">24 − 3 = 21 network bits</div>
+        <p style="font-size:13px;margin-top:6px;">Leading bits "110" are fixed. 21 bits remain → 2,097,152 possible networks.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Class D</div>
+        <div class="proto-names">No network/host split</div>
+        <p style="font-size:13px;margin-top:6px;">Entire address identifies a multicast group.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MULTICAST -->
+  <div class="section">
+    <div class="section-label">Multicast (Class D)</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=373" class="ts">06:13</a>
+    <p>Multicast allows a single packet to be delivered to a <strong>group of hosts</strong> simultaneously, identified by one multicast group address. This differs from unicast (one-to-one) and broadcast (one-to-all-on-network).</p>
+    <div class="callout green">
+      Class D multicast range: <strong>224.0.0.0 → 239.255.255.255</strong><br>
+      Leading bits: <strong>1110</strong> | First octet: 224 (11100000) to 239 (11101111)
+    </div>
+    <p>Example analogy: sending a physical letter addressed to "all B.Tech CSE students, IIT Kharagpur" — a single address, but every member of the group receives it.</p>
+  </div>
+
+  <!-- NETWORK & BROADCAST ADDRESSES -->
+  <div class="section">
+    <div class="section-label">Reserved Addresses — Network & Broadcast</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=852" class="ts">14:12</a>
+    <p>Within each classful network, two host addresses are <strong>reserved</strong> and cannot be assigned to actual hosts:</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Network Address</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Host bits</span> All <strong>0s</strong></div>
+          <div class="compare-row"><span class="label">Purpose</span> Identifies the network itself (used in routing tables)</div>
+          <div class="compare-row"><span class="label">Class A ex.</span> 126.0.0.0</div>
+          <div class="compare-row"><span class="label">Class B ex.</span> 189.233.0.0</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Broadcast Address</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Host bits</span> All <strong>1s</strong></div>
+          <div class="compare-row"><span class="label">Purpose</span> Delivers packet to every host in the network</div>
+          <div class="compare-row"><span class="label">Class A ex.</span> 126.255.255.255</div>
+          <div class="compare-row"><span class="label">Class B ex.</span> 189.233.255.255</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      <strong>All-0s and all-1s host addresses are always reserved.</strong> Never assign them to a host.
+    </div>
+  </div>
+
+  <!-- VALID HOST COUNT -->
+  <div class="section">
+    <div class="section-label">Valid Host Count Formula</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=1061" class="ts">17:41</a>
+    <p>Because all-0s (network address) and all-1s (broadcast address) are reserved from the host space:</p>
+
+    <div class="callout green">
+      <strong>Valid hosts per network = 2<sup>n</sup> − 2</strong>, where <em>n</em> = number of host bits.
+    </div>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Host Bits (n)</th>
+          <th>Formula</th>
+          <th>Max Valid Hosts</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">A</td>
+          <td class="port-num">24</td>
+          <td>2<sup>24</sup> − 2</td>
+          <td>≈ 16,777,214</td>
+        </tr>
+        <tr>
+          <td class="proto-name">B</td>
+          <td class="port-num">16</td>
+          <td>2<sup>16</sup> − 2</td>
+          <td>65,534</td>
+        </tr>
+        <tr>
+          <td class="proto-name">C</td>
+          <td class="port-num">8</td>
+          <td>2<sup>8</sup> − 2</td>
+          <td>254</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PROBLEM WITH CLASSFUL ADDRESSING -->
+  <div class="section">
+    <div class="section-label">The Problem with Classful Addressing</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=1312" class="ts">21:52</a>
+    <p>Classful addressing suffers from severe <strong>address space waste</strong> due to rigid class boundaries. Consider a network needing 255 hosts:</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Class C — Not Sufficient</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Max hosts</span> 2<sup>8</sup> − 2 = <strong>254</strong></div>
+          <div class="compare-row"><span class="label">Needed</span> 255</div>
+          <div class="compare-row"><span class="label">Result</span> <strong>Cannot accommodate</strong> — one host too many</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Class B — Wasteful</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Max hosts</span> 2<sup>16</sup> − 2 = <strong>65,534</strong></div>
+          <div class="compare-row"><span class="label">Used</span> 255</div>
+          <div class="compare-row"><span class="label">Result</span> <strong>~65,279 addresses wasted</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      Classful addressing forces you to jump between drastically different network sizes with no middle ground. This was the primary driver for adopting CIDR.
+    </div>
+  </div>
+
+  <!-- CIDR INTRODUCTION -->
+  <div class="section">
+    <div class="section-label">CIDR — Classless Inter-Domain Routing</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=1389" class="ts">23:09</a>
+    <p>CIDR replaces fixed class boundaries with a <strong>variable-length network prefix</strong>. The core idea: break large networks into smaller pieces (<strong>subnetting</strong>) or aggregate small networks into a larger one (<strong>supernetting</strong>), allowing precise allocation of exactly the address space needed.</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Subnetting</div>
+        <div class="concept-desc">Divide a large network into multiple smaller subnets. Bits are <em>borrowed</em> from the host field and reassigned as a subnet number, shrinking the host space per subnet.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Supernetting</div>
+        <div class="concept-desc">Combine multiple smaller networks (e.g., several Class C blocks) into a single larger logical network. Achieves sizes impossible under classful rules.</div>
+      </div>
+    </div>
+
+    <h3>Address Structure Under CIDR</h3>
+    <p>Under classful addressing the address was: <strong>[Network Prefix | Host Number]</strong>. Under CIDR/subnetting it becomes:</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">Network Prefix</span>
+        <span class="arrow">+</span>
+        <span class="vci">Subnet Number</span>
+        <span class="arrow">+</span>
+        <span class="vci">Host Number</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">← Subnet IP (used in routing) →</span>
+        <span class="arrow"> </span>
+        <span class="port">← Host field →</span>
+      </div>
+    </div>
+
+    <p>The subnet number borrows bits from the original host field. The combined network prefix + subnet number forms the <strong>subnet IP</strong> — the identifier of the sub-network the host lives in.</p>
+  </div>
+
+  <!-- SUBNET MASK -->
+  <div class="section">
+    <div class="section-label">Subnet Mask</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=1576" class="ts">26:16</a>
+    <p>Without fixed class boundaries, you need additional information to know where the network part ends and the host part begins. This is the role of the <strong>subnet mask</strong> (also called <em>netmask</em> in Linux).</p>
+
+    <div class="callout">
+      A subnet mask is a <strong>32-bit value</strong>: a contiguous block of 1s (network bits) followed by a contiguous block of 0s (host bits). The count of leading 1s tells you how many bits belong to the network/subnet prefix.
+    </div>
+
+    <p>Example — given IP address and subnet mask:</p>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">IP Address</span>
+        <span class="vci">10111111 . 10110100 . 01010011 . 11101011</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Subnet Mask</span>
+        <span class="vci">11111111 . 11110000 . 00000000 . 00000000</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Result</span>
+        <span class="arrow">First 12 bits = network/subnet address | Last 20 bits = host</span>
+      </div>
+    </div>
+
+    <p>Classful equivalents expressed as subnet masks:</p>
+    <table class="port-table">
+      <thead>
+        <tr><th>Class</th><th>Default Subnet Mask</th><th>Prefix Length</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">A</td><td class="port-num">255.0.0.0</td><td>/8</td></tr>
+        <tr><td class="proto-name">B</td><td class="port-num">255.255.0.0</td><td>/16</td></tr>
+        <tr><td class="proto-name">C</td><td class="port-num">255.255.255.0</td><td>/24</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- CIDR NOTATION -->
+  <div class="section">
+    <div class="section-label">CIDR Notation</div>
+    <a href="https://www.youtube.com/watch?v=placeholder&t=1674" class="ts">27:54</a>
+    <p>CIDR notation compactly expresses an IP address and its prefix length together:</p>
+
+    <div class="callout green">
+      <strong>Format: &lt;IP address&gt; / &lt;prefix length&gt;</strong><br>
+      Example: <strong>191.180.83.235/12</strong><br>
+      → First 12 bits = network address | Remaining 20 bits = host address<br>
+      → Subnet mask = 255.240.0.0 (twelve 1s, twenty 0s)
+    </div>
+
+    <p>Another common example — a typical home/office network configuration:</p>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">IP Address</span>
+        <span class="vci">192.168.1.50</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Subnet Mask</span>
+        <span class="vci">255.255.255.0 &nbsp;(/24)</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Network Address</span>
+        <span class="vci">192.168.1.0</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Host Identifier</span>
+        <span class="vci">50 (last 8 bits)</span>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>OS terminology:</strong> Windows uses "Subnet Mask" (dotted decimal form, e.g. 255.255.255.0). Linux uses "Netmask" or the /prefix notation. Both mean the same thing.
+    </div>
+  </div>
+
+  <!-- MCQ CALLOUT -->
+  <div class="section">
+    <div class="section-label">Exam Practice</div>
+
+    <div class="callout pink">
+      <strong>MCQ 1:</strong> A network has 500 hosts. Which is the most appropriate classful address class?<br>
+      <strong>A)</strong> Class C &nbsp; <strong>B)</strong> Class B &nbsp; <strong>C)</strong> Class A &nbsp; <strong>D)</strong> Class D<br><br>
+      <strong>Answer: B — Class B</strong>. Class C supports only 2<sup>8</sup>−2 = 254 hosts (insufficient). Class B supports up to 65,534 hosts. Class A is overkill. Class D is multicast only.
+    </div>
+
+    <div class="callout pink">
+      <strong>MCQ 2:</strong> What is the broadcast address for the network 172.16.0.0/16?<br><br>
+      <strong>Answer: 172.16.255.255</strong> — Set all host bits (last 16 bits) to 1.
+    </div>
+
+    <div class="callout pink">
+      <strong>MCQ 3:</strong> IP address 200.10.5.100/28 — how many valid hosts can this subnet support?<br><br>
+      <strong>Answer: 2<sup>4</sup> − 2 = 14 hosts.</strong> Prefix /28 → 32−28 = 4 host bits.
+    </div>
+
+    <div class="callout pink">
+      <strong>MCQ 4:</strong> Which class does IP address 192.168.1.1 belong to?<br><br>
+      <strong>Answer: Class C.</strong> First octet 192 = 11000000 in binary — leading bits are 110, which identifies Class C.
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <div class="stack">
+      <div class="stack-layer layer-app">
+        <span class="layer-name">CIDR / Classless</span>
+        <span class="layer-desc">Variable prefix; subnetting + supernetting</span>
+      </div>
+      <div class="stack-layer layer-trans">
+        <span class="layer-name">Subnet Mask</span>
+        <span class="layer-desc">32-bit mask of 1s then 0s; marks network/host boundary</span>
+      </div>
+      <div class="stack-layer layer-net">
+        <span class="layer-name">Classful Addressing</span>
+        <span class="layer-desc">Fixed A/B/C/D/E classes; identified by leading bits</span>
+      </div>
+      <div class="stack-layer layer-dl">
+        <span class="layer-name">Dotted Decimal</span>
+        <span class="layer-desc">Four 8-bit octets (0–255) separated by dots</span>
+      </div>
+      <div class="stack-layer layer-phys">
+        <span class="layer-name">IPv4 Address</span>
+        <span class="layer-desc">32 bits = Network part + Host part</span>
+      </div>
+    </div>
+
+    <h3>Key Takeaways</h3>
+    <p><strong>IPv4</strong> uses 32-bit addresses written in dotted decimal. Under <strong>classful addressing</strong>, the class is determined by the leading bits; Classes A, B, C each split the 32 bits into fixed-size network and host fields. The <strong>network address</strong> (all-0s host) identifies the network and the <strong>broadcast address</strong> (all-1s host) reaches every host — both are reserved. Valid hosts per network = <strong>2<sup>n</sup> − 2</strong>.</p>
+    <p>Classful addressing wastes enormous address space when network size requirements fall between class boundaries. <strong>CIDR</strong> solves this via subnetting (splitting large networks) and supernetting (merging small ones), using a variable-length <strong>subnet mask</strong> to indicate the network prefix boundary. CIDR notation writes this as <em>IP/prefix-length</em>.</p>
+
+    <div class="tag-row">
+      <span class="tag tag-good">HIGH PRIORITY</span>
+      <span class="tag tag-good">Network Layer</span>
+      <span class="tag tag-good">IPv4</span>
+      <span class="tag tag-good">CIDR foundation</span>
+      <span class="tag tag-bad">Classful = legacy</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

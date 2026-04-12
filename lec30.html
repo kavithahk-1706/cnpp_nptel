@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 30 — IPv6 Addressing | CNPP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec29.html" class="nav-lec">← prev</a>
+        <a href="lec31.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- Header -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 30</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>IPv6 Addressing</h1>
+      <p>Why IPv4 ran out of steam, how IPv6 fixes it, header format, address types, neighbor discovery, mobility support, and migration strategies.</p>
+    </div>
+
+    <!-- Section 1: Why IPv6 -->
+    <div class="section">
+      <div class="section-label">Motivation</div>
+      <h3>Why Do We Need IPv6?</h3>
+      <p>IPv4 uses a 32-bit address space. Theoretically that's 2<sup>32</sup> addresses, but a huge chunk are reserved (loopback, broadcast, private ranges, subnet addresses). The usable pool is far smaller. With desktops, laptops, phones, IoT sensors, smart appliances all demanding unique addresses, the IPv4 pool hit saturation. Workarounds like NAT and CIDR bought time but didn't solve the core problem.</p>
+
+      <div class="callout yellow">
+        <strong>IoT tipping point:</strong> Every sensor on a smart fridge, AC unit, light switch, or hospital monitor needs a globally reachable address. IPv4 simply cannot accommodate this scale.
+      </div>
+
+      <h3>Problems with IPv4 (Beyond Address Space)</h3>
+
+      <div class="domain-grid">
+        <div class="domain-card">
+          <div class="domain-title">Address Exhaustion</div>
+          <div class="domain-desc">Even with CIDR, the 32-bit space is saturated. The drop in address growth in recent years isn't declining demand — it's a hard ceiling.</div>
+        </div>
+        <div class="domain-card">
+          <div class="domain-title">QoS Vaguely Defined</div>
+          <div class="domain-desc">IPv4 was designed for plain data traffic. Modern multimedia (VoIP, live streaming, video calls) needs delay-sensitive, prioritised delivery — not supported natively.</div>
+        </div>
+        <div class="domain-card">
+          <div class="domain-title">Mobility Unmanageable</div>
+          <div class="domain-desc">IPv4 assumes fixed devices. Mobile IP was added as a patch but performs poorly in real deployments. Not a native feature.</div>
+        </div>
+        <div class="domain-card">
+          <div class="domain-title">No Native Security</div>
+          <div class="domain-desc">Security was a secondary concern at IPv4's inception. TLS, IPSec etc. are bolt-ons layered above IPv4 — not integrated. Adds complexity and management overhead.</div>
+        </div>
+      </div>
+
+      <div class="callout pink">
+        Because QoS, mobility, and security all had to be patched on externally, the protocol became bloated and unmanageable at internet scale.
+      </div>
+    </div>
+
+    <!-- Section 2: IPv6 Features -->
+    <div class="section">
+      <div class="section-label">IPv6 Design</div>
+      <h3>IPv6 Features</h3>
+      <p>The IPv6 draft proposal arrived in December 1998, but the protocol was only formally standardised in July 2017 — nearly 20 years of iteration and refinement.</p>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">128-bit Address Space</div>
+          <div class="concept-desc">2<sup>128</sup> possible addresses — enough for every grain of sand on Earth to have billions of IPs. Exhaustion is effectively off the table.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Global Hierarchical Addressing</div>
+          <div class="concept-desc">Unlike IPv4's broken hierarchy (forced to abandon classful structure for CIDR), IPv6 preserves hierarchical structure globally, enabling optimised prefix-based routing tables.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Auto-configuration</div>
+          <div class="concept-desc">DHCP functionality is built directly into IPv6 via stateless address autoconfiguration (SLAAC). No separate DHCP protocol required — a device can self-assign an address upon connecting.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Built-in Security</div>
+          <div class="concept-desc">Authentication and encryption are native IPv6 features via extension headers, not patched on via separate protocols.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">QoS Support</div>
+          <div class="concept-desc">Traffic class and flow label fields in the IPv6 header enable native classification and prioritisation of traffic flows (e.g., video vs. background data).</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">IPv4 Compatibility</div>
+          <div class="concept-desc">Backward compatibility mechanisms (dual stack, tunneling, header translation) allow gradual migration — you don't have to flip a switch on the entire internet overnight.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Header Format -->
+    <div class="section">
+      <div class="section-label">Header Structure</div>
+      <h3>IPv6 Header Format</h3>
+      <p>The mandatory IPv6 header is fixed and simpler than IPv4's variable-length header. Optional functionality is offloaded to extension headers, keeping the base header lean for fast processing.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Size</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Version</td>
+            <td class="port-num">4 bits</td>
+            <td>Always 6 for IPv6</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Traffic Class</td>
+            <td class="port-num">8 bits</td>
+            <td>QoS — marks packet priority/type</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Flow Label</td>
+            <td class="port-num">20 bits</td>
+            <td>Identifies a specific traffic flow for QoS handling at routers</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Payload Length</td>
+            <td class="port-num">16 bits</td>
+            <td>Length of data following the header</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Next Header</td>
+            <td class="port-num">8 bits</td>
+            <td>Type of the next header (extension header or transport protocol)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Hop Limit</td>
+            <td class="port-num">8 bits</td>
+            <td>Equivalent to IPv4 TTL — decremented at each hop; packet dropped at 0</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Source Address</td>
+            <td class="port-num">128 bits</td>
+            <td>Sender's IPv6 address</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Destination Address</td>
+            <td class="port-num">128 bits</td>
+            <td>Recipient's IPv6 address</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Extension Headers</h3>
+      <p>Every IPv6 packet has exactly one mandatory base header. Beyond that, optional extension headers can be chained together using the <strong>Next Header</strong> pointer — each header points to the next. This keeps the base header fixed-size while allowing arbitrary extensibility.</p>
+
+      <div class="callout green">
+        <strong>Chain structure:</strong> Base Header → (optional) Hop-by-Hop Options → Routing Header → Fragment Header → Authentication Header → TCP Header + Data
+      </div>
+
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Hop-by-Hop Options</div>
+          <div class="interface-desc">Instructions for every router the packet passes through — how should each hop handle this packet?</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Routing Header</div>
+          <div class="interface-desc">Enables source routing — the sender can embed the exact route the packet must follow to reach the destination.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Fragment Header</div>
+          <div class="interface-desc">Carries fragmentation info when an IPv6 packet is split into pieces. Note: only the source can fragment in IPv6 — routers cannot.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Authentication Header</div>
+          <div class="interface-desc">Security data for verifying the sender's identity — authentication built natively into the packet structure.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: IPv6 Address Notation -->
+    <div class="section">
+      <div class="section-label">Address Format</div>
+      <h3>IPv6 Address Notation</h3>
+      <p>A 128-bit IPv6 address is written as <strong>8 groups of 16-bit hexadecimal numbers</strong>, separated by colons.</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">Full form</span>
+          <span class="arrow">→</span>
+          <span class="vci">FE80:0000:0000:0000:0001:0800:23E:F5DB</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Drop leading zeros</span>
+          <span class="arrow">→</span>
+          <span class="vci">FE80:0:0:0:1:800:23E:F5DB</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Compress consecutive zero groups with ::</span>
+          <span class="arrow">→</span>
+          <span class="vci">FE80::1:800:23E:F5DB</span>
+        </div>
+      </div>
+
+      <div class="callout pink">
+        <strong>:: can only appear once.</strong> If you use it twice, it becomes impossible to determine how many zero groups each :: represents. The missing groups are inferred from the total count — only unambiguous if :: is used exactly once.
+      </div>
+    </div>
+
+    <!-- Section 5: Address Space Allocation -->
+    <div class="section">
+      <div class="section-label">Address Types</div>
+      <h3>Address Space Allocation by Prefix</h3>
+      <p>IPv6 divides its address space by examining the leading bits of an address (the prefix), similar to CIDR.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Allocation</th>
+            <th>Prefix (binary)</th>
+            <th>Start (hex)</th>
+            <th>Prefix Length</th>
+            <th>Fraction of Space</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Reserved</td>
+            <td><code>0000 0000</code></td>
+            <td class="port-num">0::/8</td>
+            <td>8 bits</td>
+            <td>1/256</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Reserved for NSAP</td>
+            <td><code>0000 001</code></td>
+            <td class="port-num">200::/7</td>
+            <td>7 bits</td>
+            <td>1/128</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Reserved for IPX</td>
+            <td><code>0000 010</code></td>
+            <td class="port-num">400::/7</td>
+            <td>7 bits</td>
+            <td>1/128</td>
+          </tr>
+          <tr>
+            <td class="proto-name" style="color:var(--accent3)"><strong>Aggregatable Global Unicast</strong></td>
+            <td><code>001</code></td>
+            <td class="port-num">2000::/3</td>
+            <td>3 bits</td>
+            <td><strong>1/8</strong></td>
+          </tr>
+          <tr>
+            <td class="proto-name">Link-Local Unicast</td>
+            <td><code>1111 1110 10</code></td>
+            <td class="port-num">FE80::/10</td>
+            <td>10 bits</td>
+            <td>1/1024</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Site-Local Unicast</td>
+            <td><code>1111 1110 11</code></td>
+            <td class="port-num">FEC0::/10</td>
+            <td>10 bits</td>
+            <td>1/1024</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Multicast</td>
+            <td><code>1111 1111</code></td>
+            <td class="port-num">FF00::/8</td>
+            <td>8 bits</td>
+            <td>1/256</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        IPv6 has <strong>no broadcast</strong>. Broadcast is replaced by multicast (FF00::/8) and anycast. This is a significant efficiency improvement — no device is forced to process traffic not destined for it.
+      </div>
+
+      <h3>Global Unicast Address Format</h3>
+      <p>The globally routable unicast addresses (2000::/3) are structured in three parts:</p>
+
+      <div class="domain-parts">
+        <div class="dp dp-tld">
+          <span class="dp-label">Global Routing Prefix</span>
+          <span class="dp-val">n bits</span>
+        </div>
+        <div class="dp dp-sub">
+          <span class="dp-label">Subnet ID</span>
+          <span class="dp-val">m bits</span>
+        </div>
+        <div class="dp dp-host">
+          <span class="dp-label">Interface ID</span>
+          <span class="dp-val">128 − n − m bits</span>
+        </div>
+      </div>
+
+      <p>The <strong>Global Routing Prefix</strong> is assigned to a site (e.g., an ISP or organisation) by routing authorities, structured hierarchically so the entire internet's routing table can be kept manageable. The <strong>Subnet ID</strong> identifies a specific subnet within that site. The <strong>Interface ID</strong> identifies the specific network interface (analogous to the host part in IPv4).</p>
+
+      <div class="callout green">
+        In CIDR notation, the prefix length covers <strong>Global Routing Prefix + Subnet ID</strong> combined. So /48 means 48 bits of global+subnet prefix, leaving 80 bits for interface IDs within that subnet.
+      </div>
+    </div>
+
+    <!-- Section 6: Neighbor Discovery -->
+    <div class="section">
+      <div class="section-label">ICMPv6 Feature</div>
+      <h3>Neighbor Discovery Protocol (NDP)</h3>
+      <p>Neighbor Discovery is the IPv6 replacement for ARP. In IPv4, ARP resolves an IP address to a MAC address via a broadcast — every device on the subnet has to process that broadcast. IPv6 replaces this with a targeted mechanism using ICMPv6.</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">ARP (IPv4)</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Method</div><div>Broadcasts query to every device on the subnet</div></div>
+            <div class="compare-row"><div class="label">Scope</div><div>All devices must receive and process</div></div>
+            <div class="compare-row"><div class="label">Protocol</div><div>ARP (separate from ICMP)</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">NDP (IPv6)</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Method</div><div>Sends Neighbor Solicitation to a specific <em>solicited-node multicast</em> address</div></div>
+            <div class="compare-row"><div class="label">Scope</div><div>Only the target node (and others sharing that multicast group) processes it</div></div>
+            <div class="compare-row"><div class="label">Protocol</div><div>ICMPv6 (integrated into IPv6)</div></div>
+          </div>
+        </div>
+      </div>
+
+      <h4>Neighbor Solicitation (ICMPv6 Type 135)</h4>
+      <p>When node A wants to find the MAC address of node B, it sends a <strong>Neighbor Solicitation</strong> message. The destination is not a broadcast address — it's the solicited-node multicast address derived from B's IPv6 address. Only node B (and any other node sharing that solicited-node multicast group) receives and processes it.</p>
+      <p>The message contains: the <strong>target IPv6 address</strong> (whose MAC we want) and the <strong>source link-layer address</strong> (A's own MAC).</p>
+
+      <h4>Neighbor Advertisement (ICMPv6 Type 136)</h4>
+      <p>Node B responds with a <strong>Neighbor Advertisement</strong> containing its IPv6 address and its MAC address. Nodes also periodically send unsolicited Neighbor Advertisements to maintain link connectivity.</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">R flag</span>
+          <span class="vci">Sender is a router</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">S flag</span>
+          <span class="vci">This advertisement is a response to a solicitation</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">O flag</span>
+          <span class="vci">Override — source must update its neighbor cache with this new info</span>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Hint — visualise this:</strong> The solicited-node multicast concept is best understood by tracing a packet exchange between two nodes on a link. See the worked example at <a href="#" class="ts">~25:18</a> in the lecture video.
+      </div>
+    </div>
+
+    <!-- Section 7: Mobility -->
+    <div class="section">
+      <div class="section-label">Mobility</div>
+      <h3>IPv6 Mobility Support</h3>
+      <p>Unlike IPv4 where mobile support required an external foreign agent and performed poorly, IPv6 builds mobility support into the protocol natively via extension headers.</p>
+
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Temporary Care-of Address</div>
+          <div class="interface-desc">When a mobile node leaves its home network, it gets a temporary address at the new location. Its home address is stored in the IPv6 Destination Options extension header, so traffic destined for the home address can still reach it.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">No Foreign Agent Needed</div>
+          <div class="interface-desc">IPv4 mobility required a designated foreign agent router to map old and new addresses. IPv6 uses NDP and address autoconfiguration instead — a node connects to any subnet and self-configures. Clean and protocol-native.</div>
+        </div>
+      </div>
+
+      <p>The mobile station lists routing information in the Routing extension header so packets can be tunneled and forwarded to the correct location without involving an external agent.</p>
+    </div>
+
+    <!-- Section 8: Migration -->
+    <div class="section">
+      <div class="section-label">Migration Strategies</div>
+      <h3>Migrating from IPv4 to IPv6</h3>
+      <p>A hard cutover from IPv4 to IPv6 is impossible — the majority of existing infrastructure runs IPv4. Three mechanisms enable gradual coexistence and migration:</p>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">1. Dual Stack</div>
+          <div class="concept-desc">A single machine runs both IPv4 and IPv6 protocol stacks simultaneously. Communicating with an IPv4 host? Use the IPv4 stack. Communicating with an IPv6 host? Use the IPv6 stack. No translation needed — just choose the right stack at runtime.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">2. Tunneling</div>
+          <div class="concept-desc">IPv6 packets are encapsulated inside IPv4 packets (or vice versa) when traversing a network that only supports the other version. The IPv4/IPv6 header wraps the other as payload — the inner header is read by the final destination.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">3. Header Translation</div>
+          <div class="concept-desc">An IPv4 header is translated into an IPv6 header (or vice versa) by converting field values. Requires address translation as well — specific rules govern how IPv4 and IPv6 addresses map to each other.</div>
+        </div>
+      </div>
+
+      <h4>Address Translation Rules (Header Translation)</h4>
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">IPv6 → IPv4</span>
+          <span class="arrow">→</span>
+          <span class="vci">Take the low-order 32 bits of the IPv6 address as the IPv4 address</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">IPv4 → IPv6</span>
+          <span class="arrow">→</span>
+          <span class="vci">Prepend 80 zero bits + 16 one-bits (::FFFF/96 prefix) to the 32-bit IPv4 address</span>
+        </div>
+      </div>
+
+      <div class="callout green">
+        <strong>Example:</strong> IPv4 <code>202.141.80.20</code> → IPv6 <code>::FFFF:CA8D:5014</code> (202=CA, 141=8D, 80=50, 20=14 in hex). Going the other way: IPv6 <code>FE80:2381::1:0800:23E:F5DB</code> — take the last 32 bits (FE=254, 80=128, 23=35, 81=129) → IPv4 <code>254.128.35.129</code>.
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="section">
+      <div class="section-label">Summary</div>
+      <h3>Key Concepts at a Glance</h3>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">IPv4 Problems</div>
+          <div class="concept-desc">Address exhaustion (32-bit), no native QoS, no native mobility, no native security. All three added as external patches, making the protocol unmanageable at scale.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">IPv6 Address Format</div>
+          <div class="concept-desc">128 bits, written as 8 colon-separated hex groups. Leading zeros droppable. Consecutive zero groups collapsible to :: (exactly once).</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Header Design</div>
+          <div class="concept-desc">Fixed mandatory header + chained optional extension headers. Traffic Class + Flow Label = native QoS. Next Header pointer enables unlimited extension chaining.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Neighbor Discovery</div>
+          <div class="concept-desc">IPv6's ARP replacement. Uses ICMPv6 Neighbor Solicitation (type 135) and Advertisement (type 136). Targets a solicited-node multicast address instead of broadcasting — far more efficient.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Address Types</div>
+          <div class="concept-desc">Global unicast (2000::/3, 1/8th of space), link-local (FE80::/10), site-local (FEC0::/10), multicast (FF00::/8). No broadcast in IPv6.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Migration</div>
+          <div class="concept-desc">Three strategies: dual stack (run both), tunneling (encapsulate one inside the other), header translation (convert between formats with address mapping rules).</div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Further reading:</strong> RFC 2460 (IPv6 spec), RFC 4291 (IPv6 addressing architecture), RFC 3587 (Global Unicast address format). For multicast specifics: IANA IPv6 Multicast Addresses documentation.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

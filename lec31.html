@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 31 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec30.html" class="nav-lec">← prev</a>
+      <a href="lec32.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 31 <span class="high-badge">high priority</span></div>
+    <h1>Internet QoS I — What is Quality of Service</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This lecture introduces Network Quality of Service (QoS) — what it means, why it matters, and what the network-level parameters are. TCP congestion control is revisited to establish that it does <em>not</em> prevent congestion, only reacts to it. The four primary QoS parameters — bandwidth, delay, jitter, and loss — are then defined in detail, followed by application-level QoS requirements, a formal definition of QoS, the concept of a flow, and why QoS is implemented at the network layer.</p>
+  </div>
+
+  <!-- WHY QoS EXISTS -->
+  <div class="section">
+    <div class="section-label">Why QoS Exists — Streaming vs File Transfer <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~00:28</a></div>
+    <p>Normal file transfer is tolerant: get all the bytes, reconstruct the file, done. Order of arrival matters but timing does not. Multimedia streaming is fundamentally different — data is consumed <em>as it arrives</em>. A YouTube stream must continuously feed the player at a rate that matches playback. If data stops or varies in rate, the experience degrades visibly.</p>
+    <div class="callout green">
+      <strong>Quality of Experience (QoE)</strong> = the user's perceived quality of an application. QoS is the network's side of that deal. To guarantee QoE, the network must provide certain performance guarantees — and this requires dedicated or prioritised resources, not just best-effort delivery.
+    </div>
+    <div class="callout yellow">
+      <strong>Important caveat:</strong> Perfect QoS is only achievable on a dedicated leased line where you have all the bandwidth. On the shared public internet, QoS is always an approximation. What we can do is prioritise and regulate traffic to get close to the required service level.
+    </div>
+  </div>
+
+  <!-- TCP CONGESTION CONTROL REVISITED -->
+  <div class="section">
+    <div class="section-label">Revisiting Congestion — Does TCP Prevent It? <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~06:29</a></div>
+    <div class="callout pink">
+      <strong>TCP congestion control does NOT prevent congestion.</strong> It reacts to congestion after it has already occurred. The sequence is: congestion happens → TCP detects packet loss → TCP reduces sending rate → congestion slowly clears. The congestion already happened; TCP just cleans it up.
+    </div>
+    <p>This means congestion — and its side effects on bandwidth, delay, jitter, and loss — is a permanent reality of packet-switched networks. QoS mechanisms exist to manage and bound these effects, not to eliminate them.</p>
+  </div>
+
+  <!-- THE FOUR QoS PARAMETERS -->
+  <div class="section">
+    <div class="section-label">The Four Primary QoS Parameters <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~08:58</a></div>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">parameter 1</div>
+        <div class="proto-names">Bandwidth</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Amount of data transmissible over a link per unit time. Hard limit — if you need more than your pipe provides, no QoS trick fixes it. You need a bigger pipe.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">parameter 2</div>
+        <div class="proto-names">Delay</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">End-to-end time for a packet to travel from source to destination. Has three components: transmission delay, propagation delay, queuing delay.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">parameter 3</div>
+        <div class="proto-names">Jitter</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;"><strong>Variation in end-to-end delay</strong> across packets in the same stream. Packets in the same flow may experience different congestion levels at intermediate routers, arriving at uneven intervals.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">parameter 4</div>
+        <div class="proto-names">Loss</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Fraction of packets not received vs total sent. Caused by router buffer overflow (congestion) in wired networks. In wireless, also caused by channel interference independently of congestion.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELAY COMPONENTS IN DEPTH -->
+  <div class="section">
+    <div class="section-label">Delay — Three Components in Detail <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~18:04</a></div>
+
+    <h3>1. Transmission Delay</h3>
+    <p>Time to push all bits of a packet onto the wire. Depends on <strong>link capacity (bandwidth)</strong>, not distance.</p>
+    <div class="callout green">
+      <strong>Formula:</strong> Transmission Delay = Packet Size (bits) ÷ Link Capacity (bps)<br>
+      <strong>Example:</strong> 8 Mb packet over 8 Mbps link → 8,000,000 ÷ 8,000,000 = <strong>1 second</strong>. Same packet over 16 Mbps link → <strong>0.5 seconds</strong>.
+    </div>
+
+    <h3>2. Propagation Delay <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~20:05</a></h3>
+    <p>Time for one bit (treated as a signal) to physically travel from one end of a link to the other. Depends on <strong>distance and medium</strong> — not bandwidth. A signal on optical fibre travels at roughly 2/3 the speed of light; on copper it is similar. Longer cable = higher propagation delay regardless of capacity.</p>
+    <div class="callout">
+      <strong>Transmission vs Propagation — the key distinction:</strong> Transmission delay is about how fast you can <em>load</em> the pipe. Propagation delay is about how long it takes the signal to physically <em>cross</em> the pipe. A wider pipe (more bandwidth) reduces transmission delay but has zero effect on propagation delay.
+    </div>
+
+    <h3>3. Queuing Delay <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~23:37</a></h3>
+    <p>Time a packet spends waiting in a router's buffer queue before it can be transmitted. Caused by multiple senders simultaneously sending to the same outgoing link faster than the router can forward. This is the <strong>dominant delay component</strong> in practice.</p>
+    <div class="callout pink">
+      <strong>In general: Queuing delay ≫ Transmission delay + Propagation delay.</strong><br>
+      Congestion directly increases queuing delay — more packets pile into the queue, every packet waits longer. This is why congested networks feel slow even on high-bandwidth links.
+    </div>
+    <div class="callout yellow">
+      Think of it like a movie theatre ticket counter: if people arrive faster than the counter serves them, the queue grows and everyone waits longer. The counter's speed (bandwidth) and the theatre's distance from you (propagation) are irrelevant to your wait time if the queue is the bottleneck.
+    </div>
+  </div>
+
+  <!-- JITTER IN DEPTH -->
+  <div class="section">
+    <div class="section-label">Jitter — Why Delay Variation Hurts Streaming <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~26:44</a></div>
+    <p>Packets in the same stream may experience different queuing delays at intermediate routers — some packets travel through a congested router, others arrive after congestion has cleared. The result is that packets arrive at the receiver at uneven intervals even if they were sent at uniform intervals.</p>
+
+    <div class="compare">
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ Steady packet stream (ideal)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">pkt 1</span>arrives at t=10ms</div>
+          <div class="compare-row"><span class="label">pkt 2</span>arrives at t=20ms</div>
+          <div class="compare-row"><span class="label">pkt 3</span>arrives at t=30ms</div>
+          <div class="compare-row"><span class="label">pkt 4</span>arrives at t=40ms</div>
+        </div>
+      </div>
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Jittered stream (reality)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">pkt 1</span>arrives at t=10ms (congested path)</div>
+          <div class="compare-row"><span class="label">pkt 2</span>arrives at t=25ms (worse congestion)</div>
+          <div class="compare-row"><span class="label">pkt 3</span>arrives at t=31ms (less congestion)</div>
+          <div class="compare-row"><span class="label">pkt 4</span>arrives at t=33ms (congestion cleared)</div>
+        </div>
+      </div>
+    </div>
+
+    <p>For a live stream, the player must render frames as they arrive. If frame 3 arrives 15ms after frame 2 but frame 4 arrives 2ms after frame 3, the player either stalls (waiting for late frames) or plays jerkily (rendering at variable speed). High jitter = visible stutter even when average delay is acceptable.</p>
+  </div>
+
+  <!-- LOSS IN DEPTH -->
+  <div class="section">
+    <div class="section-label">Loss — Wired vs Wireless <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~27:43</a></div>
+    <p><strong>Loss</strong> = (packets not received) / (total packets sent). In wired networks, loss is almost exclusively caused by router buffer overflow during congestion. TCP uses loss as a congestion signal for this reason. In wireless networks, this assumption breaks down — loss also occurs due to channel interference (multiple devices on shared medium creating noise), completely independently of congestion. This is why running TCP's congestion control over a lossy wireless link is problematic: TCP misinterprets interference-caused loss as congestion and unnecessarily throttles the sender.</p>
+  </div>
+
+  <!-- APPLICATION QoS TABLE -->
+  <div class="section">
+    <div class="section-label">Application-Level QoS Requirements <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~29:26</a></div>
+    <p>Different applications tolerate different levels of each QoS parameter. These are Cisco reference values:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Application</th>
+          <th>Loss Tolerance</th>
+          <th>Delay (one-way)</th>
+          <th>Jitter</th>
+          <th>Bandwidth</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Voice (VoIP)</td>
+          <td style="color:var(--accent2);">≤ 1%</td>
+          <td style="color:var(--accent3);">≤ 150ms</td>
+          <td style="color:var(--accent3);">≤ 30ms</td>
+          <td>21 Kbps – 320 Kbps</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Interactive Video (live stream)</td>
+          <td style="color:var(--accent2);">≤ 1%</td>
+          <td style="color:var(--accent3);">≤ 150ms</td>
+          <td style="color:var(--accent3);">≤ 30ms</td>
+          <td>On demand</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Streaming Video (on-demand)</td>
+          <td style="color:#ffb86a;">≤ 5%</td>
+          <td style="color:#ffb86a;">≤ Buffer time</td>
+          <td style="color:#ffb86a;">≤ Buffer time</td>
+          <td>On demand</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Data (file transfer)</td>
+          <td style="color:var(--muted);">—</td>
+          <td style="color:var(--muted);">—</td>
+          <td style="color:var(--muted);">—</td>
+          <td>Best effort</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout green">
+      <strong>Why streaming video tolerates more loss than live video:</strong> Pre-recorded video frames can be interpolated — if frame 2 is lost but frames 1 and 3 are available, the player can reconstruct an approximation of frame 2 by averaging. Live streams cannot do this because subsequent frames haven't arrived yet. Real-time = zero margin for reconstruction.
+    </div>
+  </div>
+
+  <!-- FORMAL DEFINITION OF QoS -->
+  <div class="section">
+    <div class="section-label">Formal Definition of QoS (Cisco) <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~31:24</a></div>
+    <div class="callout">
+      <strong>QoS</strong> refers to the <em>capability of a network to provide better service to selected network traffic</em> over various technologies (Frame Relay, ATM, Ethernet, 802.1 networks, SONET, IP-routed networks). The primary goal is to provide <strong>priority</strong> including dedicated bandwidth, controlled jitter and latency (one-way delay required by real-time traffic), and improved loss characteristics.
+    </div>
+    <p>The "various technologies" part is important — a single end-to-end path may traverse multiple link types (wireless hop → Ethernet → SONET optical). QoS must be maintained across all of them, not just one segment.</p>
+  </div>
+
+  <!-- FLOW -->
+  <div class="section">
+    <div class="section-label">The Concept of a Flow <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~33:53</a></div>
+    <div class="callout green">
+      <strong>Flow</strong> = a stream of packets from a source to a destination. The granularity of a flow can be defined at different levels: machine-to-machine, process-to-process, application-to-application, or socket-to-socket. Different flows require different levels of QoS, and the network must handle them accordingly.
+    </div>
+    <p>A VoIP call and a file download happening simultaneously from the same machine are two different flows with completely different QoS requirements. The network needs to distinguish and prioritise them independently.</p>
+  </div>
+
+  <!-- WHY QoS IS AT NETWORK LAYER -->
+  <div class="section">
+    <div class="section-label">Why QoS is Implemented at the Network Layer <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~34:40</a></div>
+    <p>QoS requires both <strong>end-to-end visibility</strong> and <strong>per-hop resource reservation</strong>. Neither the transport layer nor the data link layer alone can provide both:</p>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Transport Layer (end-to-end)</div>
+        <div class="concept-desc">Sees the full end-to-end picture — delay, loss, reordering. Can express QoS requirements. But cannot directly reserve resources at intermediate routers since it has no visibility into individual hops.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Data Link Layer (per-hop)</div>
+        <div class="concept-desc">Controls resource allocation on one link. Can reserve bandwidth and manage queues at one hop. But has no end-to-end view — cannot coordinate across the full path.</div>
+      </div>
+    </div>
+    <div class="callout green">
+      The <strong>network layer bridges both</strong>. It has end-to-end routing information (from transport layer feedback) and directly interfaces with per-hop data link behaviour at each router. Resource reservation must happen at every hop along the path — if even one intermediate router cannot meet the QoS requirement, the end-to-end guarantee fails. The network layer is the only layer that can coordinate both perspectives simultaneously.
+    </div>
+  </div>
+
+  <!-- APPLICATION CLASSES -->
+  <div class="section">
+    <div class="section-label">Application Classes Based on QoS <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~36:37</a></div>
+
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">class 1</div>
+        <div class="proto-names">Constant Bit Rate (CBR)</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Requires steady, unvarying data stream. Most sensitive to jitter and loss. Example: VoIP (telephone over IP). Any interruption is immediately perceivable.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">class 2</div>
+        <div class="proto-names">Real-Time Variable Bit Rate (rt-VBR)</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Bit rate varies (frame complexity varies) but timing is real-time. Example: videoconferencing. Rate flexibility is allowed, but latency must stay low.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">class 3</div>
+        <div class="proto-names">Non-Real-Time Variable Bit Rate (nrt-VBR)</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Variable rate, timing not critical. Example: IPTV / on-demand video streaming. Buffering at the client absorbs jitter. More tolerant of delay and some loss.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">class 4</div>
+        <div class="proto-names">Available Bit Rate / Best Effort</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">No QoS guarantees. Gets whatever capacity is left. Example: file transfer, email. Delivery is eventually guaranteed (TCP retransmits) but timing is irrelevant.</p>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Coming up in lec32:</strong> How the network actually enforces QoS — traffic regulation (token bucket, leaky bucket), resource reservation (RSVP), and scheduling algorithms at routers. This lecture is the "why and what"; next lecture is the "how".
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">QoS definition</div>
+        <div class="proto-names">Capability to serve selected traffic better</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Dedicated bandwidth + controlled jitter/latency + improved loss. Not for all traffic — selected flows that need it.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">TCP congestion ctrl</div>
+        <div class="proto-names">Reacts to congestion, does not prevent it</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Congestion happens first. TCP detects via loss. TCP reduces rate. Congestion clears. QoS is needed because this reactive loop is insufficient for real-time traffic.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">transmission delay</div>
+        <div class="proto-names">Packet size ÷ link bandwidth</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">How long to push all bits onto the wire. Depends on bandwidth, not distance.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">propagation delay</div>
+        <div class="proto-names">Distance ÷ signal speed</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">How long for a bit to physically travel the link. Depends on distance, not bandwidth.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">queuing delay</div>
+        <div class="proto-names">Wait time in router buffer</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Dominant component. Caused by congestion — more packets arriving than the router can forward. Queuing delay ≫ transmission + propagation.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">jitter</div>
+        <div class="proto-names">Variance of delay across packets</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Different packets in same flow experience different congestion → arrive at uneven intervals → stutter in live playback. Critical for CBR and rt-VBR traffic.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

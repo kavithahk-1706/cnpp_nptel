@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEC 29 — CNPP Notes</title>
+<link rel="stylesheet" href="notes.css">
+</head>
+<body>
+<div class="container">
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec28.html" class="nav-lec">← prev</a>
+      <a href="lec30.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div class="lec-tag">LEC 29 <span class="high-badge">high priority</span></div>
+    <h1>IP Addressing (IPv4) III — Network Address Translation (NAT)</h1>
+    <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ watch lecture</a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Lecture Overview</div>
+    <p>This lecture addresses a fundamental problem with IPv4: the address space is exhausted. The proposed and widely-deployed solution is <strong>Network Address Translation (NAT)</strong> — a mechanism that allows a large number of devices in a private network to share a small pool of public IP addresses. The lecture covers the motivation, the basic operation of NAT, IP masquerading (port-based NAT / PNAT), use cases including ISP migration and load balancing, and the key limitation of NAT around inbound connections.</p>
+  </div>
+
+  <!-- THE IPv4 EXHAUSTION PROBLEM -->
+  <div class="section">
+    <div class="section-label">The Problem — IPv4 Address Exhaustion <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~00:45</a></div>
+    <div class="callout pink">
+      <strong>Core problem:</strong> IPv4 is 32 bits, giving a theoretical maximum of 2<sup>32</sup> addresses. In practice, the usable address space is significantly smaller, and the number of devices requiring IP addresses has grown exponentially since IPv4 was designed.
+    </div>
+
+    <h4>Why the usable address space is smaller than 2<sup>32</sup></h4>
+    <p>The 32-bit space is divided into classes A, B, C, D, and E. Class D is reserved for multicast (rarely used in practice, so largely wasted). Class E is reserved and cannot be used for normal data transfer at all. Within classes A, B, and C, every individual network consumes at least two addresses that cannot be assigned to hosts — the <strong>network address</strong> and the <strong>broadcast address</strong>. This further erodes the pool. Additionally, modern devices often have multiple network interfaces, each requiring its own IP address.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">⬤ Address Space Problems</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Class D</span>Reserved for multicast — largely unused, wasted</div>
+          <div class="compare-row"><span class="label">Class E</span>Reserved — completely unavailable for general use</div>
+          <div class="compare-row"><span class="label">Per network</span>Network address + broadcast address unusable per subnet</div>
+          <div class="compare-row"><span class="label">Multi-NIC</span>Each interface needs its own IP — multiplies demand</div>
+          <div class="compare-row"><span class="label">Growth</span>Device count increased hundreds of fold since IPv4 was designed</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">⬤ The Solution Insight</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">key insight</span>Not all users and devices are online simultaneously</div>
+          <div class="compare-row"><span class="label">implication</span>You only need a public IP for currently-active connections, not every device</div>
+          <div class="compare-row"><span class="label">approach</span>Make addresses reusable within private networks</div>
+          <div class="compare-row"><span class="label">mechanism</span>Translate private → public at the network boundary</div>
+          <div class="compare-row"><span class="label">result</span>Many private hosts share a small pool of public IPs</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRIVATE ADDRESS RANGES -->
+  <div class="section">
+    <div class="section-label">Private IP Address Ranges <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~08:33</a></div>
+    <p>Three blocks of IPv4 address space are designated as <strong>private addresses</strong>. These are reusable — the same private address block can exist inside any number of separate organisations simultaneously. They are never routed on the public internet.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Private Range</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="transport tcp-badge">Class A</span></td>
+          <td class="port-num">10.0.0.0 — 10.255.255.255</td>
+          <td>Single large block. Your home/office WiFi is almost certainly in this range.</td>
+        </tr>
+        <tr>
+          <td><span class="transport tcp-badge">Class B</span></td>
+          <td class="port-num">172.16.0.0 — 172.32.255.255</td>
+          <td>16 contiguous Class B networks.</td>
+        </tr>
+        <tr>
+          <td><span class="transport tcp-badge">Class C</span></td>
+          <td class="port-num">192.168.0.0 — 192.168.255.255</td>
+          <td>256 Class C networks. Most common in home routers.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout yellow">
+      <strong>The reusability principle:</strong> Two Sandip Chakrabortys at IIT KGP and IIT Bombay can coexist because the context (which institute) disambiguates them. Similarly, 10.0.1.2 at IIT KGP and 10.0.1.2 at Stanford are completely different machines — the organisation they belong to is the disambiguating context. Private IPs are only meaningful within their own network boundary.
+    </div>
+  </div>
+
+  <!-- BASIC NAT OPERATION -->
+  <div class="section">
+    <div class="section-label">Basic NAT Operation <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~11:45</a></div>
+    <div class="callout green">
+      <strong>NAT device</strong> sits at the boundary between a private network and the public internet. It maintains a <strong>NAT table</strong> — a mapping between private IP addresses and the public IPs assigned to them. On the way out, it replaces the private source IP with a public one. On the way back, it reverses the substitution.
+    </div>
+
+    <h3>Outgoing packet flow (inside → outside)</h3>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Step 1</span>
+        <span class="arrow">→</span>
+        <span class="vci">Internal machine (10.0.1.2) sends packet with src=10.0.1.2, dst=213.168.112.3</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Step 2</span>
+        <span class="arrow">→</span>
+        <span class="vci">Packet arrives at NAT device. NAT selects a public IP from its pool (e.g. 128.143.71.21)</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Step 3</span>
+        <span class="arrow">→</span>
+        <span class="vci">NAT records mapping: 10.0.1.2 ↔ 128.143.71.21 in NAT table</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Step 4</span>
+        <span class="arrow">→</span>
+        <span class="vci">NAT replaces src IP in packet header: src becomes 128.143.71.21. Forwards to public internet.</span>
+      </div>
+    </div>
+
+    <h3>Incoming reply flow (outside → inside)</h3>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Step 5</span>
+        <span class="arrow">→</span>
+        <span class="vci">Destination machine (213.168.112.3) replies. Sets dst=128.143.71.21 (the public NAT IP it saw as source)</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Step 6</span>
+        <span class="arrow">→</span>
+        <span class="vci">Reply arrives at NAT device. NAT looks up 128.143.71.21 in NAT table → finds mapping to 10.0.1.2</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Step 7</span>
+        <span class="arrow">→</span>
+        <span class="vci">NAT replaces dst IP: 128.143.71.21 → 10.0.1.2. Forwards into private network.</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Step 8</span>
+        <span class="arrow">→</span>
+        <span class="vci">Internal network delivers packet to 10.0.1.2. Machine receives the reply.</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      The destination machine on the public internet never sees the private IP — it only ever interacts with the NAT's public IP. The internal network topology is completely hidden. This is a secondary but important security benefit: the internal structure of an organisation is invisible to the outside world.
+    </div>
+  </div>
+
+  <!-- IP MASQUERADING / PNAT -->
+  <div class="section">
+    <div class="section-label">IP Masquerading — Port-Based NAT (PNAT) <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~19:12</a></div>
+    <p>Basic NAT maps one private IP to one public IP. This still requires a pool of public IPs proportional to the number of simultaneous users. <strong>IP masquerading</strong> (also called Port-based NAT or PNAT) takes this further — it allows a <strong>single public IP</strong> to serve multiple private hosts simultaneously by using the port number as an additional discriminator.</p>
+
+    <div class="callout green">
+      The key insight: network communication is actually <strong>process-to-process</strong>. A process is identified not just by IP address but by the (IP, port) pair. So two different internal machines can share one public IP as long as they use different ports — the port alone is enough to distinguish their traffic on the way back.
+    </div>
+
+    <h4>PNAT example — two machines, one public IP</h4>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Machine A</span>
+        <span class="arrow">→</span>
+        <span class="vci">Private: 10.0.1.2 : port 2001 → mapped to → Public: 128.143.71.21 : port 2100</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Machine B</span>
+        <span class="arrow">→</span>
+        <span class="vci">Private: 10.0.1.3 : port 3020 → mapped to → Public: 128.143.71.21 : port 4444</span>
+      </div>
+    </div>
+
+    <p>Both machines share the same public IP <strong>128.143.71.21</strong>. When a reply arrives at the NAT device addressed to port 2100, the NAT table resolves it to machine A at 10.0.1.2:2001. A reply to port 4444 goes to machine B at 10.0.1.3:3020. The port number is the differentiator.</p>
+
+    <div class="callout yellow">
+      Port numbers are 16-bit, giving ~65,000 values. Even after subtracting reserved/well-known ports, you have tens of thousands of usable port numbers. With PNAT, a single public IP can theoretically serve that many simultaneous connections. This is why home routers work — your entire household shares one public IP through PNAT.
+    </div>
+
+    <h4>NAT table structure in PNAT</h4>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Private IP : Port</th>
+          <th>Public IP : Port</th>
+          <th>Direction</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">10.0.1.2 : 2001</td>
+          <td class="port-num">128.143.71.21 : 2100</td>
+          <td style="color:var(--accent3);">outgoing / reverse lookup</td>
+        </tr>
+        <tr>
+          <td class="port-num">10.0.1.3 : 3020</td>
+          <td class="port-num">128.143.71.21 : 4444</td>
+          <td style="color:var(--accent3);">outgoing / reverse lookup</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- USE CASES -->
+  <div class="section">
+    <div class="section-label">NAT Use Cases <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~16:48</a></div>
+
+    <h3>1. Address Conservation (Primary Use Case)</h3>
+    <p>Large numbers of private hosts share a small pool of public IPs. Only actively-connected machines consume a public IP at any moment. Machines that are idle do not hold a public IP at all.</p>
+
+    <h3>2. ISP Migration <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~16:48</a></h3>
+    <p>An organisation can connect to multiple ISPs for reliability (called a <strong>multi-homed network</strong>). Without NAT, switching ISPs requires reconfiguring the IP address of every internal machine to reflect the new ISP's network prefix. With NAT, only the NAT box's public IP pool changes — all internal machines keep their private IPs unchanged.</p>
+    <div class="callout green">
+      IIT KGP is connected to both ERNET and NKN. If ERNET goes down, the NAT device switches its public IP pool to NKN addresses. Internal machines at 10.x.x.x are completely unaffected — zero reconfiguration required.
+    </div>
+
+    <h3>3. Load Balancing of Servers <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~23:31</a></h3>
+    <p>Multiple identical servers behind NAT can all be reachable via a single public IP. The NAT device distributes incoming connections across the internal servers based on load. External clients see one IP; internally, the traffic fans out across a cluster. This is conceptually the same as what a reverse proxy / load balancer does.</p>
+    <div class="callout">
+      Example: public IP 128.143.71.21 → NAT distributes requests between web server at 10.0.1.2 and web server at 10.0.1.3. Neither server's private address is ever exposed externally.
+    </div>
+  </div>
+
+  <!-- NAT LIMITATION -->
+  <div class="section">
+    <div class="section-label">NAT Limitation — Inbound Connections <a class="ts" href="https://nptel.ac.in/courses/106105183" target="_blank">↗ ~23:57</a></div>
+    <div class="callout pink">
+      <strong>Critical limitation:</strong> NAT is fundamentally <em>outbound-initiated</em>. A machine inside the private network can always initiate a connection outward — the NAT creates the mapping dynamically. But an external machine cannot initiate a connection to a private host because it has no way to know the private IP — it can only see the NAT box's public IP, and there is no pre-existing mapping until the internal machine speaks first.
+    </div>
+
+    <h4>Why this matters</h4>
+    <p>If you want to run a server (web server, game server, SSH endpoint) inside a private network that accepts connections from the public internet, NAT blocks this by default. The outside world can only reach the NAT box's public IP — it has no knowledge of what's behind it. The NAT table has no entry until an outbound connection creates one.</p>
+
+    <h4>Workarounds</h4>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">DNS + Static NAT Mapping</div>
+        <div class="concept-desc">Map a DNS name (e.g. www.iitkgp.ac.in) to the NAT box's public IP. Configure a static entry in the NAT table that always forwards requests arriving on a specific port to a specific internal machine. The external world resolves the DNS name, gets the NAT's public IP, and the static mapping handles forwarding. Used for public-facing web servers behind NAT.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Internal Machine Initiates First</div>
+        <div class="concept-desc">If the internal machine establishes an outbound connection first, the NAT creates a mapping entry. The external machine can then use the source IP from that first packet (the NAT's public IP) as a destination for subsequent communication. Works only when there is a mechanism for the internal machine to "announce" itself.</div>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Real-world consequence:</strong> This is why your home router (which is NAT) means you can browse freely but people can't connect inward to your machine by default. Port forwarding in router settings = manually adding a static NAT mapping for a specific port.
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">why NAT exists</div>
+        <div class="proto-names">IPv4 address exhaustion</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Not enough public IPs for every device. Classes D and E wasted. Network + broadcast addresses eat into each subnet. Device count exploded.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">NAT mechanism</div>
+        <div class="proto-names">Private ↔ Public IP translation at boundary</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">NAT table maps private IPs to public IPs. Outgoing: replace src. Incoming: reverse lookup, replace dst.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">PNAT / masquerading</div>
+        <div class="proto-names">One public IP → many private hosts</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">NAT table maps (private IP : port) ↔ (public IP : port). Port number disambiguates multiple hosts sharing one public IP.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">private ranges</div>
+        <div class="proto-names">10.x.x.x / 172.16–32.x.x / 192.168.x.x</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Never routed on the public internet. Reusable across any number of organisations simultaneously.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">use cases</div>
+        <div class="proto-names">Conservation, ISP migration, load balancing</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">Multiple public benefits beyond just conserving addresses. ISP migration = change pool only. Load balancing = one public IP fans out to server cluster.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">limitation</div>
+        <div class="proto-names">Inbound connections blocked by default</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:4px;margin-bottom:0;">No pre-existing NAT entry = no path in. External hosts cannot initiate connections to private hosts. Requires static mappings or DNS workarounds.</p>
+      </div>
+    </div>
+
+    <div class="callout yellow" style="margin-top:20px;">
+      <strong>Coming up next (Lec 30):</strong> IPv6 — a proper long-term solution to address exhaustion with a 128-bit address space. NAT is a workaround, not a fix. IPv6 eliminates the need for NAT entirely, though global deployment has been slow and NAT is still dominant in practice.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

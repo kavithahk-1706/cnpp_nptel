@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lec 22 — TCP Congestion Control</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec21.html" class="nav-lec">← prev</a>
+      <a href="lec23.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 22</span>
+    <span class="high-badge">★ High Priority</span>
+    <h1>Transmission Control Protocol — IV<br>Congestion Control</h1>
+    <p style="color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px;">Prof. Sandip Chakraborthy · IIT Kharagpur · CNPP</p>
+  </div>
+
+  <!-- 1. Overview -->
+  <div class="section">
+    <div class="section-label">Overview</div>
+    <p>This lecture covers TCP's congestion control mechanism — how the protocol detects network congestion and dynamically adjusts its sending rate to achieve both efficiency (maximum link utilisation) and fairness (equitable sharing among competing flows). It builds directly on the AIMD principles and flow control concepts from the previous lectures.</p>
+    <div class="callout green">
+      <strong>Core insight:</strong> TCP merges two independent rate constraints — one from the network (congestion window, CWnd) and one from the receiver (receiver window, RWnd) — and always transmits at the more conservative of the two.
+    </div>
+  </div>
+
+  <!-- 2. Key Variables -->
+  <div class="section">
+    <div class="section-label">Key Variables</div>
+    <h3>Windows and Sending Rate</h3>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Congestion Window</div>
+        <div class="proto-names">CWnd</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">Maximum bytes the sender may have unacknowledged in the network at any instant. Set and updated by the sender based on observed congestion signals.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Receiver Window</div>
+        <div class="proto-names">RWnd</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">Advertised by the receiver — the free buffer space available at the destination. Used by flow control (Lec 21).</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Sender Window</div>
+        <div class="proto-names">SWnd = min(CWnd, RWnd)</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">The actual operating window. Using the minimum ensures neither the network nor the receiver is overloaded simultaneously.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Sending Rate (approx.)</div>
+        <div class="proto-names">Rate ≈ CWnd / RTT</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">Dividing the congestion window by RTT approximates throughput in bytes/second.</p>
+      </div>
+    </div>
+
+    <h3>Why AIMD?</h3>
+    <p>AIMD is chosen because it provably converges to a state that simultaneously maximises link utilisation and satisfies max-min fairness. AIAD converges too slowly; MIMD is unstable and violates fairness. TCP uses <strong>packet loss</strong> as its binary congestion signal — no explicit network feedback is needed.</p>
+  </div>
+
+  <!-- 3. History -->
+  <div class="section">
+    <div class="section-label">Historical Context</div>
+    <h3>The 1986 Congestion Collapse</h3>
+    <p>The growing popularity of the early internet led in 1986 to the first documented congestion collapse — a prolonged period during which network goodput dropped by more than a factor of 100. This motivated Van Jacobson to design the first TCP congestion control algorithm, published in 1988.</p>
+    <div class="callout yellow">
+      <strong>Jacobson's constraint:</strong> The algorithm had to work within the existing TCP header and state machine, requiring no changes to deployed machines — it had to be instantly deployable on the live internet.
+    </div>
+    <h3>Why Packet Loss = Congestion Signal (in Wired Networks)</h3>
+    <p>In wired networks, channels are effectively lossless — guided media are shielded from interference, and the link layer handles residual bit errors. Any packet loss therefore originates from buffer overflow at an intermediate router, which is by definition congestion. Packet loss is thus a reliable, in-band congestion signal detectable via the existing retransmission timeout mechanism.</p>
+    <div class="callout pink">
+      <strong>Wireless caveat:</strong> In wireless networks, channel-induced losses are frequent and cannot be distinguished from congestion-induced drops. TCP's assumption breaks down — a known limitation in wireless environments.
+    </div>
+  </div>
+
+  <!-- 4. ACK Clocking -->
+  <div class="section">
+    <div class="section-label">ACK Clocking</div>
+    <h3>ACKs as Bottleneck Probes <a href="#" class="ts">12:09</a></h3>
+    <p>In a multi-hop path, packets sent as a burst drain onto the bottleneck (slowest) link at that link's rate. Consequently, ACKs return to the sender at approximately the rate of the bottleneck link — regardless of how fast earlier links are.</p>
+    <p>Jacobson used this insight: <strong>ACKs serve as natural clocks</strong> that pace CWnd adjustments to the bottleneck capacity. Every incoming ACK triggers a congestion window update. No external probing timer is needed.</p>
+  </div>
+
+  <!-- 5. Slow Start Motivation -->
+  <div class="section">
+    <div class="section-label">Motivation for Slow Start</div>
+    <h3>Problem: Pure Additive Increase is Too Slow <a href="#" class="ts">14:41</a></h3>
+    <p>With CWnd starting at 1 and increasing by 1 MSS per RTT, reaching the Bandwidth-Delay Product takes prohibitively long on fast links:</p>
+    <div class="vci-box">
+      <div class="vci-row"><span class="port">Link</span><span class="arrow">→</span><span class="vci">10 Mbps, RTT = 100 ms</span></div>
+      <div class="vci-row"><span class="port">BDP (target CWnd)</span><span class="arrow">→</span><span class="vci">1 Mbit (= 100 × 1250-byte packets)</span></div>
+      <div class="vci-row"><span class="port">Time to reach BDP at +1/RTT</span><span class="arrow">→</span><span class="vci">100 RTTs = <strong>10 seconds</strong></span></div>
+    </div>
+    <p>Most HTTP connections close before 10 seconds. Pure additive increase means the connection never operates near its capacity. Solution: <strong>slow start</strong>.</p>
+  </div>
+
+  <!-- 6. Slow Start -->
+  <div class="section">
+    <div class="section-label">Phase 1 — Slow Start</div>
+    <h3>Exponential Growth at Connection Start <a href="#" class="ts">18:08</a></h3>
+    <p><strong>Slow start</strong> is a misnomer. The name reflects starting from a low rate (CWnd = 1 MSS), not slow growth. CWnd is <em>doubled every RTT</em> — growth is exponential.</p>
+    <div class="callout">
+      <strong>Mechanism:</strong> For each ACK received before the retransmission timer fires, the sender adds 1 MSS to CWnd. A window of N packets generates N ACKs, so CWnd doubles each RTT.
+    </div>
+    <table class="port-table">
+      <thead>
+        <tr><th>RTT</th><th>CWnd (segments)</th><th>Packets sent this RTT</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="port-num">1</td><td class="proto-name">1</td><td>1</td></tr>
+        <tr><td class="port-num">2</td><td class="proto-name">2</td><td>2</td></tr>
+        <tr><td class="port-num">3</td><td class="proto-name">4</td><td>4</td></tr>
+        <tr><td class="port-num">4</td><td class="proto-name">8</td><td>8 (pipe full)</td></tr>
+      </tbody>
+    </table>
+    <p>Exponential growth will eventually overshoot the network's capacity. A threshold (ssthresh) is required to transition to stable linear growth.</p>
+    <div class="callout yellow">
+      <strong>📊 Visual — recommended:</strong> The lecture contains a hand-drawn diagram of CWnd vs. time showing exponential slow start, ssthresh crossover, AIMD linear phase, packet loss drops, and ssthresh updates <a href="#" class="ts">21:18</a>. Critical for exam intuition — view this slide.
+    </div>
+  </div>
+
+  <!-- 7. ssthresh -->
+  <div class="section">
+    <div class="section-label">Slow Start Threshold</div>
+    <h3>ssthresh — Gating Exponential Growth <a href="#" class="ts">19:58</a></h3>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Initial value</div>
+        <div class="proto-names">ssthresh = BDP (or very large)</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">Set large at start — sender has no prior knowledge of network capacity, so it probes aggressively.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">On packet loss (RTO)</div>
+        <div class="proto-names">ssthresh = CWnd / 2</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">Halved to record the observed congestion point. CWnd resets to 1 MSS and slow start restarts.</p>
+      </div>
+    </div>
+    <p><strong>Rule:</strong> CWnd &lt; ssthresh → slow start (exponential). CWnd ≥ ssthresh → congestion avoidance (linear additive increase). ssthresh acts as a memory of where the network last became congested.</p>
+  </div>
+
+  <!-- 8. Congestion Avoidance -->
+  <div class="section">
+    <div class="section-label">Phase 2 — Congestion Avoidance</div>
+    <h3>Additive Increase above ssthresh <a href="#" class="ts">21:10</a></h3>
+    <p>Above ssthresh, TCP enters <strong>congestion avoidance</strong> — the additive increase phase of AIMD. A per-ACK partial increment approximates adding 1 MSS per full RTT:</p>
+    <div class="callout">
+      <strong>Formula (applied per ACK received):</strong><br>
+      <code style="font-family:'IBM Plex Mono',monospace;color:var(--accent3);font-size:15px;">CWnd = CWnd + (MSS × MSS) / CWnd</code><br><br>
+      Over one RTT, the sum of CWnd/MSS such increments equals approximately 1 MSS — the intended additive increase rate.
+    </div>
+    <p>This linear growth continues until a congestion event (RTO or triple DUPACK) is detected, which triggers multiplicative decrease.</p>
+  </div>
+
+  <!-- 9. Congestion Detection -->
+  <div class="section">
+    <div class="section-label">Congestion Detection</div>
+    <h3>Two Signals <a href="#" class="ts">24:56</a></h3>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Retransmission Timeout (RTO)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">What</span><span>Timer expires with no ACK received</span></div>
+          <div class="compare-row"><span class="label">Severity</span><span>Definitive — strong congestion; the pipe may be fully choked</span></div>
+          <div class="compare-row"><span class="label">Downside</span><span>Must wait the full RTO duration before reacting — slow response</span></div>
+          <div class="compare-row"><span class="label">Response</span><span>CWnd → 1 MSS · ssthresh → CWnd/2 · restart slow start</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Triple Duplicate ACK (3 DUPACKs)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">What</span><span>Receiver sends same ACK 3 times upon receiving out-of-order segments</span></div>
+          <div class="compare-row"><span class="label">Severity</span><span>Mild — packets are still flowing; temporary, not catastrophic congestion</span></div>
+          <div class="compare-row"><span class="label">Advantage</span><span>Early detection; lost packet identity known immediately from ACK sequence number</span></div>
+          <div class="compare-row"><span class="label">Response</span><span>Depends on TCP variant (Tahoe vs Reno)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Why 3 DUPACKs?</h4>
+    <p>The threshold of three is an engineering heuristic by Jacobson — chosen to filter out natural out-of-order delivery (which typically generates 1–2 DUPACKs) while reliably identifying actual packet loss.</p>
+
+    <h4>Inferring the Lost Packet</h4>
+    <p>TCP uses cumulative acknowledgements. Receiving DUPACK(3) repeatedly means everything up to sequence 3 was delivered, but a later segment is missing. Packets 5, 6, 7 arriving out of order each trigger DUPACK(3). The sender infers segment 4 (the next expected in sequence) is the lost packet and can retransmit it immediately.</p>
+  </div>
+
+  <!-- 10. TCP Tahoe -->
+  <div class="section">
+    <div class="section-label">TCP Tahoe</div>
+    <h3>Fast Retransmit <a href="#" class="ts">27:35</a></h3>
+    <p>TCP Tahoe introduced <strong>fast retransmit</strong>: on 3 DUPACKs, retransmit the inferred lost segment without waiting for RTO. However, Tahoe's congestion response is the same regardless of whether the signal was RTO or 3 DUPACKs:</p>
+    <div class="tag-row">
+      <span class="tag tag-bad">ssthresh ← CWnd / 2</span>
+      <span class="tag tag-bad">CWnd ← 1 MSS</span>
+      <span class="tag tag-bad">Restart slow start from 1</span>
+    </div>
+    <p>The limitation: Tahoe treats 3 DUPACKs as severely as an RTO, even though DUPACKs indicate ongoing flow. This causes unnecessary slow start cycles and reduces throughput for mild congestion events.</p>
+  </div>
+
+  <!-- 11. TCP Reno -->
+  <div class="section">
+    <div class="section-label">TCP Reno</div>
+    <h3>Fast Recovery <a href="#" class="ts">28:51</a></h3>
+    <p>TCP Reno's key insight: 3 DUPACKs mean some packets are still in transit. A full slow start restart is wasteful. Reno introduces <strong>fast recovery</strong> to stay near the congestion point:</p>
+    <div class="vci-box">
+      <div class="vci-row" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);font-weight:600;">FAST RECOVERY — On receiving 3 DUPACKs</div>
+      <div class="vci-row"><span class="port">1</span><span class="arrow">→</span><span class="vci">ssthresh ← CWnd / 2</span></div>
+      <div class="vci-row"><span class="port">2</span><span class="arrow">→</span><span class="vci">Retransmit missing segment (fast retransmit)</span></div>
+      <div class="vci-row"><span class="port">3</span><span class="arrow">→</span><span class="vci">CWnd ← ssthresh + 3 (credit: receiver already holds 3 out-of-order segments)</span></div>
+      <div class="vci-row"><span class="port">4</span><span class="arrow">→</span><span class="vci">Each further DUPACK: CWnd += 1, send new segment if window permits</span></div>
+      <div class="vci-row"><span class="port">5</span><span class="arrow">→</span><span class="vci">On new (cumulative) ACK: CWnd ← ssthresh, exit fast recovery</span></div>
+      <div class="vci-row"><span class="port">6</span><span class="arrow">→</span><span class="vci">Resume congestion avoidance (linear increase from ssthresh)</span></div>
+    </div>
+    <p>The +3 at Step 3 reflects that three segments have already been received and buffered at the receiver — those slots in the network are occupied, so CWnd can immediately account for them. Each additional DUPACK represents one more buffered packet.</p>
+    <div class="callout green">
+      <strong>Tahoe vs Reno — critical distinction:</strong> Both fast-retransmit on 3 DUPACKs. Tahoe then resets CWnd to 1 MSS and redoes slow start (slow recovery). Reno enters fast recovery, resumes at ssthresh, and skips slow start — significantly higher throughput for transient congestion.
+    </div>
+    <p>If the congestion is detected by RTO instead, Reno behaves identically to Tahoe — CWnd → 1 MSS, restart slow start — because RTO signals severe congestion requiring a full rate reset.</p>
+  </div>
+
+  <!-- 12. Full Phase Table -->
+  <div class="section">
+    <div class="section-label">Summary — Three Phases</div>
+    <h3>TCP Congestion Control State Machine</h3>
+    <table class="port-table">
+      <thead>
+        <tr><th>Phase</th><th>CWnd Growth</th><th>Exit Trigger</th><th>Next Phase</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Slow Start</td>
+          <td>Exponential: ×2 per RTT (+1 MSS/ACK)</td>
+          <td>CWnd ≥ ssthresh</td>
+          <td class="port-num">Congestion Avoidance</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Congestion Avoidance</td>
+          <td>Linear: +1 MSS per RTT (MSS²/CWnd per ACK)</td>
+          <td>Packet loss (RTO or 3 DUPACKs)</td>
+          <td class="port-num">Slow Start (RTO) or Fast Recovery (3 DUPACK)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Fast Recovery (Reno only)</td>
+          <td>+1 MSS per additional DUPACK</td>
+          <td>New (non-duplicate) ACK received</td>
+          <td class="port-num">Congestion Avoidance</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout yellow">
+      <strong>📊 Visual — recommended:</strong> The Fast Recovery TCP Reno slide contains a combined CWnd-vs-RTT graph alongside a sender-receiver ladder diagram showing the exact sequence of DUPACKs, retransmit, and recovery <a href="#" class="ts">32:49</a>. Refer to this for understanding the timeline of Reno's behaviour under loss.
+    </div>
+  </div>
+
+  <!-- 13. Variants Overview -->
+  <div class="section">
+    <div class="section-label">TCP Variants</div>
+    <h3>Chronological Overview</h3>
+    <div class="three-col">
+      <div class="interface-card">
+        <div class="interface-title">TCP Tahoe</div>
+        <div class="interface-desc">First congestion control. Introduces CWnd, ssthresh, slow start, fast retransmit. Resets CWnd to 1 MSS on any loss signal.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">TCP Reno</div>
+        <div class="interface-desc">Adds fast recovery for 3-DUPACK events. Skips slow start for mild congestion. Still resets to 1 MSS on RTO.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">TCP SACK</div>
+        <div class="interface-desc">Selective ACK — receiver explicitly reports received-out-of-order ranges. Sender retransmits only missing segments (Selective Repeat ARQ semantics, not Go-Back-N).</div>
+      </div>
+    </div>
+    <p>TCP New Reno, CUBIC, BBR, and many others followed. The core three-phase structure is preserved across all classical variants.</p>
+  </div>
+
+  <!-- 14. Key Takeaways -->
+  <div class="section">
+    <div class="section-label">Key Takeaways</div>
+    <div class="layer-row">
+      <div class="layer-badge layer-app">AIMD</div>
+      <div class="layer-content">
+        <div class="layer-name">Additive Increase, Multiplicative Decrease</div>
+        <div class="layer-detail">The rate-control discipline. +1 MSS/RTT on no loss; ÷2 on loss. Provably converges to max-min fair, high-utilisation operating point. MIMD and AIAD do not have this property.</div>
+      </div>
+    </div>
+    <div class="layer-row">
+      <div class="layer-badge layer-trans">SWnd</div>
+      <div class="layer-content">
+        <div class="layer-name">Sender Window = min(CWnd, RWnd)</div>
+        <div class="layer-detail">Unifies congestion control (network constraint) and flow control (receiver constraint). The binding constraint determines actual throughput.</div>
+      </div>
+    </div>
+    <div class="layer-row">
+      <div class="layer-badge layer-net">ACK Clock</div>
+      <div class="layer-content">
+        <div class="layer-name">ACKs return at bottleneck rate</div>
+        <div class="layer-detail">ACKs naturally pace the sender to the slowest link in the path. CWnd adjustments triggered per-ACK are implicitly bottleneck-aware with no explicit feedback.</div>
+      </div>
+    </div>
+    <div class="layer-row">
+      <div class="layer-badge layer-dl">ssthresh</div>
+      <div class="layer-content">
+        <div class="layer-name">Slow Start Threshold</div>
+        <div class="layer-detail">Divides exponential slow start from linear congestion avoidance. Updated to CWnd/2 on every loss event — it is the network's congestion point memory.</div>
+      </div>
+    </div>
+    <div class="layer-row">
+      <div class="layer-badge layer-phys">Loss Signal</div>
+      <div class="layer-content">
+        <div class="layer-name">RTO vs 3 DUPACKs</div>
+        <div class="layer-detail">RTO = severe congestion → reset to 1 MSS. 3 DUPACKs = mild congestion (flow ongoing) → fast recovery to ssthresh. Reno distinguishes these; Tahoe does not.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

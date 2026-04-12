@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 20 — TCP Connections | CNPP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec19.html" class="nav-lec">← prev</a>
+      <a href="lec21.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div>
+      <span class="lec-tag">Lecture 20</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+    </div>
+    <h1>Transmission Control Protocol — II (Connections)</h1>
+    <p style="color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px;">Prof. Sandip Chakraborty · IIT Kharagpur · Transport Layer</p>
+    <a href="https://nptel.ac.in" class="video-link" target="_blank">▶ Watch Lecture</a>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="section">
+    <div class="section-label">Overview</div>
+    <p>This lecture completes the TCP connection lifecycle: how connections are established via the three-way handshake, how the Initial Sequence Number (ISN) is selected securely, and how connections are released gracefully. The lecture then walks through the complete TCP State Transition Diagram — a direct exam target.</p>
+    <div class="tag-row">
+      <span class="tag tag-good">3-way handshake</span>
+      <span class="tag tag-good">ISN selection</span>
+      <span class="tag tag-good">SYN flood / DoS</span>
+      <span class="tag tag-good">TCP connection release</span>
+      <span class="tag tag-good">State transition diagram</span>
+      <span class="tag tag-bad">Flow control — next lecture</span>
+    </div>
+  </div>
+
+  <!-- THREE-WAY HANDSHAKE -->
+  <div class="section">
+    <div class="section-label">Connection Establishment</div>
+    <h3>Three-Way Handshake</h3>
+    <p>TCP is a bidirectional protocol. To set up a connection between Host A and Host B, <strong>both directions must be independently initialised</strong>, which requires each side to advertise its own Initial Sequence Number (ISN). The three-way handshake achieves this in three messages.</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci" style="min-width:30px;">1</span>
+        <span class="port">A → B</span>
+        <span class="arrow">→</span>
+        <span><strong>SYN</strong> (seq = x) &nbsp;·&nbsp; SYN flag set. A proposes ISN = x for the A→B stream.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:30px;">2</span>
+        <span class="port">B → A</span>
+        <span class="arrow">→</span>
+        <span><strong>SYN + ACK</strong> (seq = y, ack = x+1) &nbsp;·&nbsp; B acknowledges A's SYN and proposes ISN = y for the B→A stream. Both flags set — piggybacked in a single segment.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:30px;">3</span>
+        <span class="port">A → B</span>
+        <span class="arrow">→</span>
+        <span><strong>ACK</strong> (seq = x+1, ack = y+1) &nbsp;·&nbsp; A acknowledges B's SYN. Connection is now ESTABLISHED on both sides.</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Why three messages and not two?</strong> A two-way exchange would only confirm one direction. TCP needs each side to both send and receive an acknowledgement for its own SYN — confirming bidirectional reachability. The SYN+ACK in step 2 is a single piggyback segment that simultaneously acknowledges A's SYN and initiates B's own synchronisation.
+    </div>
+
+    <p>After step 3, Host A has confirmed that B acknowledged its ISN (x), and Host B has confirmed that A acknowledged its ISN (y). Both sides can now perform independent sequence-number tracking.</p>
+  </div>
+
+  <!-- ISN SELECTION -->
+  <div class="section">
+    <div class="section-label">Initial Sequence Number Selection</div>
+    <h3>The Problem: Avoiding Delayed Duplicates</h3>
+    <p>The ISN must be chosen so that packets from a previous, crashed connection are not confused with packets from a newly established connection on the same port pair. Specifically, the new ISN must fall <strong>outside the forbidden region</strong> of the previous connection's sequence number space.</p>
+
+    <p>Two strategies exist to ensure non-overlapping forbidden regions:</p>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Strategy 1 — Time Domain</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>Wait long enough after a crash before restarting, so all in-flight packets from the old connection have expired (TTL-based die-off). The new connection starts in a safe region automatically.</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Strategy 2 — Sequence Number Domain</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>Choose the new ISN high enough above the last sequence number used by the old connection so that the two forbidden regions do not overlap. TCP uses this strategy.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Original TCP: Clock-Based ISN</h3>
+    <p>The original TCP specification used a hardware clock to generate the ISN:</p>
+    <div class="callout green">
+      Clock ticked every <strong>4 microseconds</strong>. The ISN was set to the current clock value (range: 0 to 2<sup>32</sup>−1, matching TCP's 32-bit sequence number space). After a crash, the elapsed time means the clock has advanced, producing an ISN that is automatically offset from the previous connection's sequence range.
+    </div>
+
+    <h3>Problem: SYN Flood Attack (DoS)</h3>
+    <p>The clock-based approach makes ISN generation deterministic. An attacker who observes several connections can compute the clock tick rate and predict future ISNs. This enables the <strong>SYN flood attack</strong>:</p>
+
+    <div class="callout pink">
+      <strong>SYN Flood / Denial of Service:</strong> The attacker continuously sends spoofed SYN segments with predicted sequence numbers. The victim server accepts each as a legitimate connection request, allocates resources (half-open connection state), and waits for the final ACK that never arrives. Flooded with thousands of such requests from multiple machines, the server's connection queue exhausts — it can no longer process real connections. This is a classic <strong>Distributed Denial of Service (DDoS)</strong> vector.
+    </div>
+
+    <h3>Modern TCP: Cryptographic ISN Generation</h3>
+    <p>Current TCP implementations apply a <strong>cryptographic hash function</strong> on top of the clock value:</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">1</span>
+        <span>Clock generates a base value x (ensures non-overlap with previous connection's forbidden region).</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">2</span>
+        <span>A cryptographic function transforms x into y, where y &gt; x (preserving the non-overlap guarantee).</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">3</span>
+        <span>y is used as the actual ISN. Because y is cryptographically derived, an attacker cannot predict it from observed ISNs, defeating SYN flood prediction.</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      The cryptographic ISN satisfies both requirements simultaneously: it is high enough above the old forbidden region (safety), and it is unpredictable to an external observer (security).
+    </div>
+  </div>
+
+  <!-- CONNECTION RELEASE -->
+  <div class="section">
+    <div class="section-label">Connection Release</div>
+    <h3>Four-Step Graceful Release (FIN-based)</h3>
+    <p>TCP connection release is <strong>symmetric</strong>: each direction of the bidirectional connection is closed independently using a FIN segment. Recalling the Two Army Problem, a perfectly simultaneous close over an unreliable channel is impossible — TCP therefore uses a <strong>timeout-assisted approach</strong> at the active-close side to tolerate packet reordering and loss.</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci" style="min-width:30px;">1</span>
+        <span class="port">A → B</span>
+        <span class="arrow">→</span>
+        <span><strong>FIN</strong> (seq = n) &nbsp;·&nbsp; Host A initiates <em>active close</em>. A will send no more data, but can still receive.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:30px;">2</span>
+        <span class="port">B → A</span>
+        <span class="arrow">→</span>
+        <span><strong>ACK</strong> (ack = n+1) &nbsp;·&nbsp; Host B acknowledges the FIN. B enters <em>passive close</em> but may still send data. The A→B direction is now closed.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:30px;">3</span>
+        <span class="port">B → A</span>
+        <span class="arrow">→</span>
+        <span><strong>FIN</strong> (seq = m) &nbsp;·&nbsp; When B is ready to close the B→A direction, it sends its own FIN. Steps 2 and 3 may be combined into a single FIN+ACK if B is ready immediately.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:30px;">4</span>
+        <span class="port">A → B</span>
+        <span class="arrow">→</span>
+        <span><strong>ACK</strong> (ack = m+1) &nbsp;·&nbsp; A acknowledges B's FIN, then enters <strong>TIME_WAIT</strong> and starts a timeout. After the timeout, A fully closes.</span>
+      </div>
+    </div>
+
+    <h3>Why TIME_WAIT only on the Active-Close Side?</h3>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Active Close (Host A)</div>
+        <div class="concept-desc">A initiated the closure but the channel is unreliable — packets may be reordered. A may still receive data from B that was in-flight before B's FIN arrived. The timeout window allows A to continue receiving such stragglers. After the timeout, A discards any further incoming segments.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Passive Close (Host B)</div>
+        <div class="concept-desc">B receives the final ACK from A. At this point B knows that A has already sent its FIN — A will not send any more data. There is nothing left to receive, so no timeout is needed. B closes immediately upon receiving A's last ACK.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATE TRANSITION DIAGRAM -->
+  <div class="section">
+    <div class="section-label">TCP State Transition Diagram</div>
+    <h3>All TCP States</h3>
+    <p>The diagram is expressed as <strong>event / action</strong> pairs on each transition arc. Dashed arcs = server path. Solid arcs = client path. Both sides begin and end in the CLOSED state.</p>
+
+    <div class="callout yellow">
+      <strong>Visual hint:</strong> The full state transition diagram is shown in the lecture slides at <a href="#" class="ts">17:48</a> (connection establishment) and <a href="#" class="ts">24:54</a> (connection release). Strongly recommended to cross-reference the diagram image for exam revision.
+    </div>
+
+    <!-- State reference table -->
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>State</th>
+          <th>Description</th>
+          <th>Phase</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="port-num">CLOSED</td><td>No connection active or pending. Starting and ending point for both sides.</td><td><span class="transport tcp-badge">both</span></td></tr>
+        <tr><td class="port-num">LISTEN</td><td>Server is waiting for an incoming connection request (after <code>listen()</code> system call).</td><td><span class="transport udp-badge">server</span></td></tr>
+        <tr><td class="port-num">SYN_SENT</td><td>Client has sent SYN and is waiting for SYN+ACK from the server.</td><td><span class="transport tcp-badge">client</span></td></tr>
+        <tr><td class="port-num">SYN_RCVD</td><td>Server has received SYN and sent SYN+ACK; waiting for final ACK from client. Also entered by client in simultaneous open.</td><td><span class="transport both-badge">both</span></td></tr>
+        <tr><td class="port-num">ESTABLISHED</td><td>Three-way handshake complete. Normal data transfer state.</td><td><span class="transport both-badge">both</span></td></tr>
+        <tr><td class="port-num">FIN_WAIT_1</td><td>Active-close side has sent FIN and is waiting for ACK or FIN+ACK.</td><td><span class="transport tcp-badge">client</span></td></tr>
+        <tr><td class="port-num">FIN_WAIT_2</td><td>Received ACK for sent FIN; waiting for FIN from the other side.</td><td><span class="transport tcp-badge">client</span></td></tr>
+        <tr><td class="port-num">CLOSING</td><td>Simultaneous close: both sides sent FIN; client sent ACK for received FIN, now waiting for ACK of its own FIN.</td><td><span class="transport both-badge">both</span></td></tr>
+        <tr><td class="port-num">CLOSE_WAIT</td><td>Passive-close side received FIN and sent ACK; waiting for the application to issue its own <code>close()</code>.</td><td><span class="transport udp-badge">server</span></td></tr>
+        <tr><td class="port-num">LAST_ACK</td><td>Passive-close side has sent its own FIN; waiting for the final ACK from the active-close side.</td><td><span class="transport udp-badge">server</span></td></tr>
+        <tr><td class="port-num">TIME_WAIT</td><td>Active-close side has sent the last ACK; waiting out the timeout before fully closing to absorb any delayed packets.</td><td><span class="transport tcp-badge">client</span></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Client State Path (Normal, Solid Line)</h3>
+    <div class="vci-box">
+      <div class="vci-row"><span class="vci">1</span><span>CLOSED → <strong>SYN_SENT</strong> &nbsp;·&nbsp; event: <code>connect()</code> called / action: send SYN</span></div>
+      <div class="vci-row"><span class="vci">2</span><span>SYN_SENT → <strong>ESTABLISHED</strong> &nbsp;·&nbsp; event: receive SYN+ACK / action: send ACK</span></div>
+      <div class="vci-row"><span class="vci">3</span><span>ESTABLISHED → <strong>FIN_WAIT_1</strong> &nbsp;·&nbsp; event: <code>close()</code> called / action: send FIN</span></div>
+      <div class="vci-row"><span class="vci">4a</span><span>FIN_WAIT_1 → <strong>FIN_WAIT_2</strong> &nbsp;·&nbsp; event: receive ACK only (server still has data) / action: —</span></div>
+      <div class="vci-row"><span class="vci">4b</span><span>FIN_WAIT_1 → <strong>TIME_WAIT</strong> &nbsp;·&nbsp; event: receive FIN+ACK / action: send ACK</span></div>
+      <div class="vci-row"><span class="vci">5</span><span>FIN_WAIT_2 → <strong>TIME_WAIT</strong> &nbsp;·&nbsp; event: receive FIN / action: send ACK</span></div>
+      <div class="vci-row"><span class="vci">6</span><span>TIME_WAIT → <strong>CLOSED</strong> &nbsp;·&nbsp; event: timeout expires / action: —</span></div>
+    </div>
+
+    <h3>Server State Path (Normal, Dashed Line)</h3>
+    <div class="vci-box">
+      <div class="vci-row"><span class="vci">1</span><span>CLOSED → <strong>LISTEN</strong> &nbsp;·&nbsp; event: <code>listen()</code> called / action: —</span></div>
+      <div class="vci-row"><span class="vci">2</span><span>LISTEN → <strong>SYN_RCVD</strong> &nbsp;·&nbsp; event: receive SYN / action: send SYN+ACK</span></div>
+      <div class="vci-row"><span class="vci">3</span><span>SYN_RCVD → <strong>ESTABLISHED</strong> &nbsp;·&nbsp; event: receive ACK / action: —</span></div>
+      <div class="vci-row"><span class="vci">4</span><span>ESTABLISHED → <strong>CLOSE_WAIT</strong> &nbsp;·&nbsp; event: receive FIN / action: send ACK</span></div>
+      <div class="vci-row"><span class="vci">5</span><span>CLOSE_WAIT → <strong>LAST_ACK</strong> &nbsp;·&nbsp; event: <code>close()</code> called / action: send FIN</span></div>
+      <div class="vci-row"><span class="vci">6</span><span>LAST_ACK → <strong>CLOSED</strong> &nbsp;·&nbsp; event: receive ACK / action: — (no timeout needed)</span></div>
+    </div>
+
+    <h3>Special Cases</h3>
+    <h4>Simultaneous Open</h4>
+    <p>Both client and server call <code>connect()</code> at the same time and send SYN simultaneously. Neither receives a SYN+ACK first — both receive a plain SYN. Both independently transition to <strong>SYN_RCVD</strong>, send SYN+ACK, and upon receiving each other's SYN+ACK transition to ESTABLISHED. This is an unusual but valid scenario handled by the state machine.</p>
+
+    <h4>Simultaneous Close</h4>
+    <p>Both sides call <code>close()</code> simultaneously and send FIN to each other without first receiving an ACK. Each side, upon receiving the other's FIN, enters the <strong>CLOSING</strong> state (rather than FIN_WAIT_2). After receiving the final ACK, both sides transition to TIME_WAIT and then to CLOSED.</p>
+
+    <h4>SYN_RCVD Reset</h4>
+    <p>From SYN_RCVD, the server may issue a <strong>RST</strong> (reset) to return to the LISTEN state, discarding the half-open connection. This is a defensive measure against SYN flood attacks — the server abandons the pending connection without fully processing it.</p>
+
+    <div class="callout green">
+      <strong>Key exam point:</strong> TIME_WAIT is exclusive to the <em>active-close</em> side. The passive-close side (LAST_ACK → CLOSED) has no timeout, because once it receives the final ACK, it knows the active-close peer has shut down and will send no more data.
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <h3>Three-Way Handshake</h3>
+    <p>SYN (ISN=x) → SYN+ACK (ISN=y, ack=x+1) → ACK (ack=y+1). Three messages are required because TCP is bidirectional; each direction needs an independent SYN acknowledged by the other side.</p>
+
+    <h3>ISN Selection</h3>
+    <p>Original TCP used a 4 µs clock cycle (range 0–2<sup>32</sup>−1) to produce a monotonically increasing ISN, ensuring the new connection's forbidden region does not overlap with the previous one's. This was vulnerable to SYN flood attacks because the ISN was predictable. Modern TCP applies a cryptographic hash on top of the clock value, preserving the forbidden-region guarantee while making the ISN unpredictable.</p>
+
+    <h3>Connection Release</h3>
+    <p>Graceful release requires four messages (FIN → ACK → FIN → ACK) because the two directions are closed independently. Steps 2 and 3 may be merged into FIN+ACK. The active-close side enters TIME_WAIT after the last ACK to absorb any straggler segments. The passive-close side does not need a timeout because it knows the active peer will send no further data.</p>
+
+    <h3>TCP State Machine</h3>
+    <p>Eleven states in total. The three critical ones for exam purposes: <strong>ESTABLISHED</strong> (normal data transfer), <strong>TIME_WAIT</strong> (active-close timeout — client only, prevents data loss from delayed packets), and <strong>CLOSING</strong> (simultaneous close scenario). The notation on every arc is <em>event / action</em>; dashed = server path, solid = client path.</p>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 21 — TCP Flow Control | CNPP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec20.html" class="nav-lec">← prev</a>
+      <a href="lec22.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div>
+      <span class="lec-tag">Lecture 21</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+    </div>
+    <h1>Transmission Control Protocol — III (Flow Control)</h1>
+    <p style="color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:13px;">Prof. Sandip Chakraborty · IIT Kharagpur · Transport Layer</p>
+    <a href="https://nptel.ac.in" class="video-link" target="_blank">▶ Watch Lecture</a>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="section">
+    <div class="section-label">Overview</div>
+    <p>This lecture covers TCP's flow control mechanism in full detail — the sliding window algorithm, efficiency problems caused by small segments, their respective solutions, out-of-order segment handling, and the complete TCP timer management suite including the RTO estimation algorithms. Several named algorithms with associated formulas appear here — high exam relevance.</p>
+    <div class="tag-row">
+      <span class="tag tag-good">Sliding window / Go-Back-N</span>
+      <span class="tag tag-good">Delayed ACK</span>
+      <span class="tag tag-good">Nagle's algorithm</span>
+      <span class="tag tag-good">Silly window syndrome / Clark's solution</span>
+      <span class="tag tag-good">DUPACK / out-of-order</span>
+      <span class="tag tag-good">RTO · SRTT · RTTVAR</span>
+      <span class="tag tag-good">Jacobson's algorithm · Karn's algorithm</span>
+      <span class="tag tag-bad">Congestion control — next lecture</span>
+    </div>
+  </div>
+
+  <!-- SLIDING WINDOW -->
+  <div class="section">
+    <div class="section-label">TCP Flow Control Mechanism</div>
+    <h3>Sliding Window with Go-Back-N</h3>
+    <p>TCP uses a <strong>sliding window flow control algorithm</strong> based on the Go-Back-N ARQ principle. On a timeout, the sender retransmits everything currently inside the sender window. Sequence numbers start from the ISN negotiated during the three-way handshake; the example below uses 0 for simplicity.</p>
+
+    <div class="callout yellow">
+      <strong>Worked Example</strong> — Receiver buffer capacity: 4 kB
+    </div>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci" style="min-width:24px;">1</span>
+        <span>Application writes 2 kB → sender transmits <strong>SEQ=0, 2048 bytes</strong>. Receiver buffer: 2 kB occupied, 2 kB free. Receiver sends <strong>ACK=2048, WIN=2048</strong>.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:24px;">2</span>
+        <span>Application writes another 2 kB → sender transmits <strong>SEQ=2048, 2048 bytes</strong>. Receiver buffer: 4 kB full. Receiver sends <strong>ACK=4096, WIN=0</strong>. <strong>Sender is blocked.</strong></span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:24px;">3</span>
+        <span>Receiver application reads 2 kB. Buffer: 2 kB free. Receiver sends <strong>ACK=4096, WIN=2048</strong> (window update). Sender unblocks.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:24px;">4</span>
+        <span>Sender transmits 1 kB → <strong>SEQ=4096, 1024 bytes</strong>. Receiver sends <strong>ACK=5120, WIN=1024</strong>. And so on.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci" style="min-width:24px;">★</span>
+        <span>If an ACK is lost, the sender retransmits the entire window contents per Go-Back-N. Unacknowledged data stays in the sender buffer until the ACK arrives.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SMALL SEGMENT PROBLEM -->
+  <div class="section">
+    <div class="section-label">Small Segment Problem</div>
+    <h3>The Overhead Problem — Telnet Example</h3>
+    <p>In interactive applications like <strong>telnet</strong> (remote command execution), every keystroke generates a 1-byte payload. TCP's minimum segment header is <strong>20 bytes</strong>, so each keypress produces a 21-byte segment carrying 1 byte of actual data — a <strong>95% header overhead</strong>. Each such segment also triggers an ACK and window update from the receiver, compounding the waste.</p>
+
+    <div class="callout pink">
+      <strong>Root problem:</strong> Tiny data units from the application result in disproportionate control traffic, consuming bandwidth without transferring meaningful data.
+    </div>
+
+    <p>Two independent mechanisms address this from opposite ends of the connection:</p>
+  </div>
+
+  <!-- DELAYED ACK -->
+  <div class="section">
+    <div class="section-label">Solution 1 — Receiver Side</div>
+    <h3>Delayed Acknowledgements</h3>
+    <p>Instead of immediately acknowledging every received segment, the receiver <strong>delays the ACK and window update for up to 500 ms</strong>, hoping to accumulate more incoming data before sending a single, larger acknowledgement. This prevents the sender from being triggered to immediately send another tiny segment.</p>
+
+    <div class="callout green">
+      Delayed ACK reduces the number of ACK segments and window update messages. However, the sender is still free to send small segments at will — delayed ACK only controls the receiver's response behaviour.
+    </div>
+  </div>
+
+  <!-- NAGLE -->
+  <div class="section">
+    <div class="section-label">Solution 2 — Sender Side</div>
+    <h3>Nagle's Algorithm</h3>
+    <p>Nagle's algorithm controls the sender directly. The rule is simple: when data arrives at the sender in small pieces, <strong>send only the first piece immediately and buffer everything else until the ACK for that first piece arrives</strong>. Once the ACK arrives, all buffered data is flushed in a single larger segment, and the process repeats.</p>
+
+    <div class="callout">
+      <strong>Core invariant:</strong> At any given instant, <em>only one short packet may be outstanding in the network</em>. This prevents a flood of tiny segments from entering the network simultaneously.
+    </div>
+
+    <p>By the time the ACK for the first byte returns, the sender has typically accumulated several more bytes in its buffer, which are then sent together — dramatically improving effective payload ratio.</p>
+
+    <h4>When NOT to use Nagle's Algorithm</h4>
+    <p>Nagle's algorithm intentionally introduces delay — it withholds data until an ACK arrives. For <strong>delay-sensitive applications</strong> (real-time games, interactive GUIs, trading systems), this latency is unacceptable. Such applications disable Nagle's algorithm using the <code>TCP_NODELAY</code> socket option.</p>
+
+    <h3>Critical Interaction: Nagle + Delayed ACK = Starvation</h3>
+    <div class="callout pink">
+      <strong>Do not combine Nagle's algorithm and delayed acknowledgements.</strong> Nagle's algorithm waits for an ACK before sending buffered data. Delayed ACK withholds that ACK for up to 500 ms. The result: the sender waits for an ACK that the receiver is deliberately not sending, while the receiver waits for more data the sender is deliberately not sending. Both sides stall — this is a <strong>deadlock-like starvation</strong> causing severe application response degradation.
+    </div>
+  </div>
+
+  <!-- SILLY WINDOW SYNDROME -->
+  <div class="section">
+    <div class="section-label">Silly Window Syndrome</div>
+    <h3>The Problem</h3>
+    <p>Silly Window Syndrome (SWS) occurs when the receiver-side application reads data very slowly (e.g., 1 byte at a time) while the sender has large amounts of data to transmit. The sequence of events creates a self-reinforcing loop of tiny transmissions:</p>
+
+    <div class="vci-box">
+      <div class="vci-row"><span class="vci" style="min-width:24px;">1</span><span>Receiver buffer is full → sends <strong>ACK, WIN=0</strong>. Sender blocked.</span></div>
+      <div class="vci-row"><span class="vci" style="min-width:24px;">2</span><span>Application reads 1 byte → 1 byte free in buffer → receiver sends <strong>WIN=1</strong> (window update).</span></div>
+      <div class="vci-row"><span class="vci" style="min-width:24px;">3</span><span>Sender receives WIN=1 → sends <strong>1 byte of data</strong> (1 byte payload + 20 byte header = 21 byte segment).</span></div>
+      <div class="vci-row"><span class="vci" style="min-width:24px;">4</span><span>Buffer full again → <strong>WIN=0</strong>. Back to step 1. Infinite loop of 21-byte segments.</span></div>
+    </div>
+
+    <p>The same bandwidth-wasting problem as the telnet case, but triggered from the receiver side rather than the sending application.</p>
+
+    <h3>Clark's Solution</h3>
+    <p>Clark's solution addresses SWS at the receiver: <strong>do not send a window update until sufficient buffer space is available</strong>. The receiver suppresses window updates when only a trivially small amount of space has opened up. "Sufficient" is implementation-defined — typically a meaningful percentage of the total buffer size, or at least enough for a full-sized segment.</p>
+  </div>
+
+  <!-- NAGLE + CLARK COMPARISON -->
+  <div class="section">
+    <div class="section-label">Combined View</div>
+    <h3>Nagle's Algorithm and Clark's Solution are Complementary</h3>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Nagle's Algorithm (Sender-side)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Problem</span><span>Sending application delivers data 1 byte at a time to TCP.</span></div>
+          <div class="compare-row"><span class="label">Fix</span><span>Buffer all small pieces at sender until ACK received, then send combined segment.</span></div>
+          <div class="compare-row"><span class="label">Effect</span><span>Reduces number of small segments entering the network from sender.</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Clark's Solution (Receiver-side)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Problem</span><span>Receiving application fetches data from TCP buffer 1 byte at a time.</span></div>
+          <div class="compare-row"><span class="label">Fix</span><span>Suppress window update messages until sufficient buffer space is freed.</span></div>
+          <div class="compare-row"><span class="label">Effect</span><span>Prevents sender from being triggered to send 1-byte segments by tiny window updates.</span></div>
+        </div>
+      </div>
+    </div>
+    <p>Unlike the Nagle + Delayed ACK combination, Nagle + Clark does <em>not</em> cause starvation — they work on different sides of the connection and do not create a mutual waiting dependency. Both may introduce some latency overhead, but no deadlock scenario is possible.</p>
+
+    <h3>PSH Flag — Override for Real-Time Applications</h3>
+    <p>When an application needs data delivered immediately, bypassing both Nagle's algorithm and the Clark solution, it sets the <strong>PSH (Push) flag</strong> in the TCP header. This signals the sender to create and transmit a segment immediately without waiting for the buffer to accumulate, and signals the receiver to pass data to the application layer immediately without waiting for a full buffer.</p>
+  </div>
+
+  <!-- OUT OF ORDER -->
+  <div class="section">
+    <div class="section-label">Out-of-Order Segment Handling</div>
+    <h3>Duplicate Acknowledgement (DUPACK)</h3>
+    <p>TCP uses <strong>cumulative acknowledgements</strong> — an ACK number N means "I have received everything up to byte N−1." When an out-of-order segment arrives, TCP buffers it but sends a duplicate ACK repeating the last successfully received in-order byte, signalling that there is a gap.</p>
+
+    <div class="callout yellow">
+      <strong>Worked Example</strong> — Received bytes: 0, 1, 2, [3 missing], 4, 5, 6, 7
+    </div>
+
+    <div class="vci-box">
+      <div class="vci-row"><span class="vci" style="min-width:24px;">1</span><span>Bytes 0, 1, 2 received → <strong>ACK=3</strong> (expecting byte 3 next).</span></div>
+      <div class="vci-row"><span class="vci" style="min-width:24px;">2</span><span>Byte 4 arrives (out of order, gap at 3) → TCP buffers byte 4, sends <strong>DUPACK: ACK=3</strong> again.</span></div>
+      <div class="vci-row"><span class="vci" style="min-width:24px;">3</span><span>Bytes 5, 6, 7 arrive → each triggers another <strong>DUPACK: ACK=3</strong>. All buffered.</span></div>
+      <div class="vci-row"><span class="vci" style="min-width:24px;">4</span><span>Multiple DUPACKs trigger the congestion control algorithm (details in next lecture). After timeout, sender retransmits byte 3.</span></div>
+      <div class="vci-row"><span class="vci" style="min-width:24px;">5</span><span>Byte 3 received → buffer now holds bytes 3–7 contiguously → receiver sends <strong>ACK=8</strong> (cumulative, acknowledging all).</span></div>
+    </div>
+
+    <div class="callout">
+      DUPACK is a critical signal in TCP: receiving <strong>3 duplicate ACKs</strong> is used by the congestion control algorithm as an indicator of packet loss without waiting for a full timeout (fast retransmit — covered in the next lecture).
+    </div>
+  </div>
+
+  <!-- TCP TIMER MANAGEMENT -->
+  <div class="section">
+    <div class="section-label">TCP Timer Management</div>
+    <h3>Retransmission Timeout (RTO)</h3>
+    <p>When a segment is sent, TCP starts a retransmission timer. If an ACK arrives before the timer expires, the timer stops. If the timer expires first, the segment is retransmitted and the congestion control algorithm is triggered. The fundamental question is: <strong>what should the RTO value be?</strong></p>
+
+    <p>The natural candidate is a multiple of the Round Trip Time (RTT): <code>RTO = n × RTT</code>. But this requires a reliable RTT estimate — and that estimate is difficult to obtain at the transport layer.</p>
+
+    <h3>Why RTT Estimation is Hard at the Transport Layer</h3>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Data Link Layer RTT</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>Two directly connected nodes. Single link, minimal variability. RTT distribution is narrow and stable — a simple average gives a reliable estimate.</span></div>
+          <div class="compare-row"><span>Unit: <strong>microseconds</strong>, tight bell curve.</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Transport Layer RTT</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>End-to-end across the entire internet, through multiple intermediate routers with dynamic queues. RTT distribution is wide and multimodal — the average is an unreliable estimate with high deviation.</span></div>
+          <div class="compare-row"><span>Unit: <strong>milliseconds</strong>, flat spread over multiple peaks.</span></div>
+        </div>
+      </div>
+    </div>
+    <p>Setting RTO based on a naïve RTT average at the transport layer produces <strong>spurious RTOs</strong> — the timer fires prematurely during normal high-load conditions, triggering unnecessary retransmissions. The solution is a dynamic algorithm that continuously adapts.</p>
+  </div>
+
+  <!-- JACOBSON -->
+  <div class="section">
+    <div class="section-label">RTT Estimation — Jacobson's Algorithm (1988)</div>
+    <h3>SRTT: Smoothed Round Trip Time</h3>
+    <p>For each TCP connection, a variable <strong>SRTT</strong> (Smoothed Round Trip Time) is maintained as the best current estimate of RTT to the destination. Each time an ACK is received, the measured RTT <em>R</em> is used to update SRTT via an <strong>Exponentially Weighted Moving Average (EWMA)</strong>:</p>
+
+    <div class="callout green">
+      <strong>SRTT = α · SRTT + (1 − α) · R</strong><br><br>
+      α = smoothing factor controlling how quickly old values are forgotten. Typically <strong>α = 7/8</strong>.<br>
+      A high α means old values persist longer (more inertia). A low α means recent measurements dominate (more reactive).
+    </div>
+
+    <p>The same timer used for retransmission also measures RTT: when the segment is sent the timer starts; when the ACK arrives the elapsed time is R. If the timer expires before the ACK arrives, R is not measured (see Karn's algorithm below).</p>
+
+    <h3>Problem with EWMA Alone: High-Load Variance</h3>
+    <p>The initial TCP implementation set <code>RTO = 2 × SRTT</code>. This proved too inflexible: under high network load, RTT fluctuations increase dramatically. A fixed multiplier on SRTT fails to track the variance, producing spurious timeouts when actual RTT momentarily spikes above 2×SRTT.</p>
+
+    <h3>Full RTO Formula: Incorporating RTTVAR</h3>
+    <p>The solution is to track the <strong>variance</strong> of RTT measurements alongside the mean, and fold it into the RTO calculation:</p>
+
+    <div class="callout green">
+      <strong>Step 1 — Update variance:</strong><br>
+      RTTVAR = β · RTTVAR + (1 − β) · |SRTT − R|<br>
+      β = 3/4 (typically)<br><br>
+      <strong>Step 2 — Compute RTO:</strong><br>
+      RTO = SRTT + 4 × RTTVAR<br><br>
+      When network load is high and RTT fluctuates widely, RTTVAR increases, which automatically inflates RTO — preventing spurious timeouts.
+    </div>
+
+    <div class="callout yellow">
+      <strong>Why the coefficient 4?</strong> It is somewhat arbitrary — Jacobson chose it partly because 4 = 2², allowing the multiplication to be implemented as a single binary left-shift, keeping the computation lightweight on 1988-era hardware. The Jacobson paper is notable for using only integer addition, subtraction, and bit-shift operations throughout.
+    </div>
+
+    <h4>Summary of Constants</h4>
+    <table class="port-table">
+      <thead><tr><th>Variable</th><th>Meaning</th><th>Typical Value</th></tr></thead>
+      <tbody>
+        <tr><td class="port-num">α</td><td>SRTT smoothing factor</td><td class="proto-name">7/8</td></tr>
+        <tr><td class="port-num">β</td><td>RTTVAR smoothing factor</td><td class="proto-name">3/4</td></tr>
+        <tr><td class="port-num">SRTT</td><td>Smoothed (average) RTT estimate</td><td class="proto-name">—</td></tr>
+        <tr><td class="port-num">RTTVAR</td><td>RTT variance estimate</td><td class="proto-name">—</td></tr>
+        <tr><td class="port-num">RTO</td><td>Retransmission Timeout</td><td class="proto-name">SRTT + 4·RTTVAR</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- KARN -->
+  <div class="section">
+    <div class="section-label">RTT Estimation on Retransmission — Karn's Algorithm</div>
+    <h3>The Retransmission Ambiguity Problem</h3>
+    <p>If a segment is lost and retransmitted, the ACK that eventually arrives is ambiguous — it could be acknowledging the original transmission or the retransmission. Using the elapsed time from the original send as an RTT sample would corrupt the SRTT estimate with a grossly inflated value.</p>
+
+    <h3>Karn's Algorithm</h3>
+    <div class="callout green">
+      <strong>Rule 1:</strong> Do not update SRTT or RTTVAR for any retransmitted segment. RTT samples are only taken from segments that were transmitted exactly once.<br><br>
+      <strong>Rule 2:</strong> On each successive retransmission timeout, <strong>double the RTO</strong>: RTO → 2·RTO → 4·RTO → … until the segment is successfully acknowledged. This is <strong>exponential backoff</strong>. Once an ACK is received for a successfully delivered (non-retransmitted) segment, RTO is reset to the Jacobson-computed value.
+    </div>
+
+    <p>Exponential backoff serves a dual purpose: it avoids congesting the network further when segments are being dropped, and it gives the network progressively more time to recover. The doubling sequence (RTO, 2·RTO, 4·RTO, …) is capped in practice to prevent indefinite growth.</p>
+  </div>
+
+  <!-- OTHER TIMERS -->
+  <div class="section">
+    <div class="section-label">Other TCP Timers</div>
+    <h3>Summary of All TCP Timers</h3>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Timer</th><th>Purpose</th><th>Behaviour on Expiry</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">Retransmission (RTO)</td>
+          <td>Detect lost segments during normal data transfer.</td>
+          <td class="proto-name">Retransmit segment; trigger congestion control; double RTO (Karn).</td>
+        </tr>
+        <tr>
+          <td class="port-num">Persistent</td>
+          <td>Prevent deadlock when receiver advertises WIN=0. The sender has data to send but is blocked — without this timer, the connection would stall permanently if the window-update ACK is lost.</td>
+          <td class="proto-name">Send a <strong>probe segment</strong> to the receiver to solicit an updated window advertisement.</td>
+        </tr>
+        <tr>
+          <td class="port-num">Keepalive</td>
+          <td>Detect and close idle connections. After a long period of inactivity, the connection may have been abandoned by the remote peer without a proper FIN exchange.</td>
+          <td class="proto-name">Close the connection (or send keepalive probes first, depending on implementation).</td>
+        </tr>
+        <tr>
+          <td class="port-num">TIME_WAIT</td>
+          <td>Active-close side waits after sending final ACK, to absorb delayed duplicates and prevent them being misinterpreted by a new connection on the same port pair.</td>
+          <td class="proto-name">Fully close the connection. Duration = <strong>2 × maximum packet lifetime</strong>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Persistent timer and WIN=0 deadlock:</strong> When the receiver sends WIN=0, the sender stops. If the subsequent window-update ACK (WIN &gt; 0) is lost in transit, both sides wait indefinitely. The persistent timer breaks this deadlock by having the sender proactively probe the receiver rather than waiting forever.
+    </div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <h3>Flow Control Mechanism</h3>
+    <p>TCP uses sliding window with Go-Back-N. The receiver advertises its available buffer space in the WIN field of every ACK. The sender may not have more unacknowledged data outstanding than the advertised window. When WIN=0 is received, the sender blocks until a non-zero window update arrives.</p>
+
+    <h3>Small Segment Optimisations</h3>
+    <p><strong>Delayed ACK</strong> (receiver): hold ACK for up to 500 ms hoping to batch it with a window update or piggyback on a data segment going the other way. <strong>Nagle's algorithm</strong> (sender): send first small piece immediately, buffer all subsequent small pieces until that ACK is received, then flush everything in one segment. <strong>Clark's solution</strong> (receiver, for silly window syndrome): suppress window update until sufficient buffer space is available. Nagle + Clark are complementary and safe. Nagle + Delayed ACK causes starvation — do not use together. The <strong>PSH flag</strong> bypasses both mechanisms for latency-critical data.</p>
+
+    <h3>Out-of-Order and DUPACK</h3>
+    <p>Out-of-order segments are buffered. A duplicate ACK (DUPACK) is sent for each one, repeating the last in-order ACK number. Three DUPACKs triggers fast retransmit (congestion control, next lecture). Once the missing segment arrives, a single cumulative ACK covers all contiguous buffered data.</p>
+
+    <h3>RTO and RTT Estimation</h3>
+    <p>RTO is set dynamically. <strong>Jacobson's algorithm</strong> maintains SRTT (EWMA of measured RTT, α=7/8) and RTTVAR (EWMA of variance, β=3/4). RTO = SRTT + 4·RTTVAR. <strong>Karn's algorithm</strong> ensures RTT samples are only taken from segments sent exactly once (no retransmissions), and doubles RTO on each successive retransmission until the segment gets through.</p>
+  </div>
+
+</div>
+</body>
+</html>

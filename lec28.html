@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 28 — IP Addressing (IPv4) II: CIDR</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec27.html" class="nav-lec">← prev</a>
+      <a href="lec29.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <!-- ── Header ── -->
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 28</span>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>IP Addressing (IPv4) II — CIDR</h1>
+    <p>Subnetting worked examples, the all-zero/all-one subnet problem, supernetting, hierarchical address allocation, and Variable Length Subnet Mask (VLSM).</p>
+    <a href="#" class="video-link">▶ watch lecture</a>
+  </div>
+
+  <!-- ── 1. CIDR Recap ── -->
+  <div class="section">
+    <div class="section-label">Quick Recap</div>
+    <h3>CIDR Addressing Format</h3>
+    <p>An IP address in CIDR is written as <strong>a.b.c.d/n</strong> where <strong>n</strong> is the number of leading bits that form the <strong>network prefix</strong>. The remaining <strong>32 − n</strong> bits are the <strong>host address</strong> within that network.</p>
+    <div class="callout">
+      Example: <strong>10111111.10110100.01010011.11101011</strong> with netmask <strong>11111111.11110000.00000000.00000000</strong> → first 12 bits = subnet address, remaining 20 bits = host address.
+    </div>
+    <p>The subnet mask is ANDed with the IP address to extract the network portion. The host portion identifies the specific device within that subnet.</p>
+  </div>
+
+  <!-- ── 2. Dividing a network into subnets ── -->
+  <div class="section">
+    <div class="section-label">Core Concept</div>
+    <h3>Dividing a Network into Subnets</h3>
+    <p>Given a network block <strong>203.110.0.0/16</strong>: the first 16 bits identify the network, and the remaining 16 bits are free for host addressing. To create subnets, you <strong>borrow bits from the host portion</strong> and use them as a subnet identifier. The more bits you borrow, the more subnets you can make — but the fewer hosts each subnet can hold.</p>
+
+    <div class="callout yellow">
+      <strong>Visual hint:</strong> The lecture works through this example step-by-step on a diagram at <strong>01:37</strong> and <strong>02:12</strong>. Worth watching if the binary arithmetic feels unclear.
+    </div>
+
+    <h4>Why 3 bits to create 3 subnets — not 2?</h4>
+    <p>With 2 borrowed bits you get four possible patterns: <strong>00, 01, 10, 11</strong>. But <strong>00</strong> (all-zeros) and <strong>11</strong> (all-ones) are reserved and cannot be used as subnet identifiers (explained below). That leaves only <strong>01</strong> and <strong>10</strong> — just two usable subnets. To get three usable subnets you need 3 bits, giving patterns 000–111; using 100, 101, 110 avoids both all-zeros and all-ones.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">2 bits (insufficient)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">patterns</span><span>00, 01, 10, 11</span></div>
+          <div class="compare-row"><span class="label">reserved</span><span>00 (subnet zero) &amp; 11 (all-one)</span></div>
+          <div class="compare-row"><span class="label">usable</span><span>01, 10 → only 2 subnets</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">3 bits (correct)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">patterns</span><span>000 – 111</span></div>
+          <div class="compare-row"><span class="label">reserved</span><span>000 &amp; 111</span></div>
+          <div class="compare-row"><span class="label">usable</span><span>001, 010, 011, 100, 101, 110 → 6 subnets</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h4>Result for 203.110.0.0/16 → 3 subnets</h4>
+    <p>Borrow 3 bits → new prefix = 16 + 3 = <strong>/19</strong>. Remaining 13 bits for host addressing. Using subnet IDs 100, 101, 110:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Subnet</th>
+          <th>Subnet ID (binary)</th>
+          <th>Network Address</th>
+          <th>Prefix</th>
+          <th>Host bits</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Subnet 1</td>
+          <td class="port-num">100</td>
+          <td>203.110.128.0</td>
+          <td class="port-num">/19</td>
+          <td>13 bits (8190 hosts)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Subnet 2</td>
+          <td class="port-num">101</td>
+          <td>203.110.160.0</td>
+          <td class="port-num">/19</td>
+          <td>13 bits (8190 hosts)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Subnet 3</td>
+          <td class="port-num">110</td>
+          <td>203.110.192.0</td>
+          <td class="port-num">/19</td>
+          <td>13 bits (8190 hosts)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 3. All-zero / All-one problem ── -->
+  <div class="section">
+    <div class="section-label">Important Rule</div>
+    <h3>The All-Zero and All-One Subnet Problem</h3>
+    <p>These two subnet identifiers cause address ambiguity and must be avoided.</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Subnet Zero (All 0s)</div>
+        <div class="concept-desc">
+          Consider 192.168.0.0/16 split with 1 borrowed bit, using <strong>0</strong> as the subnet identifier. The resulting subnet's <strong>network address</strong> = 192.168.0.0 — identical to the original network's address. A router cannot distinguish between the two, causing routing ambiguity.
+        </div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">All-One Subnet</div>
+        <div class="concept-desc">
+          Using <strong>1</strong> as the subnet identifier for 192.168.0.0/16 gives subnet 192.168.128.0/17. Its <strong>broadcast address</strong> (set all host bits to 1) = 192.168.255.255 — identical to the original network's broadcast. This causes broadcast storms and routing confusion.
+        </div>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      <strong>Summary:</strong> All-zero subnet → subnet network address collides with parent network address. All-one subnet → subnet broadcast address collides with parent network broadcast address. Both are illegal by convention.
+    </div>
+  </div>
+
+  <!-- ── 4. CIDR Worked Example (IIT KGP) ── -->
+  <div class="section">
+    <div class="section-label">Worked Example</div>
+    <h3>CIDR + Supernetting — IIT Kharagpur Scenario</h3>
+    <p>The Computer and Informatics Centre (CIC) of IIT KGP receives the address block <strong>203.110.0.0/19</strong> from PNIC (India's IP allocation authority). This gives 13 host bits → up to 2<sup>13</sup> − 2 = 8190 usable addresses.</p>
+    <p>Three departments need subnets:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Department</th><th>Hosts Required</th><th>Host bits needed</th><th>Calculation</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">CSE</td>
+          <td>2000</td>
+          <td class="port-num">11 bits</td>
+          <td>2<sup>11</sup> = 2048 ≥ 2000 ✓</td>
+        </tr>
+        <tr>
+          <td class="proto-name">VGSOM</td>
+          <td>500</td>
+          <td class="port-num">9 bits</td>
+          <td>2<sup>9</sup> − 2 = 510 ≥ 500 ✓</td>
+        </tr>
+        <tr>
+          <td class="proto-name">EE</td>
+          <td>500</td>
+          <td class="port-num">9 bits</td>
+          <td>2<sup>9</sup> − 2 = 510 ≥ 500 ✓</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout pink">
+      <strong>The problem:</strong> The largest subnet (CSE) needs 11 host bits. Out of the 13 available bits, that leaves only <strong>2 bits</strong> for subnet identification — which, as established above, is insufficient to safely create 3 subnets. A fix is needed.
+    </div>
+
+    <h4>Solution: Apply Supernetting (Combine VGSOM + EE)</h4>
+    <p>VGSOM and EE each have 500 hosts. Combined: 1000 hosts → requires only <strong>10 host bits</strong> (2<sup>10</sup> = 1024). Now the problem collapses to <strong>two</strong> subnets at the top level (CSE vs. VGSOM+EE), which requires only 2 subnet bits — and with 3 total bits available (13 − 10 = 3), this works.</p>
+
+    <h4>Level 1 Split — 203.110.0.0/19 → two subnets</h4>
+    <p>Borrow 2 bits from host space. New prefix = 19 + 2 = <strong>/21</strong>. Assign subnet IDs 10 (CSE) and 01 (VGSOM+EE):</p>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Subnet</th><th>Subnet ID</th><th>Network Address</th><th>Prefix</th><th>Remaining host bits</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">CSE</td>
+          <td class="port-num">10</td>
+          <td>203.110.16.0</td>
+          <td class="port-num">/21</td>
+          <td>11 bits</td>
+        </tr>
+        <tr>
+          <td class="proto-name">VGSOM + EE (supernet)</td>
+          <td class="port-num">01</td>
+          <td>203.110.8.0</td>
+          <td class="port-num">/21</td>
+          <td>11 bits</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>Level 2 Split — 203.110.8.0/21 → VGSOM and EE</h4>
+    <p>Inside the VGSOM+EE supernet block, borrow 2 more bits. New prefix = 21 + 2 = <strong>/23</strong>. Assign IDs 10 (VGSOM) and 01 (EE):</p>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Subnet</th><th>Subnet ID</th><th>Network Address</th><th>Prefix</th><th>Remaining host bits</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">VGSOM</td>
+          <td class="port-num">10</td>
+          <td>203.110.12.0</td>
+          <td class="port-num">/23</td>
+          <td>9 bits (510 hosts)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">EE</td>
+          <td class="port-num">01</td>
+          <td>203.110.10.0</td>
+          <td class="port-num">/23</td>
+          <td>9 bits (510 hosts)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout green">
+      <strong>Final allocation summary:</strong> CSE → 203.110.16.0/21 | VGSOM → 203.110.12.0/23 | EE → 203.110.10.0/23. This is hierarchical addressing — two levels of subnetting, routed by an intermediate router placed between the supernet boundary and the individual department subnets.
+    </div>
+
+    <div class="callout">
+      <strong>Visual hint:</strong> The step-by-step hierarchical diagram is shown at <strong>14:11</strong> in the lecture video. If the two-level split feels abstract, go watch that slide — it's drawn out clearly.
+    </div>
+  </div>
+
+  <!-- ── 5. Fixed vs Variable Length ── -->
+  <div class="section">
+    <div class="section-label">Advanced Concept</div>
+    <h3>Fixed-Length vs Variable-Length Subnet Mask (VLSM)</h3>
+    <p>In the IIT KGP example above, the same prefix length was used for all subnets at each level (both Level 1 subnets used /21; both Level 2 subnets used /23). This is <strong>fixed-length subnet masking (FLSM)</strong>.</p>
+    <p><strong>CIDR does not require this.</strong> It natively supports <strong>Variable Length Subnet Mask (VLSM)</strong> — different subnets under the same parent network can have different prefix lengths. This allows address space to be allocated more efficiently based on actual host requirements.</p>
+
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">Fixed-Length (FLSM)</div>
+        <div class="interface-desc">All subnets at a given level share the same prefix length. Simpler to manage but wastes addresses — small subnets get the same allocation as large ones.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">Variable-Length (VLSM)</div>
+        <div class="interface-desc">Each subnet gets a prefix length matched to its actual host count. More efficient use of address space. Requires CIDR-aware routing (classless routing protocols like OSPF, EIGRP, BGP).</div>
+      </div>
+    </div>
+
+    <h4>VLSM Worked Example — 202.110.0.0/20</h4>
+    <p>Given 202.110.0.0/20: 12 host bits available → 2<sup>12</sup> − 2 = 4094 usable addresses. Required: S1 = 1000 hosts, S2 = 500 hosts, S3 = 500 hosts.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Subnet</th><th>Hosts</th><th>Host bits needed</th><th>Prefix</th><th>Subnet bits from /20</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">S1</td>
+          <td>1000</td>
+          <td class="port-num">10 bits</td>
+          <td class="port-num">/22</td>
+          <td>2 bits borrowed</td>
+        </tr>
+        <tr>
+          <td class="proto-name">S2</td>
+          <td>500</td>
+          <td class="port-num">9 bits</td>
+          <td class="port-num">/23</td>
+          <td>3 bits borrowed</td>
+        </tr>
+        <tr>
+          <td class="proto-name">S3</td>
+          <td>500</td>
+          <td class="port-num">9 bits</td>
+          <td class="port-num">/23</td>
+          <td>3 bits borrowed</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>S1 gets a <strong>/22</strong> mask, while S2 and S3 each get a <strong>/23</strong> mask — these are different lengths under the same parent, which would be illegal in FLSM but is perfectly valid in VLSM/CIDR.</p>
+
+    <div class="callout pink">
+      <strong>Critical constraint — prefix uniqueness:</strong> When assigning subnet identifiers under VLSM, no subnet's identifier bits must be a <strong>binary prefix</strong> of another subnet's identifier. For example, if S1 uses subnet ID <strong>10</strong> (for /22), then S2 cannot use <strong>101</strong> (for /23) because 10 is a prefix of 101 — a packet destined for a host in S1 could falsely match S2's entry. Choose IDs such that no one is a prefix of another.
+    </div>
+
+    <div class="callout">
+      <strong>Visual hint:</strong> Prof. Chakraborty works through the binary bit-layout for VLSM assignment on the whiteboard at <strong>21:40</strong>. If the prefix-uniqueness rule feels confusing, the diagram at that timestamp spells it out bit by bit.
+    </div>
+  </div>
+
+  <!-- ── Summary ── -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+    <h3>Key Takeaways</h3>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-app">Subnetting</span>
+      <div class="layer-content">
+        <div class="layer-name">Borrowing bits from host space</div>
+        <div class="layer-detail">To create N subnets, borrow ⌈log₂(N+2)⌉ bits from the host portion (the +2 accounts for avoided all-zero and all-one IDs). New prefix = original prefix + borrowed bits. Each subnet gets fewer host bits as a result.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-trans">Forbidden</span>
+      <div class="layer-content">
+        <div class="layer-name">All-zero and all-one subnet IDs</div>
+        <div class="layer-detail">All-zero subnet: its network address equals the parent network address. All-one subnet: its broadcast address equals the parent broadcast address. Both cause ambiguity in routing and must be avoided.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-net">Supernetting</span>
+      <div class="layer-content">
+        <div class="layer-name">Combining smaller subnets into a larger block</div>
+        <div class="layer-detail">When there aren't enough subnet bits to split into the required number of independent subnets, smaller departments can be logically combined under a single intermediate router. The combined block is then re-split at the next level. This is hierarchical IP allocation.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-dl">VLSM</span>
+      <div class="layer-content">
+        <div class="layer-name">Variable Length Subnet Mask</div>
+        <div class="layer-detail">CIDR allows different subnets under the same parent to carry different prefix lengths, matched to actual host requirements. More efficient than FLSM. Requires that subnet identifiers are prefix-free — no subnet ID can be a binary prefix of another.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-phys">Next Lecture</span>
+      <div class="layer-content">
+        <div class="layer-name">CIDR routing, NAT, and IPv6</div>
+        <div class="layer-detail">Lec 29 covers how routing works under CIDR (longest prefix matching), Network Address Translation (NAT), and an overview of IPv6 — including why adoption has been historically slow despite IPv4 exhaustion.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
