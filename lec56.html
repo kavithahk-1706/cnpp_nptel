@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 56 — Physical Layer II</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec55.html" class="nav-lec">← prev</a>
+        <a href="lec57.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 56</span>
+      <span class="med-badge">medium priority</span>
+      <h1>Layer 1: Physical Layer – II</h1>
+      <p>Data vs signals, analog vs digital, signal properties, transmission impairments, and theoretical data rate limits (Nyquist & Shannon). Heavy on formulas — make sure you can apply them, not just state them.</p>
+    </div>
+
+    <!-- DATA AND SIGNALS -->
+    <div class="section">
+      <div class="section-label">Data and Signals</div>
+
+      <p>Everything processed by your system is <strong>data</strong> — ultimately a stream of 1s and 0s. But the physical medium underneath can only carry <strong>electromagnetic signals</strong>, so data must be transformed before transmission.</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Analog</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Data</span> Continuous values (e.g. voice, temperature)</div>
+            <div class="compare-row"><span class="label">Signal</span> Infinite values within a range; smooth waveform</div>
+            <div class="compare-row"><span class="label">Use</span> Periodic analog signals are common in comms</div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Digital</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Data</span> Discrete states — 0 or 1 (or more levels)</div>
+            <div class="compare-row"><span class="label">Signal</span> Limited number of values; stepped waveform</div>
+            <div class="compare-row"><span class="label">Use</span> Non-periodic digital signals are common in comms</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">In data communication, we predominantly use <strong>periodic analog signals</strong> and <strong>non-periodic digital signals</strong>.</div>
+    </div>
+
+    <!-- SIGNAL PROPERTIES -->
+    <div class="section">
+      <div class="section-label">Properties of Periodic Analog Signals</div>
+
+      <p>A periodic (sine) wave is fully described by three parameters:</p>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Amplitude</div>
+          <div class="concept-desc">Peak value of the signal — the maximum it reaches on the positive (or minimum on the negative) side. Represents signal strength/power.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Frequency (f)</div>
+          <div class="concept-desc">Number of complete cycles per second, measured in <strong>Hz</strong>. Inversely related to period T: <strong>f = 1/T</strong> and <strong>T = 1/f</strong>.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Phase</div>
+          <div class="concept-desc">Offset of the wave relative to time zero — how much the waveform is "shifted" from its reference start position. Measured in degrees.</div>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        <strong>Visual hint:</strong> The slide at <a class="ts" href="#" title="09:54">09:54</a> shows three sine waves with identical amplitude and frequency but phases of 0°, 90°, and 180° — worth visualising. Adding out-of-phase waves produces a composite result that differs from simply stacking in-phase waves.
+      </div>
+    </div>
+
+    <!-- COMPOSITE SIGNALS & DOMAINS -->
+    <div class="section">
+      <div class="section-label">Composite Signals &amp; Signal Domains</div>
+
+      <p>When multiple sine waves are added together, the result is a <strong>composite signal</strong>. Any composite signal can be represented in two ways:</p>
+
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Time Domain</div>
+          <div class="interface-desc">Signal amplitude plotted against time. Shows what the waveform actually looks like moment to moment.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Frequency Domain</div>
+          <div class="interface-desc">Signal amplitude plotted against frequency. Shows which frequency components are present and their respective amplitudes. A single sine wave = one spike.</div>
+        </div>
+      </div>
+
+      <p>Fourier analysis is the mathematical bridge: any composite signal can be decomposed into its individual sine wave components. A three-wave composite of frequencies 0, 8, 16 Hz appears as three separate spikes in the frequency domain.</p>
+
+      <h3>Bandwidth of a Composite Signal</h3>
+      <p>Bandwidth is the <strong>range of frequencies</strong> a signal occupies:</p>
+
+      <div class="callout green">
+        <strong>BW = f<sub>highest</sub> − f<sub>lowest</sub></strong><br/>
+        Example: Human voice spans ~0–4 kHz → BW = 4 kHz. POTS telephone lines are also designed for this range.
+      </div>
+
+      <p>Why does this matter? A <strong>channel</strong> (physical medium) has its own frequency-passing characteristics — it may only allow a certain band of frequencies through. Your signal's bandwidth must fit within the channel's bandwidth, otherwise data is lost.</p>
+
+      <h4>Periodic vs Non-Periodic Digital Signals in Frequency Domain</h4>
+      <p>Both have theoretically <strong>infinite bandwidth</strong>. However, periodic digital signals have <strong>discrete frequencies</strong> (spikes at harmonics: f, 3f, 5f, 7f…), while non-periodic digital signals have a <strong>continuous frequency</strong> spectrum. In practice, only the dominant harmonics are transmitted — the high-frequency tail contributes little to reconstruction.</p>
+    </div>
+
+    <!-- DIGITAL SIGNALS -->
+    <div class="section">
+      <div class="section-label">Digital Signals — Levels &amp; Bit Rate</div>
+
+      <h3>Signal Levels</h3>
+      <p>A digital signal doesn't have to be just 2 levels (0V / +5V). It can have <strong>multiple voltage levels</strong>, each encoding more than one bit per signal element.</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">2 levels</span>
+          <span class="arrow">→</span>
+          <span class="vci">1 bit per level &nbsp;(log₂ 2 = 1)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">4 levels</span>
+          <span class="arrow">→</span>
+          <span class="vci">2 bits per level &nbsp;(log₂ 4 = 2)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">8 levels</span>
+          <span class="arrow">→</span>
+          <span class="vci">3 bits per level &nbsp;(log₂ 8 = 3)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">L levels</span>
+          <span class="arrow">→</span>
+          <span class="vci">log₂ L bits per level</span>
+        </div>
+      </div>
+
+      <p>More levels = more data packed per signal element, but also more susceptible to noise (finer distinctions are harder to tell apart at the receiver). Not always feasible in noisy channels.</p>
+
+      <h3>Bit Rate</h3>
+      <p><strong>Bit rate</strong> = number of bits transmitted per second (bps). It is a property of the <em>data stream</em>, not the signal directly.</p>
+
+      <h4>Example calculations from lecture</h4>
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">100 pages/min text</span>
+          <span class="arrow">→</span>
+          <span class="vci">100 × 24 × 80 × 8 = 1.536 Mbps</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Digitized voice (4 kHz, 8 bits/sample)</span>
+          <span class="arrow">→</span>
+          <span class="vci">2 × 4000 × 8 = 64 kbps</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">HDTV (1920×1080, 30fps, 24 bits/pixel)</span>
+          <span class="arrow">→</span>
+          <span class="vci">1920×1080×30×24 ≈ 1.5 Gbps (compressed to 20–40 Mbps in practice)</span>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Nyquist sampling theorem</strong> (for digitised analog): to faithfully represent an analog signal of bandwidth B Hz, you must sample at <strong>2B samples per second</strong>. That's why voice at 4 kHz → 8000 samples/sec.
+      </div>
+
+      <h3>Bit Length</h3>
+      <p>Bit length is the <strong>physical distance</strong> a single bit occupies in the medium while in transit:</p>
+      <div class="callout green"><strong>Bit Length = Propagation Speed × Bit Duration</strong></div>
+    </div>
+
+    <!-- TRANSMISSION IMPAIRMENTS -->
+    <div class="section">
+      <div class="section-label">Transmission Impairments</div>
+      <p>Real media are not perfect. The signal received is not identical to the signal sent. Three categories:</p>
+
+      <h3>1. Attenuation</h3>
+      <p>Signal <strong>loses energy</strong> as it travels through the medium (overcomes resistance). Amplitude decreases with distance. Fixed using <strong>amplifiers</strong> (analog) or <strong>regenerators/repeaters</strong> (digital — preferred since they reconstruct a clean signal rather than amplifying noise too).</p>
+
+      <div class="callout pink">
+        Attenuation is measured in <strong>decibels (dB)</strong>:<br/>
+        <code>Attenuation (dB) = 10 · log₁₀(P₂ / P₁)</code><br/>
+        If power is halved: 10 · log₁₀(0.5) = 10 × (−0.3) = <strong>−3 dB</strong><br/>
+        → A loss of 3 dB ≡ losing half the signal power.
+      </div>
+
+      <h3>2. Distortion</h3>
+      <p>Signal <strong>changes shape</strong>. Occurs in composite signals because each frequency component travels through the medium at a slightly different speed, arriving at the receiver with different delays. This causes <strong>phase shifts</strong> — the components are no longer in sync at the receiver, and when recombined, they produce a corrupted version of the original composite signal.</p>
+
+      <div class="callout yellow">
+        <a class="ts" href="#" title="21:35">21:35</a> — the slide clearly shows components sent in-phase vs arriving out-of-phase at the receiver. Worth checking.
+      </div>
+
+      <h3>3. Noise</h3>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Cause</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Thermal</td>
+            <td>Random motion of electrons in the wire — creates spurious signals never sent by the transmitter</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Induced</td>
+            <td>Interference from external EM sources — motors, appliances, power lines nearby</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Crosstalk</td>
+            <td>One wire acts as a sending antenna, adjacent wire acts as a receiving antenna — signals bleed across wires</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Impulse</td>
+            <td>Short, high-energy spikes from lightning or power surges — brief but highly destructive to data</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SNR -->
+    <div class="section">
+      <div class="section-label">Signal-to-Noise Ratio (SNR)</div>
+
+      <p>SNR quantifies how much stronger the signal is compared to the noise floor. Used to determine the theoretical maximum achievable bit rate.</p>
+
+      <div class="callout green">
+        <strong>SNR = Average Signal Power / Average Noise Power</strong><br/><br/>
+        <strong>SNR<sub>dB</sub> = 10 · log₁₀(SNR)</strong><br/><br/>
+        High SNR → signal dominates noise → reliable transmission<br/>
+        Low SNR → noise dominates → data corruption
+      </div>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">Signal = 10 mW, Noise = 1 μW</span>
+          <span class="arrow">→</span>
+          <span class="vci">SNR = 10,000 → SNR<sub>dB</sub> = 40 dB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA RATE LIMITS -->
+    <div class="section">
+      <div class="section-label">Data Rate Limits</div>
+
+      <p>Three factors govern achievable data rate: <strong>bandwidth available</strong>, <strong>number of signal levels</strong>, and <strong>channel noise quality (SNR)</strong>. Two theoretical formulas bound what's possible:</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Nyquist — Noiseless Channel</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Formula</span> BitRate = 2 × B × log₂ L</div>
+            <div class="compare-row"><span class="label">Where</span> B = bandwidth (Hz), L = number of signal levels</div>
+            <div class="compare-row"><span class="label">Tells you</span> How many signal levels to use once you fix the target bit rate</div>
+            <div class="compare-row"><span class="label">Limit</span> No noise assumed — purely theoretical ceiling for a given L</div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Shannon — Noisy Channel</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Formula</span> C = B × log₂(1 + SNR)</div>
+            <div class="compare-row"><span class="label">Where</span> B = bandwidth (Hz), SNR = signal-to-noise ratio</div>
+            <div class="compare-row"><span class="label">Tells you</span> Absolute upper bound regardless of how many levels you use</div>
+            <div class="compare-row"><span class="label">Limit</span> If SNR → 0 (pure noise), C → 0. No data can get through.</div>
+          </div>
+        </div>
+      </div>
+
+      <h4>Practical workflow: use Shannon first, then Nyquist</h4>
+      <div class="callout">
+        Shannon gives the <strong>upper bound on capacity</strong>. Since achieving the absolute maximum is impractical (too sensitive to noise), you pick a lower, realistic target bit rate, then use Nyquist to find the <strong>required number of signal levels</strong> to achieve it.
+      </div>
+
+      <h4>Worked example (from lecture)</h4>
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">Given</span>
+          <span class="vci">B = 1 MHz, SNR = 63</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Shannon upper limit</span>
+          <span class="vci">C = 10⁶ × log₂(1+63) = 10⁶ × log₂(64) = 10⁶ × 6 = <strong>6 Mbps</strong></span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Choose target rate</span>
+          <span class="vci">4 Mbps (safer margin below Shannon limit)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Nyquist for L</span>
+          <span class="vci">4 × 10⁶ = 2 × 10⁶ × log₂ L → log₂ L = 2 → <strong>L = 4 levels</strong></span>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        When SNR is very high, the Shannon formula simplifies to an approximation:<br/>
+        <strong>C ≈ B × (SNR<sub>dB</sub> / 3)</strong>
+      </div>
+    </div>
+
+    <!-- FORMULA SUMMARY -->
+    <div class="section">
+      <div class="section-label">Formula Cheatsheet</div>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Formula</th><th>What it gives</th><th>Condition</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">f = 1/T</td>
+            <td>Frequency from period</td>
+            <td>Periodic signal</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Bits per level = log₂ L</td>
+            <td>Bits encoded per signal element</td>
+            <td>L = number of levels</td>
+          </tr>
+          <tr>
+            <td class="proto-name">BW = f<sub>H</sub> − f<sub>L</sub></td>
+            <td>Signal bandwidth</td>
+            <td>Composite signal</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Bit Length = v × t<sub>bit</sub></td>
+            <td>Physical space occupied by 1 bit</td>
+            <td>v = propagation speed</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Attn<sub>dB</sub> = 10·log₁₀(P₂/P₁)</td>
+            <td>Signal power loss</td>
+            <td>−3 dB = half power</td>
+          </tr>
+          <tr>
+            <td class="proto-name">SNR<sub>dB</sub> = 10·log₁₀(SNR)</td>
+            <td>SNR in decibels</td>
+            <td>SNR = P<sub>sig</sub>/P<sub>noise</sub></td>
+          </tr>
+          <tr>
+            <td class="proto-name">BitRate = 2B·log₂ L</td>
+            <td>Max bit rate, noiseless</td>
+            <td>Nyquist</td>
+          </tr>
+          <tr>
+            <td class="proto-name">C = B·log₂(1 + SNR)</td>
+            <td>Channel capacity upper bound</td>
+            <td>Shannon (noisy channel)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <p><strong>Data vs Signal:</strong> Data is what you want to send; a signal is the EM representation that actually travels through the medium. Both can be analog or digital.</p>
+
+      <p><strong>Signal properties:</strong> Periodic analog signals are characterised by amplitude (strength), frequency (repetition rate), and phase (start offset). Adding signals with different phases yields a composite waveform.</p>
+
+      <p><strong>Bandwidth:</strong> The frequency range a signal occupies. A channel has a finite bandwidth — signals whose bandwidth exceeds the channel's passband get distorted or clipped.</p>
+
+      <p><strong>Signal levels &amp; bit rate:</strong> More voltage levels per signal element = more bits per baud, but also more noise-sensitive. Bit rate calculations are straightforward multiplications once you know samples/sec and bits/sample.</p>
+
+      <p><strong>Transmission impairments:</strong> Attenuation (energy loss — fixed by amplifiers/regenerators), Distortion (phase mismatch in composite signals — caused by different propagation speeds per frequency), and Noise (thermal, induced, crosstalk, impulse).</p>
+
+      <p><strong>SNR:</strong> The ratio of signal power to noise power. High SNR = clean channel. Expressed in dB. Critical for computing capacity limits.</p>
+
+      <p><strong>Nyquist vs Shannon:</strong> Nyquist gives the theoretical max bit rate in a <em>noiseless</em> channel for a given number of signal levels. Shannon gives the absolute capacity ceiling for a <em>noisy</em> channel given SNR. In practice: use Shannon to find the ceiling, pick a safer target below it, use Nyquist to find required signal levels.</p>
+    </div>
+
+  </div>
+</body>
+</html>

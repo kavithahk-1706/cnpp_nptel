@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 51 — ARP, RARP, Proxy ARP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec50.html" class="nav-lec">← prev</a>
+        <a href="lec52.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <div>
+        <span class="lec-tag">Lecture 51</span>
+        <span class="high-badge">HIGH PRIORITY</span>
+      </div>
+      <h1>ARP, RARP &amp; Proxy ARP</h1>
+      <p>Layer 2 address resolution — mapping IP addresses to physical (MAC) addresses, the reverse, and the proxy variant. Packet format, encapsulation, cache mechanics, and four canonical use cases.</p>
+      <a href="https://www.youtube.com/watch?v=PLACEHOLDER_LEC51" class="video-link" target="_blank">▶ Watch Lecture</a>
+    </div>
+
+    <!-- ── 1. Why Address Resolution ── -->
+    <div class="section">
+      <div class="section-label">Motivation</div>
+      <h3>Why IP Alone Is Not Sufficient</h3>
+      <p>Communication between two devices on a network requires physical (hardware) connectivity <em>and</em> knowledge of the destination's physical address. An IP address identifies a device logically at Layer 3, but the data link layer (Layer 2) must deliver frames using MAC addresses. A source that knows only the destination IP address cannot construct a valid Layer 2 frame without first resolving that IP address to a corresponding MAC address.</p>
+      <p>This gap is bridged by the <strong>Address Resolution Protocol (ARP)</strong> and its complement, <strong>Reverse ARP (RARP)</strong>.</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">ARP</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Direction: IP → MAC (logical → physical)</span></div>
+            <div class="compare-row"><span>Use case: Sending a frame to a known IP address when the MAC is unknown.</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">RARP</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Direction: MAC → IP (physical → logical)</span></div>
+            <div class="compare-row"><span>Use case: Diskless/dumb terminals that know their own MAC but need to be assigned an IP at boot time.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 2. Position in TCP/IP Stack ── -->
+    <div class="section">
+      <div class="section-label">Protocol Positioning</div>
+      <h3>Where ARP/RARP Sit in the TCP/IP Stack</h3>
+      <p>ARP and RARP are often described as <strong>companion protocols to IP</strong>. They operate at the boundary between the Network Layer (Layer 3) and the Data Link Layer (Layer 2): they carry IP addresses (a Layer 3 concept) on one side and physical addresses (a Layer 2 concept) on the other. Some literature places them as an interface layer between IP and the MAC sublayer.</p>
+
+      <div class="hourglass">
+        <div class="hg-row hg-wide">Application / Transport</div>
+        <div class="hg-row hg-mid">Network Layer — IP, IGMP, ICMP</div>
+        <div class="hg-row hg-narrow" style="width:50%">ARP / RARP</div>
+        <div class="hg-row hg-mid2">Data Link Layer (MAC)</div>
+        <div class="hg-row hg-wide2">Physical Layer</div>
+      </div>
+    </div>
+
+    <!-- ── 3. ARP Operation ── -->
+    <div class="section">
+      <div class="section-label">Core Mechanism</div>
+      <h3>How ARP Works — Request and Reply</h3>
+      <p>When Host A wishes to send a frame to Host B and knows only B's IP address, ARP proceeds as follows:</p>
+
+      <div class="callout green">
+        <strong>Step 1 — ARP Request (Broadcast):</strong> Host A broadcasts an ARP request onto the local network segment: <em>"Who has IP X.X.X.X? Tell me your MAC address."</em> The destination MAC in the enclosing Ethernet frame is the broadcast address <code>FF:FF:FF:FF:FF:FF</code>.
+      </div>
+      <div class="callout">
+        <strong>Step 2 — ARP Reply (Unicast):</strong> Only the host whose IP matches the query responds. It sends a unicast ARP reply back to Host A containing its MAC address. All other hosts silently discard the broadcast.
+      </div>
+      <div class="callout yellow">
+        <strong>Step 3 — Frame Transmission:</strong> Host A now has both the destination IP and the resolved MAC address. It constructs the Layer 2 frame and transmits it normally.
+      </div>
+
+      <p><strong>Key distinction:</strong> ARP request = broadcast; ARP reply = unicast.</p>
+    </div>
+
+    <!-- ── 4. ARP Packet Format ── -->
+    <div class="section">
+      <div class="section-label">Packet Format — HIGH PRIORITY</div>
+      <h3>ARP Packet Structure</h3>
+      <p>The ARP packet contains the following fields. Memorise the standard values for Ethernet/IPv4.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Size</th>
+            <th>Standard Value / Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="proto-name">Hardware Type</td><td class="port-num">2 bytes</td><td>1 = Ethernet</td></tr>
+          <tr><td class="proto-name">Protocol Type</td><td class="port-num">2 bytes</td><td>0x0800 = IPv4</td></tr>
+          <tr><td class="proto-name">Hardware Length</td><td class="port-num">1 byte</td><td>6 (bytes in a MAC address)</td></tr>
+          <tr><td class="proto-name">Protocol Length</td><td class="port-num">1 byte</td><td>4 (bytes in an IPv4 address)</td></tr>
+          <tr><td class="proto-name">Operation</td><td class="port-num">2 bytes</td><td>1 = Request, 2 = Reply</td></tr>
+          <tr><td class="proto-name">Sender Hardware Address</td><td class="port-num">6 bytes</td><td>MAC of requester / responder</td></tr>
+          <tr><td class="proto-name">Sender Protocol Address</td><td class="port-num">4 bytes</td><td>IP of requester / responder</td></tr>
+          <tr><td class="proto-name">Target Hardware Address</td><td class="port-num">6 bytes</td><td><strong>All 0s in a Request</strong> (unknown); filled in the Reply</td></tr>
+          <tr><td class="proto-name">Target Protocol Address</td><td class="port-num">4 bytes</td><td>IP address being queried</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout pink">
+        <strong>Exam note — Target Hardware Address in requests:</strong> In an ARP request, the target hardware address field is set to all zeros because that is precisely the unknown quantity the request is trying to discover.
+      </div>
+    </div>
+
+    <!-- ── 5. Encapsulation ── -->
+    <div class="section">
+      <div class="section-label">Encapsulation</div>
+      <h3>ARP Inside an Ethernet Frame</h3>
+      <p>The ARP packet is encapsulated as the payload of a standard Ethernet frame. The Ethernet <strong>Type field</strong> is set to <code>0x0806</code> to indicate that the payload contains an ARP message. (Recall: <code>0x0800</code> = IP, <code>0x0806</code> = ARP.)</p>
+      <p>The ARP request uses destination MAC <code>FF:FF:FF:FF:FF:FF</code> (broadcast). The ARP reply uses the actual unicast MAC of the requester as the destination.</p>
+    </div>
+
+    <!-- ── 6. Four Cases ── -->
+    <div class="section">
+      <div class="section-label">Four Cases — HIGH PRIORITY</div>
+      <h3>Four Canonical ARP Scenarios</h3>
+      <p>ARP is used in four distinct forwarding contexts, covering all combinations of source and destination device types:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Case</th>
+            <th>Sender → Receiver</th>
+            <th>Target IP in ARP Request</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">1</td>
+            <td class="proto-name">Host → Host (same network)</td>
+            <td>Destination IP in the datagram</td>
+            <td>Direct delivery; ARP resolves destination MAC on the LAN.</td>
+          </tr>
+          <tr>
+            <td class="port-num">2</td>
+            <td class="proto-name">Host → Router (different network)</td>
+            <td>IP address of the default gateway router</td>
+            <td>Host knows destination is off-LAN; ARP resolves the router's MAC so the frame reaches the gateway.</td>
+          </tr>
+          <tr>
+            <td class="port-num">3</td>
+            <td class="proto-name">Router → Router (inter-network)</td>
+            <td>IP of the next-hop router from the routing table</td>
+            <td>Intermediate hop resolution; ARP runs on each outgoing interface.</td>
+          </tr>
+          <tr>
+            <td class="port-num">4</td>
+            <td class="proto-name">Router → Host (final delivery)</td>
+            <td>Destination IP in the datagram</td>
+            <td>Last hop; ARP resolves the final destination host's MAC on the local segment.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>Router interfaces:</strong> A router with N interfaces has N IP addresses and N MAC addresses (one per NIC). ARP resolution on a router is always performed on the specific interface through which the next hop is reachable.
+      </div>
+    </div>
+
+    <!-- ── 7. Proxy ARP ── -->
+    <div class="section">
+      <div class="section-label">Proxy ARP</div>
+      <h3>Proxy ARP (a.k.a. Promiscuous ARP / ARP Hack)</h3>
+      <p>A Proxy ARP router responds to ARP requests on behalf of hosts that are not on the same physical segment as the requester. When an ARP request arrives for an IP address belonging to a host behind the router, the router replies with its <strong>own MAC address</strong>. The sender then addresses frames to the router's MAC; the router forwards them onward to the actual destination host.</p>
+
+      <div class="callout green">
+        <strong>Key mechanism:</strong> Hosts behind the proxy ARP router are invisible to the requester. As far as the requester is concerned, all those hosts appear to be on the same physical network, reachable via the router's MAC.
+      </div>
+
+      <h4>Technical Definition</h4>
+      <p>Proxy ARP maps a single IP network prefix to one or more physical addresses, effectively allowing the same network address space to be used across more than one physical segment. A router R running Proxy ARP between Networks A and B can use the same network ID for both networks, responding to ARP requests from either side on behalf of the other.</p>
+
+      <h4>How It Works (PPP Example)</h4>
+      <p>Suppose Network A (10.10.1.x/24) is an Ethernet LAN, and Network B (also 10.10.1.x/24) is a PPP-connected segment. Router R runs Proxy ARP. When a host on Network A sends an ARP request for 10.10.1.5 (which is on Network B via PPP), Router R replies with its own MAC address. The host on Network A sends the frame to R's MAC; R then delivers it to 10.10.1.5 over the PPP link. In the ARP tables of hosts on Network A, R's MAC is recorded as the hardware address for all destinations in Network B.</p>
+
+      <h4>Advantages of Proxy ARP</h4>
+      <p>The primary advantage is <strong>simplicity</strong>: hosts on both sides need no special configuration to communicate across the boundary. Adding or removing hosts within a segment does not require updating ARP tables on remote segments, as long as all changes remain within the managed network prefix. Management is centralised at the router. Proxy ARP also naturally restricts broadcast propagation, since the router absorbs broadcast ARP traffic rather than forwarding it onto remote segments.</p>
+
+      <h4>Typical Use Cases</h4>
+      <div class="tag-row">
+        <span class="tag tag-good">Joining broadcast LAN with serial/PPP/VPN links</span>
+        <span class="tag tag-good">Multiple IP addresses from a single LAN</span>
+        <span class="tag tag-good">Firewall intermediation</span>
+        <span class="tag tag-good">Mobile IP scenarios</span>
+      </div>
+    </div>
+
+    <!-- ── 8. ARP Software Modules ── -->
+    <div class="section">
+      <div class="section-label">Implementation</div>
+      <h3>ARP Software Modules</h3>
+      <p>An ARP implementation typically consists of five cooperating software components:</p>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Cache Table</div>
+          <div class="concept-desc">Stores recent IP-to-MAC mappings. Any incoming ARP request is checked against the cache first; a cache hit avoids a network broadcast entirely.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Queues</div>
+          <div class="concept-desc">Packets awaiting resolution of their destination MAC are held in per-destination queues. Once the ARP reply arrives, queued packets are dequeued and forwarded.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Output Module</div>
+          <div class="concept-desc">Receives IP datagrams from the IP layer. Looks up the destination IP in the cache; if resolved, passes the frame to the data link layer; if pending, enqueues the packet; if absent, creates a new cache entry and broadcasts an ARP request.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Input Module</div>
+          <div class="concept-desc">Receives incoming ARP packets (requests and replies). Updates the cache with newly learned mappings and triggers delivery of any waiting packets for that destination.</div>
+        </div>
+      </div>
+      <div class="concept-card" style="margin-top:10px">
+        <div class="concept-title">Cache-Control Module</div>
+        <div class="concept-desc">Performs periodic housekeeping. Decrements timeout counters for all cache entries. Transitions timed-out resolved entries to FREE (flushed). Increments the attempt counter for pending entries; entries exceeding the maximum attempt count are also freed.</div>
+      </div>
+    </div>
+
+    <!-- ── 9. ARP Cache Table ── -->
+    <div class="section">
+      <div class="section-label">Cache Table — HIGH PRIORITY</div>
+      <h3>ARP Cache Table Structure and States</h3>
+      <p>Each entry in the ARP cache table carries the following fields:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="proto-name">State</td><td>R = Resolved (MAC known), P = Pending (ARP request sent, awaiting reply), F = Free (entry flushed/available)</td></tr>
+          <tr><td class="proto-name">Queue</td><td>Index of the queue holding packets awaiting this resolution</td></tr>
+          <tr><td class="proto-name">Attempts</td><td>Number of ARP requests sent for this entry; incremented by cache-control module each cycle</td></tr>
+          <tr><td class="proto-name">Time-Out</td><td>Countdown timer; when it reaches 0, a Resolved entry transitions to Free</td></tr>
+          <tr><td class="proto-name">Protocol Address</td><td>Destination IP address (the key)</td></tr>
+          <tr><td class="proto-name">Hardware Address</td><td>Resolved MAC address (empty while Pending)</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Output Module Decision Logic</h4>
+      <div class="callout green"><strong>Entry found, state = RESOLVED:</strong> Extract the hardware address, send the frame to the data link layer immediately. Cache unchanged.</div>
+      <div class="callout yellow"><strong>Entry found, state = PENDING:</strong> Enqueue the packet. Wait until the ARP reply arrives and the state transitions to RESOLVED.</div>
+      <div class="callout pink"><strong>Entry not found:</strong> Create a new entry with state = PENDING and Attempts = 1. Create a queue for this destination. Enqueue the packet. Broadcast an ARP request.</div>
+
+      <h4>Cache-Control Module Housekeeping (Periodic)</h4>
+      <p>On each periodic tick, the cache-control module decrements timeout values for all RESOLVED entries. Any RESOLVED entry whose timeout reaches zero transitions to FREE (its slot is reclaimed). For each PENDING entry, the Attempts counter is incremented; entries that exceed the maximum retry count transition to FREE. This ensures stale or unresolvable entries do not occupy cache space indefinitely.</p>
+
+      <h4>Worked Example — Cache Evolution</h4>
+      <p>The lecture traces five sequential events to illustrate cache state transitions. The following summarises the logic (refer to the video at timestamps 28:19–32:53 for the full animated table walkthrough, which is the clearest way to follow the evolving table):</p>
+
+      <div class="callout">
+        <strong>Event 1 — Hit on RESOLVED entry (IP 114.5.7.89):</strong> Output module finds a RESOLVED entry; extracts hardware address 457342ACAE32; sends frame; cache unchanged.
+      </div>
+      <div class="callout green">
+        <strong>Event 2 — Miss (IP 116.1.7.22):</strong> Not in cache. New entry added with state P, Attempts = 1, Queue 23. ARP broadcast sent. Packet enqueued.
+      </div>
+      <div class="callout yellow">
+        <strong>Event 3 — ARP Reply received (IP 188.11.8.71):</strong> Input module receives reply. Finds the PENDING entry (queue 18). Updates state to RESOLVED, sets timeout to 900, records the hardware address E345...ACA. Dequeues and delivers all waiting packets.
+      </div>
+      <div class="callout pink">
+        <strong>Event 4 — Periodic housekeeping:</strong> Timeout on RESOLVED entries decremented. One entry whose timeout hits 0 transitions to FREE. PENDING entries have Attempts incremented; the entry for 201.1.56.7 exceeds max attempts and transitions to FREE.
+      </div>
+    </div>
+
+    <!-- ── RARP ── -->
+    <div class="section">
+      <div class="section-label">RARP</div>
+      <h3>Reverse ARP (RARP)</h3>
+      <p>RARP performs the inverse mapping: given a known physical (MAC) address, obtain the corresponding IP address. This is required by diskless or dumb terminals that possess a NIC (and thus a MAC address) but have no stored IP configuration. At boot time, such a device broadcasts a RARP request; a designated <strong>RARP server</strong> on the network responds with the appropriate IP address. RARP was later superseded by BOOTP and then DHCP, which provide richer configuration information.</p>
+    </div>
+
+    <!-- ── Summary ── -->
+    <div class="section">
+      <div class="section-label">Summary</div>
+      <h3>Concept Summary</h3>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">ARP in One Line</div>
+          <div class="concept-desc">Broadcast request (IP → MAC), unicast reply. Result cached to avoid repeated broadcasts. ARP request = operation 1, reply = operation 2.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Proxy ARP in One Line</div>
+          <div class="concept-desc">Router intercepts ARP requests for off-segment hosts and replies with its own MAC, acting as an intermediary. Simplifies host configuration; centralises management.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">ARP Cache in One Line</div>
+          <div class="concept-desc">Lookup table of IP → MAC mappings with state (R/P/F), timeout, and retry tracking. Avoids network broadcasts for recently seen destinations.</div>
+        </div>
+      </div>
+
+      <div class="callout pink" style="margin-top:20px">
+        <strong>Numbers to memorise:</strong> Hardware type Ethernet = 1 · Protocol type IPv4 = 0x0800 · Hardware length = 6 · Protocol length = 4 · Operation: request = 1, reply = 2 · Ethernet type for ARP frame = <strong>0x0806</strong>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

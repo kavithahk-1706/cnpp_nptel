@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 55 — Physical Layer</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec54.html" class="nav-lec">← prev</a>
+        <a href="lec56.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <div>
+        <span class="lec-tag">Lecture 55</span>
+        <span class="med-badge">MEDIUM PRIORITY</span>
+      </div>
+      <h1>Layer 1: Physical Layer</h1>
+      <p>Prof. Soumya Kanti Ghosh &nbsp;·&nbsp; IIT Kharagpur</p>
+      <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ Watch Lecture</a>
+    </div>
+
+    <!-- Overview -->
+    <div class="section">
+      <div class="section-label">Overview</div>
+      <p>This lecture introduces the physical layer — Layer 1 of the OSI model and the bottommost layer of the TCP/IP stack. All upper-layer communication ultimately depends on a physical connection between two endpoints. The lecture covers the role of the physical layer, the distinction between data communications and networking, the analog-digital problem (and how modems solve it), multiplexing, and physical-layer devices: NICs, repeaters, and hubs.</p>
+      <div class="callout yellow">
+        <strong>Note:</strong> This is an introductory lecture. Deeper physical-layer phenomena — signal encoding, multiplexing variants (TDM, FDM), and transmission media — are covered in the lectures that follow.
+      </div>
+    </div>
+
+    <!-- Physical Layer in the Stack -->
+    <div class="section">
+      <div class="section-label">Physical Layer in the OSI Stack</div>
+      <p>The physical layer is responsible for the <strong>transmission of raw binary data through a medium</strong>, whether wired (copper, fibre) or wireless. Every higher layer relies on it: nothing communicates if there is no physical link between the two hops.</p>
+      <div class="stack">
+        <div class="stack-layer layer-app">
+          <span class="layer-name">Application</span>
+          <span class="layer-desc">Network apps</span>
+        </div>
+        <div class="stack-layer layer-trans">
+          <span class="layer-name">Transport</span>
+          <span class="layer-desc">End-to-end delivery</span>
+        </div>
+        <div class="stack-layer layer-net">
+          <span class="layer-name">Network</span>
+          <span class="layer-desc">Routing, packets</span>
+        </div>
+        <div class="stack-layer layer-dl">
+          <span class="layer-name">Data Link</span>
+          <span class="layer-desc">Frames, MAC, error check</span>
+        </div>
+        <div class="stack-layer layer-phys">
+          <span class="layer-name">Physical</span>
+          <span class="layer-desc">Binary transmission through medium</span>
+        </div>
+      </div>
+      <p>In TCP/IP, the physical and data link layers are sometimes merged (the NIC card implements both). In OSI they are kept separate because the physical layer is fundamentally an electronics and communications engineering concern, while the data link layer is a protocol concern.</p>
+    </div>
+
+    <!-- Data Communications vs Networking -->
+    <div class="section">
+      <div class="section-label">Data Communications vs. Networking</div>
+      <p>Two related but distinct disciplines underpin this subject:</p>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Data Communications</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Concerned with reliable, efficient <strong>signal transmission</strong> from one node to another. Topics include signal encoding, transmission media, interfacing with NIC cards, and multiplexing.</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Networking</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Concerned with the <strong>technology, architecture, and protocols</strong> used to interconnect devices. Topics include LANs, WANs, routing, TCP/UDP, and network applications. Assumes the physical medium is already in place.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Communication Model -->
+    <div class="section">
+      <div class="section-label">The Communication Model</div>
+      <p>Any data communication follows the chain:</p>
+      <div class="callout green">
+        <strong>Source</strong> → <strong>Transmitter</strong> → <strong>Transmission System</strong> → <strong>Receiver</strong> → <strong>Destination</strong>
+      </div>
+      <p>In practice the source and transmitter are co-located (e.g., a laptop with its NIC card). The transmission system is the internet, a telecom backbone, or a campus LAN. At the other end the receiver and destination are similarly co-located. For full-duplex communication the path is symmetric in both directions.</p>
+      <h4>Communication Tasks</h4>
+      <p>The complete set of tasks required for a working communication system includes: transmission system utilisation, interfacing, signal generation, synchronisation, exchange management (acknowledgements), error detection and correction, addressing and routing, recovery, message formatting, security, and network management.</p>
+    </div>
+
+    <!-- LAN vs WAN bandwidth note -->
+    <div class="section">
+      <div class="section-label">LAN vs. WAN Bandwidth</div>
+      <p>LAN connectivity (inside a campus or office) is significantly higher than WAN (internet backbone) connectivity. A standard LAN NIC operates at 100 Mbps or 1 Gbps. By contrast, internet router links at 8 Gbps are expensive to provision and maintain. The implication is that the bottleneck for most users is the WAN side, not the local network.</p>
+    </div>
+
+    <!-- Telephone Network -->
+    <div class="section">
+      <div class="section-label">Telephone Network as Backbone</div>
+      <p>The telephone network (PSTN — Public Switched Telephone Network) is the most pervasive communication infrastructure. Telecom operators (telcos) originally built it for voice but have evolved to carry data, multimedia, and mobile traffic. Multiple telcos must interoperate, which requires standardised interfaces between carrier networks.</p>
+      <p>To leverage the existing telecom backbone for data networking, a device's data traffic must be injected into the nearest telco exchange — either directly (wired connection to a campus switch that connects to the backbone) or via a mobile hotspot that uses the cellular data network.</p>
+    </div>
+
+    <!-- Analog vs Digital / Modem -->
+    <div class="section">
+      <div class="section-label">Analog vs. Digital Signals &amp; The Modem</div>
+      <p>End systems generate <strong>digital signals</strong> (binary 1s and 0s). However, most legacy communication paths (telephone lines, early long-distance links) carry <strong>analog signals</strong> — waveforms characterised by amplitude, frequency, and phase. This creates a fundamental mismatch:</p>
+      <div class="callout pink">
+        A digital device needs to push its binary data through a medium that only understands analog signals.
+      </div>
+      <p>The solution is a <strong>modem</strong> — <strong>MO</strong>dulator / <strong>DEM</strong>odulator.</p>
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Modulation (Sender Side)</div>
+          <div class="concept-desc">The modem converts the digital bit stream into an analog signal suitable for transmission over the telephone backbone (POTS — Plain Old Telephone Service).</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Demodulation (Receiver Side)</div>
+          <div class="concept-desc">The modem at the receiving end converts the incoming analog signal back into a digital bit stream and delivers it to the end system.</div>
+        </div>
+      </div>
+      <p>Two communicating systems each require a modem. The telephone network (POTS) carries the analog signal between them. This was the standard mechanism for dial-up internet access.</p>
+    </div>
+
+    <!-- Multiplexing -->
+    <div class="section">
+      <div class="section-label">Multiplexing</div>
+      <p>When multiple systems need to share a single physical medium simultaneously, individual dedicated lines become impractical. A <strong>multiplexer (MUX)</strong> allows multiple signals to be carried across a single physical medium by combining them before transmission and separating them at the other end (demultiplexing).</p>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Baseband</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Uses <strong>digital signalling</strong> over a single wire (electrical pulses or light). The signal occupies the <strong>entire bandwidth</strong> of the medium — only one signal at a time. Bidirectional communication over a single cable is possible but sending and receiving cannot occur simultaneously on the same wire. Multiplexing technique: <strong>TDM (Time Division Multiplexing)</strong>.</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Broadband</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Uses <strong>analog signals</strong> (optical or electromagnetic) over <strong>multiple transmission frequencies</strong>. Multiple signals can be carried simultaneously on different carrier frequencies. For bidirectional use, the medium is split into two channels (or two cables). Multiplexing technique: <strong>FDM (Frequency Division Multiplexing)</strong>.</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="callout">Detailed treatment of TDM and FDM variants is deferred to subsequent lectures.</div>
+    </div>
+
+    <!-- NICs, Repeaters, Hubs -->
+    <div class="section">
+      <div class="section-label">Physical-Layer Devices: NIC, Repeater, Hub</div>
+
+      <h3>Network Interface Card (NIC)</h3>
+      <p>The NIC implements both the data link layer (MAC) and the physical layer. It provides the hardware interface to the transmission medium — RJ-45 Ethernet, wireless (Wi-Fi), coaxial, or fibre. Every device that connects to a network requires a NIC.</p>
+      <p>To directly connect two computers without any intermediate device, each machine requires a NIC and the two are connected with a <strong>crossover cable</strong> — a cable in which the transmit pins of one end are wired to the receive pins of the other, and vice versa.</p>
+
+      <h3>Distance Limit and Repeaters</h3>
+      <p>An Ethernet cable (RJ-45) has a practical maximum length of approximately <strong>100 metres (300 feet)</strong>. Beyond this distance, signal attenuation becomes too severe to recover reliably. A <strong>repeater</strong> is a Layer 1 device that regenerates (amplifies and re-transmits) the signal, effectively resetting the distance limit at each repeater stage.</p>
+
+      <h3>Hub (Multi-Port Repeater)</h3>
+      <p>A <strong>hub</strong> is conceptually a multi-port repeater. Any signal arriving on one port is regenerated and forwarded out of all other ports. All devices connected to a hub share a single <strong>collision domain</strong>: simultaneous transmissions collide, both signals are corrupted, and both must be retransmitted.</p>
+      <div class="callout pink">
+        <strong>Bandwidth degradation with hubs:</strong> On a 4-port hub operating at 100 Mbps, if all four stations transmit simultaneously, the effective throughput per station degrades towards 25 Mbps in the worst case, because the full bandwidth must be shared across all ports in the same collision domain.
+      </div>
+      <p>Higher-layer devices (Layer 2 switches, Layer 3 routers) subsume all physical-layer functionality but additionally provide collision isolation and routing. The tradeoff is cost: switches are significantly more expensive than hubs, and routers more expensive than switches. Hubs are appropriate only for small or legacy networks.</p>
+
+      <h4>Device Hierarchy Summary</h4>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>Layer</th>
+            <th>Collision Domain</th>
+            <th>Broadcast Domain</th>
+            <th>Signal Regen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Hub</td>
+            <td><span class="transport tcp-badge">L1</span></td>
+            <td>All ports share one</td>
+            <td>All ports share one</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Switch</td>
+            <td><span class="transport both-badge">L2</span></td>
+            <td>Per port</td>
+            <td>All ports share one</td>
+            <td>Yes</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Router</td>
+            <td><span class="transport udp-badge">L3</span></td>
+            <td>Per port</td>
+            <td>Per interface</td>
+            <td>Yes</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Summary -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+      <div class="callout green">
+        <strong>Physical layer</strong> — transmits raw bits over a medium; it is the foundation every upper layer depends on.
+      </div>
+      <div class="callout">
+        <strong>Modem</strong> — bridges the digital world of computers and the analog world of telephone infrastructure via modulation (D→A) and demodulation (A→D). Required at both ends of a POTS-based data link.
+      </div>
+      <div class="callout">
+        <strong>Multiplexing</strong> — allows multiple signals to share one physical medium. Baseband uses TDM (digital, one signal at a time); broadband uses FDM (analog, multiple simultaneous carrier frequencies).
+      </div>
+      <div class="callout pink">
+        <strong>Hub</strong> — multi-port repeater; entire hub is a single collision domain; effective bandwidth per device degrades linearly with the number of active ports.
+      </div>
+      <div class="callout yellow">
+        <strong>Crossover cable</strong> — required for direct NIC-to-NIC connection between two computers; swaps transmit/receive pin pairs so each NIC's TX connects to the other's RX.
+      </div>
+      <div class="callout yellow">
+        <strong>100 m limit</strong> — maximum reliable Ethernet cable run before signal degradation requires a repeater.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 59 — Network Security II</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec58.html" class="nav-lec">← prev</a>
+        <a href="lec60.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <div>
+        <span class="lec-tag">Lecture 59</span>
+        <span class="med-badge">MEDIUM PRIORITY</span>
+      </div>
+      <h1>Network Security – II</h1>
+      <p>Security policy steps (recap) · Firewall, IDS, Honeypot · Reconnaissance · Vulnerability Scanning · Penetration Testing · Forensics · Proxy Server · NAT</p>
+      <a href="https://www.youtube.com/watch?v=..." class="video-link">▶ Watch Lecture</a>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 1 — RECAP: SECURITY POLICY STEPS
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Overview — The Six-Step Security Framework</div>
+      <p>Network security is not a one-time activity; it must be executed on a routine basis because both the system and the attack landscape evolve continuously. The course organises the process into six sequential steps.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>Name</th>
+            <th>Core Activity</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="port-num">1</td><td class="proto-name">Determine Security Policy</td><td>Define usage policies, privacy policies, update schedules, DMZ placement, firewall rules.</td></tr>
+          <tr><td class="port-num">2</td><td class="proto-name">Implement Security Policy</td><td>Install firewalls (iptables), configure IDSes (snort), deploy honeypots.</td></tr>
+          <tr><td class="port-num">3</td><td class="proto-name">Reconnaissance</td><td>Learn the network: IPs, key servers, running services, known vulnerabilities.</td></tr>
+          <tr><td class="port-num">4</td><td class="proto-name">Vulnerability Scanning</td><td>Automated scanning with tools such as Nessus; produce risk reports.</td></tr>
+          <tr><td class="port-num">5</td><td class="proto-name">Penetration Testing</td><td>Ethically exploit identified vulnerabilities to evaluate real-world attack resilience.</td></tr>
+          <tr><td class="port-num">6</td><td class="proto-name">Post-Attack Investigation</td><td>Forensic analysis of compromised hosts; preserve chain of evidence for legal proceedings.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 2 — STEP 2: IMPLEMENTATION TOOLS
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Step 2 — Implementation Tools</div>
+
+      <h3>Firewall</h3>
+      <p>A firewall applies filtering rules to all packets passing through it. Three major types exist.</p>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Packet Filter</div>
+          <div class="concept-desc">Filters packets based on destination IP, port, or protocol. Stateless — examines each packet independently.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Stateful Firewall</div>
+          <div class="concept-desc">Tracks ongoing TCP sessions. Ensures that out-of-session packets (packets that do not belong to an established connection) are discarded.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Application Proxy</div>
+          <div class="concept-desc">Acts as a proxy for a specific application. Inspects all layers for malicious data — the deepest form of inspection.</div>
+        </div>
+      </div>
+      <div class="callout yellow">
+        <strong>Default policy for incoming packets:</strong> Drop by default. Rules are then written to permit specific traffic. Rules for outgoing packets are optional and depend on organisational policy.
+      </div>
+
+      <h3>Intrusion Detection System (IDS)</h3>
+      <p>An IDS scans incoming messages and raises alerts when suspected scan or attack activity is detected. It operates <strong>outside</strong> the firewall (in the DMZ region or on a shared hub/broadcast domain) so that it can observe raw attack traffic before it is filtered. A widely used free IDS is <strong>Snort</strong>, available on multiple platforms. Most IDSes send alerts to log files; serious events can trigger paging, email, or telephone alerts.</p>
+
+      <h3>Honeypot / Honeynet</h3>
+      <p>A honeypot simulates a decoy host (or network) with exposed services, intentionally attracting attackers. The goal is to learn the <strong>signatures of attacks</strong>, which are then used to update the IDS knowledge base. A collection of interconnected honeypots forms a <strong>honeynet</strong>, which can be shared across organisations. Honeypots are especially valuable in large installations where understanding the attacker's methodology is strategically important.</p>
+
+      <h3>Network Architecture (DMZ)</h3>
+      <p>A typical secure internal network uses a <strong>Demilitarised Zone (DMZ)</strong> to hold publicly accessible servers (e.g., web servers) while protecting the internal network behind an additional firewall. The architecture from outer to inner is:</p>
+      <div class="callout">
+        Internet → Router → Hub (shared domain, IDS monitors here) → Firewall → Switch → DMZ (external servers) and inner Firewall/NAT → Internal Network
+      </div>
+      <p>The IDS is placed on the hub side of the outer firewall so it can observe all incoming attack traffic. The inner firewall protects the private internal network from both the DMZ and the internet.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 3 — STEPS 3–4: RECON & SCANNING
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Steps 3 &amp; 4 — Reconnaissance and Vulnerability Scanning</div>
+
+      <h3>Step 3: Reconnaissance</h3>
+      <p>Before an attack (or a defensive assessment), the network must be surveyed to identify: all host IP addresses, key servers and the critical data they hold, services running on those hosts, and known vulnerabilities in those services. Reconnaissance takes two forms.</p>
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Passive Reconnaissance</div>
+          <div class="interface-desc">Observes existing network traffic without injecting any packets. Undetectable by an IDS. Examples include traffic sniffing and examining publicly available DNS records.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Active Reconnaissance</div>
+          <div class="interface-desc">Actively probes the target network (e.g., port scans, ping sweeps). Detectable by an IDS. Yields more precise information but risks alerting the defender.</div>
+        </div>
+      </div>
+
+      <h3>Step 4: Vulnerability Scanning</h3>
+      <p>Armed with a list of hosts and services, automated scanners probe each service for known vulnerabilities. Scanners fall into two categories.</p>
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Detection Scanners (e.g., Nessus)</div>
+          <div class="interface-desc">Detect vulnerabilities and produce a risk report. New vulnerabilities are supported by installing plug-ins written in the Nessus Attack Scripting Language (NASL). Updatable and extensible.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Exploitation Frameworks (e.g., Metasploit)</div>
+          <div class="interface-desc">Allow the tester to select a payload and actively exploit a detected vulnerability (e.g., obtain a root shell). The payload is the code that executes once the exploit succeeds.</div>
+        </div>
+      </div>
+      <div class="callout yellow">
+        <strong>Zero-day exploits</strong> are vulnerabilities for which no patch exists yet. They are particularly dangerous because even a fully up-to-date system is vulnerable until a patch is released.
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 4 — STEP 5: PENETRATION TESTING
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Step 5 — Penetration Testing</div>
+      <p>Penetration testing (also called a <strong>tiger team attack</strong> or <strong>red team attack</strong>) is the method of evaluating the real-world strength of all security controls by simulating a malicious attacker. Its goal is to <em>violate</em> the site security policy — not to destroy the system, but to reveal whether it can be breached.</p>
+
+      <div class="callout pink">
+        Penetration testing is <strong>not</strong> a replacement for careful design and structured testing. It is a supplementary methodology applied once the system is in place, and it examines both procedural/operational controls and technological controls.
+      </div>
+
+      <h3>Penetration Test Methodology (Cyclic Loop)</h3>
+      <p>The process is iterative, not linear. Each pass through the loop can reveal new targets within the already-compromised system.</p>
+      <div class="callout green">
+        Information Gathering &amp; Reconnaissance → Scanning &amp; Enumeration → Vulnerability Identification → Exploitation (via exploit database) → Gain Access → Escalation &amp; Advancement → Start to Exploit Other Targets → (loop back to Information Gathering)
+      </div>
+
+      <h3>Penetration Testing Tools</h3>
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Proprietary Tools</div>
+          <div class="interface-desc">Expensive; may contain backdoors; inextensible; no access to source code; not easily adaptable to novel scenarios.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Public Domain Tools</div>
+          <div class="interface-desc">Free and generally effective, but other parties also know them. Not fully integrated or automated. Organisations often need to build custom, proprietary frameworks on top of them.</div>
+        </div>
+      </div>
+
+      <h3>System Vulnerability</h3>
+      <p>A vulnerability is a hole or weakness arising from a design flaw, an implementation bug, or an integration flaw in an application. Common types include SQL injection and buffer overflow. The formal definition of penetration testing is: the method of evaluating the vulnerability of a computer system or network by simulating the attack of a malicious hacker, carried out in a non-destructive (ethical) manner.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 5 — STEP 6: POST-ATTACK & VULN ASSESSMENT
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Steps 6 &amp; Ongoing — Post-Attack Investigation and Vulnerability Assessment</div>
+
+      <h3>Step 6: Post-Attack Investigation (Forensics)</h3>
+      <p>After a confirmed attack, a forensic investigation must be conducted. This process is heavily guided by law and varies between organisations (academic vs. financial organisations have different obligations). Key principles include:</p>
+      <div class="callout">
+        <strong>Retain chain of evidence:</strong> The primary evidence is the data on the compromised host. Log files hold the attacker's footsteps and fingerprints. Every minute of activity on the host must be accounted for. For legal reasons, a low-level copy of the disk must be examined — the original must not be modified. This is especially critical for commercial organisations who may face litigation.
+      </div>
+      <p>Post-attack investigation is normally conducted by a third party to maintain objectivity and legal credibility.</p>
+
+      <h3>Ongoing: Vulnerability Assessment</h3>
+      <p>Modern enterprises are entirely IT-enabled. Therefore, proactive self-security through vulnerability assessment is mandatory, not optional. The three main components are: <strong>Content-aware Intrusion Prevention Systems (IPS)</strong>, <strong>file system scanning</strong>, and <strong>penetration testing</strong>. These must be repeated on a routine basis because both the system configuration and the attack landscape change over time.</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 6 — PROXY SERVER
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Proxy Server, NAT, and Firewall</div>
+      <p>Proxy servers, NAT, and firewalls are common network components that were not primarily designed for security, but each provides security benefits as a side effect of its primary function.</p>
+
+      <h3>Proxy Server</h3>
+      <p>A proxy server is an intermediary that acts on behalf of clients. It <strong>acts as a server</strong> when communicating with a client, and <strong>acts as a client</strong> when communicating with the real server. The most commonly used HTTP proxy is <strong>Squid</strong>, available on all platforms.</p>
+
+      <h4>Location</h4>
+      <p>The proxy sits between all user agents (browsers) and the origin server. It holds an <strong>Access Control List (ACL)</strong> defining which requests are permitted, and a <strong>cache</strong> of previously fetched responses.</p>
+
+      <h4>Primary Purposes</h4>
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Performance (Caching)</div>
+          <div class="concept-desc">Stores results of previous requests. If the same resource is requested again, the proxy serves it from cache — conserving bandwidth and reducing latency significantly for a group of users.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Request Filtering (Access Control)</div>
+          <div class="concept-desc">Allows or denies access based on destination URL, content strings within pages, or file type (e.g., blocking video files). Application-layer proxies can inspect packet payloads for content-based filtering.</div>
+        </div>
+      </div>
+
+      <h4>Anonymous Proxy</h4>
+      <p>An anonymous proxy hides the user's real IP address. All requests to external servers originate with the proxy's IP address instead of the client's. This is useful for group subscriptions (e.g., institutional access to IEEE journals or digital libraries), where authentication is based on the proxy's registered IP rather than individual client IPs.</p>
+
+      <h4>Functions of an HTTP Proxy (Summary)</h4>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Request Forwarding</div>
+          <div class="concept-desc">Primary function. Intercepts all outgoing requests; forwards to real server only if cache miss. Acts as a rudimentary firewall.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Access Control</div>
+          <div class="concept-desc">Allows or denies access based on content and location. Application-layer proxies can open packets up to Layer 7 to inspect payload.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Cache Management</div>
+          <div class="concept-desc">Efficient utilisation of bandwidth. Faster response for repeated requests served directly from cache.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 7 — NAT
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Network Address Translator (NAT)</div>
+      <p>NAT (standardised in <strong>RFC 1631</strong>) allows a single device (a router or a dedicated NAT box) to act as the agent between a public network (the internet) and a private network (the LAN). It maps one set of IP addresses (private, non-routable) to another set (public, routable), enabling many internal hosts to share a single public IP.</p>
+
+      <h3>Address Translation Table (ATT)</h3>
+      <p>The NAT device maintains an <strong>Address Translation Table (ATT)</strong> that maps each internal host's private IP and source port to a corresponding public IP and NAT port number. Simultaneous connections from multiple internal hosts are distinguished by different port numbers.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Source Computer</th>
+            <th>Source IP</th>
+            <th>Source Port</th>
+            <th>NAT IP Address</th>
+            <th>NAT Port</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="proto-name">A</td><td class="port-num">10.5.17.112</td><td>500</td><td class="port-num">203.11.16.5</td><td>1</td></tr>
+          <tr><td class="proto-name">B</td><td class="port-num">10.5.17.85</td><td>75</td><td class="port-num">203.11.16.5</td><td>2</td></tr>
+          <tr><td class="proto-name">C</td><td class="port-num">10.23.10.5</td><td>2480</td><td class="port-num">203.11.16.5</td><td>3</td></tr>
+          <tr><td class="proto-name">D</td><td class="port-num">10.22.5.118</td><td>1120</td><td class="port-num">203.11.16.5</td><td>4</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Capability Limit</h3>
+      <p>The maximum number of concurrent translations is primarily limited by the memory available to store the ATT. Each ATT entry occupies approximately 160 bits. A NAT device with 8 MB of memory can support approximately <strong>8 × 1024 × 1024 × 8 / 160 ≈ 4,19,000 concurrent translations</strong> — sufficient for any typical organisation.</p>
+
+      <h3>Main Uses of NAT</h3>
+      <div class="tag-row">
+        <span class="tag tag-good">IP address pooling</span>
+        <span class="tag tag-good">ISP migration support</span>
+        <span class="tag tag-good">IP masquerading</span>
+        <span class="tag tag-good">Server load balancing</span>
+      </div>
+      <p>When an organisation changes its ISP and thus its public IP block, internal private IP addresses remain unchanged — only the NAT mapping is updated. This greatly simplifies network administration.</p>
+
+      <h3>Concerns About NAT</h3>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Performance Overhead</div>
+          <div class="concept-desc">Modifying the IP header requires recalculation of the IP checksum. Modifying the port number requires recalculation of the TCP checksum. This introduces a processing overhead at every packet.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Fragmentation Issues</div>
+          <div class="concept-desc">If a datagram is fragmented before reaching the NAT device, each fragment must not be assigned a different IP or port — all fragments of the same datagram must be treated as a unit. Handling this correctly requires additional logic.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">End-to-End Connectivity</div>
+          <div class="concept-desc">NAT destroys universal end-to-end reachability. A public internet host often cannot initiate a connection to a host inside a private network. This is a fundamental architectural violation of the internet's original design. Communication between two hosts each behind NAT requires two translation hops.</div>
+        </div>
+      </div>
+      <div class="callout pink">
+        <strong>IP addresses in application payloads:</strong> Applications that embed IP addresses in their payload data (e.g., FTP active mode, SIP) do not work correctly across a NAT boundary, because the NAT only rewrites the IP header — not the payload. Some advanced NAT devices perform <strong>Application Layer Gateway (ALG)</strong> inspection to handle this, translating addresses found inside the payload as well.
+      </div>
+
+      <h3>Security Benefit of NAT</h3>
+      <p>NAT automatically creates an implicit firewall between the internal and external networks. Since the ATT only contains entries for connections <strong>initiated from within</strong> the private network, an outside host cannot directly initiate a connection to any internal host. Inbound connections to internal hosts require configuring <strong>static NAT mappings</strong> (port forwarding).</p>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 8 — NAT vs PROXY
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">NAT vs. Proxy — Key Distinction</div>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">NAT</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Layer</span> Layer 3 (Network) — translates IP addresses</div>
+            <div class="compare-row"><span class="label">Transparency</span> Transparent to both source and destination hosts</div>
+            <div class="compare-row"><span class="label">Awareness</span> Neither endpoint is aware of NAT's presence</div>
+            <div class="compare-row"><span class="label">Scope</span> Operates at IP + port level only</div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Proxy Server</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Layer</span> Layer 4+ (Transport and above) — operates at TCP/application level</div>
+            <div class="compare-row"><span class="label">Transparency</span> Not always transparent — client may need to be configured to use the proxy</div>
+            <div class="compare-row"><span class="label">Awareness</span> Client is typically aware it is communicating through a proxy</div>
+            <div class="compare-row"><span class="label">Scope</span> Can inspect and filter application-layer payload content</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         SECTION 9 — CONCEPT SUMMARY
+    ══════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+      <div class="callout green">
+        <strong>Security Policy (Step 1):</strong> A full security roadmap covering usage policies, user training, privacy, DMZ placement, firewall rules, and IDS deployment.
+      </div>
+      <div class="callout green">
+        <strong>Firewall types:</strong> Packet filter (IP/port/protocol) → Stateful (session tracking) → Application proxy (payload inspection). Progressively more expensive and powerful.
+      </div>
+      <div class="callout green">
+        <strong>IDS vs. Honeypot:</strong> IDS detects attacks reactively. Honeypot lures attackers to a decoy to learn their techniques proactively.
+      </div>
+      <div class="callout green">
+        <strong>Reconnaissance:</strong> Passive (undetectable, observes traffic) vs. Active (detectable, probes the network).
+      </div>
+      <div class="callout green">
+        <strong>Penetration testing:</strong> Ethical, non-destructive simulation of a real attack. Tests both technology and procedure. Not a substitute for good design. Also called tiger team / red team attack.
+      </div>
+      <div class="callout green">
+        <strong>Proxy purposes:</strong> Performance (caching) + request filtering (access control) + anonymity.
+      </div>
+      <div class="callout green">
+        <strong>NAT:</strong> Maps private IPs to a public IP using an ATT. Provides implicit inbound firewall. Breaks end-to-end connectivity. Layer 3. Proxy is Layer 4+.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

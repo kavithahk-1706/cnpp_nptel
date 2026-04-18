@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 52 — ARP / RARP / BOOTP / DHCP (Contd.)</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec51.html" class="nav-lec">← prev</a>
+        <a href="lec53.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 52</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>ARP / RARP / BOOTP / DHCP (Contd.)</h1>
+      <p>Continuation of companion protocols to the data link layer — covering RARP, BOOTP, and DHCP in detail, including packet formats, operational flows, and lease management.</p>
+      <a href="https://www.youtube.com/watch?v=placeholder" class="video-link" target="_blank">▶ Watch Lecture</a>
+    </div>
+
+    <!-- PROTOCOL EVOLUTION -->
+    <div class="section">
+      <div class="section-label">Protocol Evolution</div>
+      <p>These protocols sit at the boundary between the network layer (IP) and the data link layer (MAC). They collectively solve the problem of bootstrapping a host's network identity from nothing but a hardware address.</p>
+
+      <div class="stack">
+        <div class="stack-layer layer-app">
+          <span class="layer-name">DHCP</span>
+          <span class="layer-desc">Full dynamic config — current standard</span>
+        </div>
+        <div class="stack-layer layer-trans">
+          <span class="layer-name">BOOTP</span>
+          <span class="layer-desc">UDP/IP — richer config than RARP</span>
+        </div>
+        <div class="stack-layer layer-net">
+          <span class="layer-name">RARP</span>
+          <span class="layer-desc">MAC → IP only; data link layer; LAN-only</span>
+        </div>
+        <div class="stack-layer layer-dl">
+          <span class="layer-name">ARP</span>
+          <span class="layer-desc">IP → MAC (previous lecture)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RARP -->
+    <div class="section">
+      <div class="section-label">RARP — Reverse Address Resolution Protocol</div>
+      <h3>What it does</h3>
+      <p>RARP performs the reverse mapping of ARP: given a known <strong>physical (MAC) address</strong>, resolve it to a <strong>logical (IP) address</strong>. This is primarily needed by <strong>diskless / thin-client workstations</strong> that have no persistent storage to remember their IP configuration across reboots.</p>
+
+      <div class="callout green">
+        <strong>ARP:</strong> IP → MAC &nbsp;|&nbsp; <strong>RARP:</strong> MAC → IP
+      </div>
+
+      <h3>Operation</h3>
+      <p>The thin client broadcasts a RARP request announcing its MAC address. A <strong>RARP server</strong> on the network holds a static MAC-to-IP mapping table. On finding a match, it replies <strong>unicast</strong> directly back to the requesting machine with the assigned IP.</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">a.</span>
+          <span class="arrow">→</span>
+          <span class="vci">RARP Request — broadcast (MAC known, IP = ?)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">b.</span>
+          <span class="arrow">←</span>
+          <span class="vci">RARP Reply — unicast (IP filled in by server)</span>
+        </div>
+      </div>
+
+      <h3>RARP Packet Format <a class="ts" href="#" title="Refer Slide Time: 06:37">06:37</a></h3>
+      <p>The packet format mirrors ARP. Key difference in field population between request and reply:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>In Request</th>
+            <th>In Reply</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Operation</td>
+            <td>3 (Request)</td>
+            <td>4 (Reply)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Sender Hardware Address</td>
+            <td class="port-num">Known (6 bytes, e.g. Ethernet)</td>
+            <td class="port-num">Known</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Sender Protocol (IP) Address</td>
+            <td>Unknown — not filled</td>
+            <td class="port-num">Filled by server</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Target Hardware Address</td>
+            <td class="port-num">Known (server's MAC)</td>
+            <td class="port-num">Known</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Target Protocol Address</td>
+            <td class="port-num">Known (server's IP)</td>
+            <td class="port-num">Known</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Encapsulation</h3>
+      <p>RARP packets are encapsulated directly in Ethernet frames. The Ethernet Type field is set to <strong>0x8035</strong> to identify RARP payload.</p>
+
+      <h3>Limitations of RARP</h3>
+      <p>RARP only delivers an IP address. A booting host also requires subnet mask, default gateway address, and DNS server addresses to fully participate in the network. RARP cannot provide these — leading to the development of BOOTP, and later DHCP.</p>
+    </div>
+
+    <!-- BOOTP -->
+    <div class="section">
+      <div class="section-label">BOOTP — Bootstrap Protocol</div>
+      <h3>Purpose</h3>
+      <p>BOOTP addresses RARP's limitations by operating over <strong>UDP/IP</strong> (not raw Ethernet) and providing a richer set of configuration parameters at boot time. It runs at the application layer, relying on UDP transport.</p>
+
+      <div class="callout">
+        BOOTP provides three services: (1) IP address assignment, (2) detection of the IP address of the serving machine, (3) the name of a boot file to be loaded and executed on the client.
+      </div>
+
+      <h3>Key Properties</h3>
+      <div class="tag-row">
+        <span class="tag tag-good">UDP-based (not raw L2)</span>
+        <span class="tag tag-good">Never fragmented</span>
+        <span class="tag tag-good">Richer config than RARP</span>
+        <span class="tag tag-bad">Static MAC→IP table (no dynamic pools)</span>
+        <span class="tag tag-bad">LAN scope only (without relay)</span>
+      </div>
+
+      <h3>Well-Known Port Numbers</h3>
+      <table class="port-table">
+        <thead>
+          <tr><th>Entity</th><th>Port</th><th>Transport</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">BOOTP Server</td>
+            <td class="port-num">67</td>
+            <td><span class="transport udp-badge">UDP</span></td>
+          </tr>
+          <tr>
+            <td class="proto-name">BOOTP Client</td>
+            <td class="port-num">68</td>
+            <td><span class="transport udp-badge">UDP</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Process <a class="ts" href="#" title="Refer Slide Time: 10:37">10:37</a></h3>
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">1.</span>
+          <span class="arrow">→</span>
+          <span class="vci">Client broadcasts BOOTREQUEST containing its MAC address (SP:68, DP:67, SA:all-0s, DA:all-1s)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">2.</span>
+          <span class="arrow">~</span>
+          <span class="vci">Client waits; retransmits if no response within timeout</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">3.</span>
+          <span class="arrow">←</span>
+          <span class="vci">Server responds with BOOTREPLY (SP:67, DP:68, SA:server unicast, DA:all-1s or client unicast)</span>
+        </div>
+      </div>
+
+      <h3>BOOTP Packet Format <a class="ts" href="#" title="Refer Slide Time: 12:46">12:46</a></h3>
+      <table class="port-table">
+        <thead>
+          <tr><th>Field</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="proto-name">Operation Code (8b)</td><td>1 = Boot Request, 2 = Boot Reply</td></tr>
+          <tr><td class="proto-name">Hardware Type (8b)</td><td>1=Ethernet, 2=Exp.Ethernet, 15=Frame Relay, 19=ATM</td></tr>
+          <tr><td class="proto-name">Hardware Length (8b)</td><td>Length of hardware address (6 for Ethernet)</td></tr>
+          <tr><td class="proto-name">Hop Count (8b)</td><td>Used by relay agents</td></tr>
+          <tr><td class="proto-name">Transaction ID (32b)</td><td>Matches requests to replies</td></tr>
+          <tr><td class="proto-name">Number of Seconds (16b)</td><td>Seconds since client began boot process</td></tr>
+          <tr><td class="proto-name">Client IP Address</td><td>Filled if client knows it; 0 otherwise</td></tr>
+          <tr><td class="proto-name">Your IP Address</td><td>IP assigned by server</td></tr>
+          <tr><td class="proto-name">Server IP Address</td><td>IP of responding BOOTP server</td></tr>
+          <tr><td class="proto-name">Gateway IP Address</td><td>Default router</td></tr>
+          <tr><td class="proto-name">Client Hardware Address (16B)</td><td>MAC of client</td></tr>
+          <tr><td class="proto-name">Server Name (64B)</td><td>Optional hostname of server</td></tr>
+          <tr><td class="proto-name">Boot File Name (128B)</td><td>File to load and execute at client</td></tr>
+          <tr><td class="proto-name">Options</td><td>Variable-length additional config</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout yellow">
+        <strong>Note:</strong> BOOTP assumes packets are never fragmented — the entire response arrives in a single unfragmented UDP datagram.
+      </div>
+
+      <p>BOOTP became the direct predecessor and basis for DHCP. Its extensions and limitations motivated DHCP's design.</p>
+    </div>
+
+    <!-- DHCP -->
+    <div class="section">
+      <div class="section-label">DHCP — Dynamic Host Configuration Protocol</div>
+      <h3>Purpose and Motivation</h3>
+      <p>DHCP supersedes RARP and BOOTP as the standard for dynamic network configuration. Unlike BOOTP's static MAC→IP table, DHCP maintains <strong>pools (scopes) of IP addresses</strong> and allocates them dynamically on demand. It is not limited to diskless clients — virtually all modern networked devices use DHCP for configuration at startup.</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">What DHCP provides</div>
+          <div class="proto-names">IP address · Subnet mask · Default gateway · DNS server(s) · Lease duration</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Transport</div>
+          <div class="proto-names">UDP — port 67 (server) / port 68 (client) — same as BOOTP</div>
+        </div>
+      </div>
+
+      <h3>Key Concept: IP Address Leasing</h3>
+      <p>DHCP does <strong>not</strong> assign addresses permanently. It <strong>leases</strong> an address for a configurable time period controlled by the administrator. When the lease expires, the address returns to the pool unless the client renews it. This allows fine-grained IP address management across large networks.</p>
+
+      <div class="callout pink">
+        <strong>DHCP Scope:</strong> The administrator-defined pool of IP addresses available for allocation on a given subnet. Not all addresses in the scope are necessarily handed out simultaneously.
+      </div>
+
+      <h3>DHCP Message Sequence (Initial Binding) <a class="ts" href="#" title="Refer Slide Time: 29:34">29:34</a></h3>
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">1. DHCPDISCOVER</span>
+          <span class="arrow">→</span>
+          <span class="vci">Client broadcasts to find available DHCP servers (SP:68, DP:67, SA:0.0.0.0, DA:255.255.255.255)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">2. DHCPOFFER</span>
+          <span class="arrow">←</span>
+          <span class="vci">One or more servers offer an IP address and config parameters</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">3. DHCPREQUEST</span>
+          <span class="arrow">→</span>
+          <span class="vci">Client selects one server, broadcasts request for the offered address (notifies rejected servers)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">4. DHCPACK</span>
+          <span class="arrow">←</span>
+          <span class="vci">Server confirms; client binds the IP and full network configuration</span>
+        </div>
+      </div>
+
+      <h3>Lease Renewal and Rebinding State Machine <a class="ts" href="#" title="Refer Slide Time: 23:20">23:20</a></h3>
+      <p>After binding, the client manages its lease autonomously through three renewal thresholds:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Lease Time Elapsed</th><th>Client Action</th><th>Server ACK</th><th>Server NACK / No Response</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">50%</td>
+            <td>Sends DHCPREQUEST (unicast to original server) — <strong>Renewing state</strong></td>
+            <td>DHCPACK → new lease starts, return to Bound</td>
+            <td>No response → wait until 87.5%</td>
+          </tr>
+          <tr>
+            <td class="port-num">87.5%</td>
+            <td>Sends DHCPREQUEST (broadcast) — <strong>Rebinding state</strong></td>
+            <td>DHCPACK → bind again with new lease</td>
+            <td>DHCPNACK → client must restart from DHCPDISCOVER</td>
+          </tr>
+          <tr>
+            <td class="port-num">100% (expired)</td>
+            <td>Lease expired — must release address</td>
+            <td>—</td>
+            <td>Returns to Initializing state</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout yellow">
+        <strong>Lease cancellation:</strong> A client can also voluntarily release its address early by sending <strong>DHCPRELEASE</strong>, which returns the IP to the pool and resets the client to the Initializing state.
+      </div>
+
+      <h3>DHCP State Diagram Summary</h3>
+      <div class="impl-stack">
+        <div class="impl-row">
+          <div class="impl-layer impl-app">Initializing</div>
+          <div class="impl-impl">Boot / DHCPNACK / lease cancelled</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-trans">Selecting</div>
+          <div class="impl-impl">DHCPDISCOVER sent → collect offers</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-net">Requesting</div>
+          <div class="impl-impl">DHCPREQUEST sent to chosen server</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-dl">Bound</div>
+          <div class="impl-impl">DHCPACK received — fully configured</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-phys">Renewing / Rebinding</div>
+          <div class="impl-impl">50% / 87.5% lease expiry handling</div>
+        </div>
+      </div>
+
+      <h3>DHCP and Cross-Subnet Operation</h3>
+      <p>DHCP operates across most IP routers. Since the initial DHCPDISCOVER is a broadcast (limited to the local subnet), a <strong>DHCP relay agent</strong> (configured on the router) forwards it as unicast to a DHCP server on a remote subnet. This allows a single DHCP server to serve multiple subnets, with the server allocating from the appropriate scope based on which relay agent forwarded the request.</p>
+    </div>
+
+    <!-- COMPARISON TABLE -->
+    <div class="section">
+      <div class="section-label">Protocol Comparison</div>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>RARP</th>
+            <th>BOOTP</th>
+            <th>DHCP</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Transport</td>
+            <td>Ethernet (L2 only)</td>
+            <td>UDP/IP</td>
+            <td>UDP/IP</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Provides IP Address</td>
+            <td class="port-num">Yes</td>
+            <td class="port-num">Yes</td>
+            <td class="port-num">Yes</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Subnet Mask / Gateway / DNS</td>
+            <td>No</td>
+            <td class="port-num">Yes</td>
+            <td class="port-num">Yes</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Boot File Delivery</td>
+            <td>No</td>
+            <td class="port-num">Yes</td>
+            <td>Optional</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Address Pool / Dynamic Allocation</td>
+            <td>No</td>
+            <td>No (static table)</td>
+            <td class="port-num">Yes (scopes)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Lease / Time-limited Assignment</td>
+            <td>No</td>
+            <td>No</td>
+            <td class="port-num">Yes</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Cross-subnet (relay)</td>
+            <td>No</td>
+            <td>Limited</td>
+            <td class="port-num">Yes</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Server Port</td>
+            <td>—</td>
+            <td class="port-num">67 (UDP)</td>
+            <td class="port-num">67 (UDP)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Client Port</td>
+            <td>—</td>
+            <td class="port-num">68 (UDP)</td>
+            <td class="port-num">68 (UDP)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <div class="callout green">
+        <strong>RARP</strong> — Reverse of ARP. MAC → IP. Broadcast request, unicast reply. Data link layer only. No config beyond IP. Superseded by BOOTP/DHCP.
+      </div>
+      <div class="callout">
+        <strong>BOOTP</strong> — UDP/IP based. Ports 67/68. Provides IP + subnet + gateway + DNS + boot filename. Static MAC-to-IP table on server. Packet never fragmented. Basis for DHCP.
+      </div>
+      <div class="callout pink">
+        <strong>DHCP</strong> — Dynamic address pools (scopes). Leases IPs for configurable time. Full config delivered. State machine: Init → Selecting → Requesting → Bound → Renewing/Rebinding. Renewal at 50% and 87.5% lease expiry. DHCPNACK forces full rediscovery. Relay agents enable cross-subnet operation.
+      </div>
+      <div class="callout yellow">
+        <strong>Layer note:</strong> These protocols sit at the boundary of network and data link layers. Some literature places ARP/RARP at L2, while BOOTP/DHCP operate at the application layer over UDP/IP — but all involve both MAC and IP address spaces.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

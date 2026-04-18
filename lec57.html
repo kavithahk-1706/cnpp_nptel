@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 57 — Physical Layer III</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec56.html" class="nav-lec">← prev</a>
+        <a href="lec58.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <div>
+        <span class="lec-tag">Lecture 57</span>
+        <span class="med-badge">medium priority</span>
+      </div>
+      <h1>Physical Layer — III: Encoding, Modulation &amp; Multiplexing</h1>
+      <p>Overview of how data (analog or digital) is converted into transmittable signals, and how multiple signals share a single channel. Heavy communication-engineering territory — the course covers this at a survey level, not deep math.</p>
+    </div>
+
+    <!-- ── SECTION 1: Encoding & Modulation Fundamentals ── -->
+    <div class="section">
+      <div class="section-label">Encoding &amp; Modulation — Basics</div>
+
+      <h3>Encoding vs Modulation</h3>
+      <p><strong>Encoding</strong> is the process of converting data into a specific format for efficient transmission. <strong>Decoding</strong> is the reverse — extracting the original data from the transmitted format.</p>
+      <p><strong>Modulation</strong> is a specific kind of encoding where the source signal (called the <strong>baseband signal</strong> or modulating signal, <em>m(t)</em>) is impressed onto a high-frequency <strong>carrier signal</strong> of frequency <em>f<sub>c</sub></em>, producing a modulated signal <em>s(t)</em>.</p>
+
+      <div class="callout yellow">
+        <strong>Why modulate at all?</strong> Every transmission medium has a usable frequency range it can carry faithfully. Raw data signals often sit in a low-frequency range that the medium attenuates heavily. A carrier frequency shifts the signal into the range the channel supports, maximising SNR at the receiver.
+      </div>
+
+      <p>Modulation operates on one or more of the three parameters of the carrier signal: <strong>amplitude</strong>, <strong>frequency</strong>, or <strong>phase</strong>.</p>
+
+      <h3>Four Encoding / Modulation Scenarios</h3>
+      <p>Any combination of data type and signal type is possible. The technique chosen depends on the medium and application:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Data Type</th>
+            <th>Signal Type</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Digital</td>
+            <td class="proto-name">Digital</td>
+            <td>Simpler, cheaper equipment. Voltage pulses directly represent bits.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Analog</td>
+            <td class="proto-name">Digital</td>
+            <td>Digitisation of voice/video. Enables use of modern digital transmission networks.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Digital</td>
+            <td class="proto-name">Analog</td>
+            <td>Required for optical fibre and wireless media that propagate only analog signals.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Analog</td>
+            <td class="proto-name">Analog</td>
+            <td>Baseband (e.g. telephone lines) or modulated (AM/FM radio). Enables FDM.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── SECTION 2: Digital → Digital ── -->
+    <div class="section">
+      <div class="section-label">Digital Data → Digital Signal</div>
+
+      <h3>Key Terminology</h3>
+      <table class="port-table">
+        <thead>
+          <tr><th>Term</th><th>Definition</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="port-num">Unipolar</td><td>All signal elements have the same algebraic sign (all positive or all negative).</td></tr>
+          <tr><td class="port-num">Polar</td><td>One logic state = positive voltage, the other = negative voltage.</td></tr>
+          <tr><td class="port-num">Data Rate</td><td>Rate of data transmission in <strong>bps</strong> (bits per second).</td></tr>
+          <tr><td class="port-num">Modulation Rate</td><td>Rate at which the signal level changes, measured in <strong>baud</strong> (signal elements per second).</td></tr>
+          <tr><td class="port-num">Mark / Space</td><td>Mark = binary 1; Space = binary 0.</td></tr>
+          <tr><td class="port-num">Duration of a bit</td><td>Time taken for the transmitter to emit one bit.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Signal Interpretation Factors</h3>
+      <p>The receiver must know both <strong>timing</strong> (when each signal element begins and ends) and the <strong>signal levels</strong> in use. Three factors govern how successfully a signal is interpreted:</p>
+      <div class="tag-row">
+        <span class="tag tag-good">↑ SNR → ↓ BER</span>
+        <span class="tag tag-bad">↑ Data Rate → ↑ BER</span>
+        <span class="tag tag-good">↑ Bandwidth → ↑ achievable data rate</span>
+      </div>
+
+      <h3>Encoding Schemes (Digital → Digital)</h3>
+      <p>Raw voltage-level signals often perform poorly on real media. Encoding schemes remap bit patterns to signal elements to improve SNR, ease synchronisation, and reduce errors. The tradeoff: more sophisticated schemes need more complex receiver circuitry.</p>
+
+      <div class="callout">
+        <strong>Visual note:</strong> The lecture shows waveform diagrams for NRZ-L, NRZI, Manchester, and Differential Manchester at <a class="ts" href="#" title="Refer Slide Time 11:08">11:08</a> and <a class="ts" href="#" title="Refer Slide Time 12:17">12:17</a>. Recommended to view those slides alongside this summary.
+      </div>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Scheme</th><th>0 Represented As</th><th>1 Represented As</th><th>Key Property</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">NRZ-L</td>
+            <td>High voltage</td>
+            <td>Low voltage</td>
+            <td>Simple. DC component causes sync issues on long runs.</td>
+          </tr>
+          <tr>
+            <td class="port-num">NRZI</td>
+            <td>No transition at bit start</td>
+            <td>Transition at bit start</td>
+            <td>Differential — easier to detect transitions than absolute levels.</td>
+          </tr>
+          <tr>
+            <td class="port-num">Bipolar-AMI</td>
+            <td>No signal (zero line)</td>
+            <td>Alternating +/− pulses</td>
+            <td>No DC component. Easy error detection (two consecutive same-polarity = error).</td>
+          </tr>
+          <tr>
+            <td class="port-num">Pseudoternary</td>
+            <td>Alternating +/− pulses</td>
+            <td>No signal</td>
+            <td>Inverse of Bipolar-AMI.</td>
+          </tr>
+          <tr>
+            <td class="port-num">Manchester</td>
+            <td>High→Low transition at mid-interval</td>
+            <td>Low→High transition at mid-interval</td>
+            <td>Self-clocking. Always a transition at mid-interval = built-in synchronisation. Used in Ethernet.</td>
+          </tr>
+          <tr>
+            <td class="port-num">Differential Manchester</td>
+            <td>Transition at start of interval (+ always a mid-interval transition)</td>
+            <td>No transition at start of interval (mid-interval transition still present)</td>
+            <td>More noise-resistant than Manchester. Always has a mid-interval transition regardless of bit value.</td>
+          </tr>
+          <tr>
+            <td class="port-num">B8ZS</td>
+            <td colspan="2">Bipolar-AMI, but any run of 8 zeros is replaced by a specific 2-code-violation string</td>
+            <td>Scrambling. Prevents long zero runs that break synchronisation.</td>
+          </tr>
+          <tr>
+            <td class="port-num">HDB3</td>
+            <td colspan="2">Bipolar-AMI, but any run of 4 zeros is replaced by a 1-code-violation string</td>
+            <td>European alternative to B8ZS.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout green">
+        <strong>Modulation rate vs data rate:</strong> For NRZI, 1 bit = 1 signal element (modulation rate = data rate). For Manchester, each bit requires 2 signal elements (one transition at mid-interval), so the modulation rate is <em>double</em> the data rate — twice the bandwidth for the same bit throughput. Seen at <a class="ts" href="#" title="Refer Slide Time 14:15">14:15</a>.
+      </div>
+    </div>
+
+    <!-- ── SECTION 3: Digital → Analog ── -->
+    <div class="section">
+      <div class="section-label">Digital Data → Analog Signal</div>
+
+      <h3>Modulation Techniques (Keying)</h3>
+      <p>When digital data must travel over a medium that only carries analog signals (e.g. optical fibre, radio, legacy telephone lines), the data is used to modulate one property of a carrier wave. The three fundamental techniques:</p>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">ASK — Amplitude Shift Keying</div>
+          <div class="concept-desc">Binary values represented by different amplitudes of the carrier. Typically one amplitude is zero (presence/absence of carrier). Simple to implement but susceptible to noise. Up to 1200 bps on voice-grade lines. Used for digital data over optical fibre.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">FSK — Frequency Shift Keying</div>
+          <div class="concept-desc">Binary values represented by two different frequencies near the carrier. <strong>BFSK</strong> (Binary FSK) is the most common variant. Less susceptible to error than ASK. Up to 1200 bps on voice-grade lines; also used for high-frequency (3–30 MHz) radio. MFSK uses more than two frequencies for higher throughput.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">PSK — Phase Shift Keying</div>
+          <div class="concept-desc">Carrier phase is shifted to represent data. <strong>BPSK</strong> uses 2 phases (180° apart) for 2 binary values. <strong>QPSK</strong> uses 4 phases (90° apart), encoding 2 bits per symbol. <strong>Differential PSK</strong> encodes data as a phase change relative to the previous symbol rather than an absolute phase reference.</div>
+        </div>
+      </div>
+
+      <h3>QAM — Quadrature Amplitude Modulation</h3>
+      <p>A combination of ASK and PSK. Two copies of the carrier are used simultaneously, offset by 90°. Each copy is independently ASK-modulated, then the two are summed. This allows two independent bit streams to travel on the same carrier frequency, effectively doubling throughput. QAM is a logical extension of QPSK. Used in <strong>ADSL</strong> and many wireless standards.</p>
+
+      <div class="callout pink">
+        <strong>Why PSK phases must be sufficiently separated:</strong> In BPSK the two phases are 180° apart. In QPSK, four phases are 90° apart. The larger the separation, the easier the receiver can distinguish them — but the fewer distinct levels you get for a given phase resolution. QAM overcomes this by adding amplitude variation on top of phase variation.
+      </div>
+    </div>
+
+    <!-- ── SECTION 4: Analog → Digital ── -->
+    <div class="section">
+      <div class="section-label">Analog Data → Digital Signal</div>
+
+      <h3>Digitisation via Codec</h3>
+      <p>Converting analog data (e.g. voice) to a digital bitstream is called <strong>digitisation</strong>. Done using a <strong>codec</strong> (coder-decoder). Two principal techniques:</p>
+
+      <h4>Pulse Code Modulation (PCM)</h4>
+      <p>Based on the <strong>Nyquist Sampling Theorem</strong>: if a signal is sampled at a rate greater than twice its highest frequency component, the samples contain all information needed to reconstruct the original signal exactly.</p>
+      <p>Voice is bandlimited to below 4000 Hz → minimum sampling rate = <strong>8000 samples/second</strong>. Each sample is a continuous amplitude value (<strong>PAM — Pulse Amplitude Modulation</strong> sample). These samples are then <strong>quantised</strong> to discrete levels and assigned a binary code.</p>
+
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci">8-bit quantisation</span><span class="arrow">→</span><span>256 discrete levels</span></div>
+        <div class="vci-row"><span class="vci">8000 samples/s × 8 bits/sample</span><span class="arrow">→</span><span><strong>64 kbps</strong> for one voice channel</span></div>
+      </div>
+
+      <div class="callout yellow">
+        <strong>Quantisation error / noise:</strong> Mapping a continuous amplitude to a finite set of levels introduces approximation. The reconstructed signal is not identical to the original — the discrepancy is called <strong>quantisation noise</strong>. Finer quantisation (more bits per sample) reduces noise but increases data rate.
+      </div>
+
+      <p>PCM pipeline: <strong>Continuous analog signal → PAM Sampler → Quantiser → Encoder → Digital bitstream</strong>. See block diagram at <a class="ts" href="#" title="Refer Slide Time 25:51">25:51</a>.</p>
+
+      <h4>Delta Modulation</h4>
+      <p>An alternative to PCM. The analog signal is approximated by a <strong>staircase function</strong> that steps up or down by a fixed amount at each sampling interval. The output is a single bit per interval: <strong>1</strong> if the staircase stepped up (analog signal exceeded the staircase), <strong>0</strong> if it stepped down. Two critical parameters are the <strong>step size</strong> and the <strong>sampling rate</strong>. Simpler than PCM but susceptible to slope overload (when the signal changes faster than the staircase can track). See waveform diagram at <a class="ts" href="#" title="Refer Slide Time 26:36">26:36</a>.</p>
+    </div>
+
+    <!-- ── SECTION 5: Analog → Analog ── -->
+    <div class="section">
+      <div class="section-label">Analog Data → Analog Signal</div>
+
+      <h3>Why Modulate Analog Data?</h3>
+      <p>Raw analog signals (e.g. voice) occupy a low-frequency baseband range that suffers heavy attenuation on many media. Modulating onto a carrier shifts the signal into a frequency band the medium transmits faithfully.</p>
+
+      <p>Three variants:</p>
+      <div class="tag-row">
+        <span class="tag tag-good">AM — Amplitude Modulation</span>
+        <span class="tag tag-good">FM — Frequency Modulation</span>
+        <span class="tag tag-good">PM — Phase Modulation</span>
+      </div>
+      <p>AM and FM are the well-known radio broadcast standards. Voice over telephone lines is transmitted at its original spectrum (baseband) — no modulation needed when the channel already supports that frequency range. FDM (see below) relies on analog modulation to stack multiple voice channels onto a single wideband link.</p>
+    </div>
+
+    <!-- ── SECTION 6: Multiplexing ── -->
+    <div class="section">
+      <div class="section-label">Multiplexing &amp; Demultiplexing</div>
+
+      <h3>Core Concept</h3>
+      <p><strong>Multiplexing (muxing)</strong> combines multiple independent information streams for simultaneous transmission over a single shared link as one complex signal. <strong>Demultiplexing (demuxing)</strong> is the reverse — separating the combined signal back into its constituent streams at the receiver.</p>
+
+      <h3>Types of Multiplexing</h3>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">FDM — Frequency Division Multiplexing</div>
+          <div class="concept-desc">Each sender is assigned a distinct sub-band (carrier frequency) within the total channel bandwidth. All sub-bands are transmitted simultaneously. Demultiplexer filters out each carrier and extracts the data. Classic example: AM/FM radio, cable TV, telephone trunk lines.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">WDM — Wavelength Division Multiplexing</div>
+          <div class="concept-desc">Conceptually identical to FDM but operates at the wavelength level over optical fibre. Multiple light beams at different wavelengths (colours) travel simultaneously through the same fibre. A prism (or diffraction grating) combines/separates them. WDM is essentially FDM for optical systems.</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">TDM — Time Division Multiplexing</div>
+          <div class="concept-desc">
+            The channel's time is divided into slots. Each sender is allocated repeating time slots in round-robin fashion. Two variants:
+            <br><br>
+            <strong>Synchronous TDM:</strong> Fixed slot assigned to each station regardless of whether it has data. Simple to decode but wastes bandwidth when a station is idle.
+            <br><br>
+            <strong>Statistical (Asynchronous) TDM:</strong> Slots are allocated dynamically only to stations that have data to send. More efficient channel utilisation but requires address/header info per slot so the demultiplexer knows which stream each slot belongs to.
+          </div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">CDM — Code Division Multiplexing</div>
+          <div class="concept-desc">
+            Does not divide by frequency or time. Each sender is assigned a unique binary code sequence called a <strong>chip sequence</strong>. Chip sequences are chosen to be <strong>orthogonal vectors</strong> — the dot product of any two different chip sequences is zero. Data from all senders is combined and transmitted simultaneously across the full bandwidth. The receiver, knowing a sender's chip sequence, can mathematically extract only that sender's data by computing the dot product with the combined signal.
+            <br><br>
+            The cell-phone variant is <strong>CDMA (Code Division Multiple Access)</strong>. Also used in satellite communication.
+          </div>
+        </div>
+      </div>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Technique</th><th>Divides By</th><th>Primary Use</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="port-num">FDM</td><td>Frequency</td><td>Radio, cable, telephone trunks. Widely used.</td></tr>
+          <tr><td class="port-num">WDM</td><td>Wavelength (light)</td><td>Optical fibre. Conceptually a form of FDM.</td></tr>
+          <tr><td class="port-num">TDM</td><td>Time slots</td><td>Digital telephony, digital networks. Widely used.</td></tr>
+          <tr><td class="port-num">CDM / CDMA</td><td>Orthogonal codes</td><td>Cellular (3G), satellite. Mathematical approach.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── SUMMARY ── -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h3>The Big Picture</h3>
+      <p><strong>Encoding</strong> maps data bits to signal elements to improve sync, reduce errors, and eliminate DC components. Complex encoding (Manchester, Differential Manchester) buys better synchronisation at the cost of higher modulation rate and more complex circuitry.</p>
+      <p><strong>Modulation</strong> shifts a signal's frequency range by riding it on a carrier. Carrier frequency is chosen to match the channel's usable bandwidth. Digital data can be impressed onto analog carriers via ASK (amplitude), FSK (frequency), or PSK (phase). QAM combines amplitude and phase for higher throughput.</p>
+      <p><strong>Digitisation</strong> (analog → digital) uses PCM (sample → quantise → encode) or Delta Modulation (staircase approximation). PCM at 8 bits / 8000 samples/s yields the standard 64 kbps voice channel. Quantisation always introduces noise — finer resolution costs more bits.</p>
+      <p><strong>Multiplexing</strong> lets multiple data streams share one physical medium. FDM/WDM exploit the frequency/wavelength dimension; TDM exploits time; CDM exploits mathematical orthogonality. TDM and FDM are the most widely deployed.</p>
+
+      <div class="callout green">
+        <strong>Exam watchpoints:</strong> Know the four data/signal type combinations and which technique applies to each. Know that Manchester doubles the modulation rate. Know the Nyquist sampling rate formula (2 × f<sub>max</sub>) and the PCM 64 kbps derivation. Know that WDM is FDM applied to optics. Know that CDM uses orthogonal chip sequences and dot products.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

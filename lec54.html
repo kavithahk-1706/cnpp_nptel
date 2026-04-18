@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 54 — Wireless LANs</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec53.html" class="nav-lec">← prev</a>
+        <a href="lec55.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- ── Header ── -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 54</span>
+      <span class="med-badge">Medium Priority</span>
+      <h1>Wireless LANs</h1>
+      <p>Overview of WLAN concepts at Layer 1 and Layer 2 — IEEE 802.11 architecture, wireless-specific MAC challenges (hidden/exposed terminal), and the CSMA/CA access mechanism.</p>
+    </div>
+
+    <!-- ── 1. Motivation ── -->
+    <div class="section">
+      <div class="section-label">Why Wireless LAN?</div>
+      <p>The proliferation of mobile devices (laptops, phones, PDAs) created an obvious demand for wireless local area networking. Bandwidth availability on wireless data networks has grown steadily, and with 4G/5G deployments, wireless infrastructure is becoming a de facto standard — eliminating the need for physical cable infrastructure entirely. Standardisation is handled by the <strong>IEEE 802 committee</strong>.</p>
+      <div class="callout">
+        WLAN is a large topic in its own right — this lecture is a focused overview of the <strong>Layer 2 (MAC) and Layer 1 (PHY) considerations</strong> specific to 802.11. Everything from Layer 3 upward is unaffected.
+      </div>
+    </div>
+
+    <!-- ── 2. IEEE 802 Working Groups ── -->
+    <div class="section">
+      <div class="section-label">IEEE 802 Standards</div>
+      <h3>Key Working Groups</h3>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">802.1</div>
+          <div class="proto-names">Higher Layer LAN Protocols</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">802.3</div>
+          <div class="proto-names">Ethernet</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">802.11</div>
+          <div class="proto-names">Wireless LAN (Wi-Fi)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">802.15</div>
+          <div class="proto-names">Wireless PAN (Bluetooth etc.)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">802.18</div>
+          <div class="proto-names">Radio Regulatory TAG</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">802.21</div>
+          <div class="proto-names">Media Independent Handover</div>
+        </div>
+      </div>
+
+      <h3>IEEE 802.11 Sub-Standards</h3>
+      <p>The most widely deployed are <strong>802.11a, 802.11b, 802.11g, and 802.11n</strong>.</p>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Standard</th>
+            <th>PHY Technique</th>
+            <th>Frequency</th>
+            <th>Max Rate</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">802.11 (1997)</td>
+            <td>Infrared / FHSS / DSSS</td>
+            <td>2.4 GHz / IR</td>
+            <td class="port-num">1–2 Mbps</td>
+            <td>Original spec</td>
+          </tr>
+          <tr>
+            <td class="proto-name">802.11a (1999)</td>
+            <td>OFDM</td>
+            <td>5 GHz</td>
+            <td class="port-num">54 Mbps</td>
+            <td>Incompatible with 802.11b</td>
+          </tr>
+          <tr>
+            <td class="proto-name">802.11b (1999)</td>
+            <td>HR-DSSS</td>
+            <td>2.4 GHz</td>
+            <td class="port-num">11 Mbps</td>
+            <td>7× range of 11a; home appliance interference</td>
+          </tr>
+          <tr>
+            <td class="proto-name">802.11e</td>
+            <td>—</td>
+            <td>—</td>
+            <td class="port-num">—</td>
+            <td>QoS and prioritisation</td>
+          </tr>
+          <tr>
+            <td class="proto-name">802.11f</td>
+            <td>—</td>
+            <td>—</td>
+            <td class="port-num">—</td>
+            <td>Handover between APs</td>
+          </tr>
+          <tr>
+            <td class="proto-name">802.11g (2001)</td>
+            <td>OFDM</td>
+            <td>2.4 GHz</td>
+            <td class="port-num">54 Mbps</td>
+            <td>Backward compatible with 802.11b; best of both</td>
+          </tr>
+          <tr>
+            <td class="proto-name">802.11n</td>
+            <td>OFDM + MIMO</td>
+            <td>2.4 / 5 GHz</td>
+            <td class="port-num">600 Mbps</td>
+            <td>Widely used modern standard</td>
+          </tr>
+          <tr>
+            <td class="proto-name">802.11ac</td>
+            <td>OFDM</td>
+            <td>&lt;6 GHz</td>
+            <td class="port-num">1 Gbps+</td>
+            <td>Multi-station; 500 Mbps single link</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 3. Categories ── -->
+    <div class="section">
+      <div class="section-label">Categories of Wireless Networks</div>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Infrastructure / Base Station</div>
+          <div class="compare-body">
+            <div class="compare-row"><div>All communication is routed <strong>through an Access Point (AP)</strong>. The AP connects to a wired backbone, giving controlled, managed connectivity to the wider internet.</div></div>
+            <div class="compare-row"><div>Nodes can be fixed or mobile within AP range.</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Ad Hoc / MANET</div>
+          <div class="compare-body">
+            <div class="compare-row"><div><strong>No central AP.</strong> Nodes communicate directly with each other.</div></div>
+            <div class="compare-row"><div><strong>MANETs</strong> (Mobile Ad Hoc Networks) extend this to fully mobile nodes — e.g. vehicular networks (V2V).</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4. 802.11 Architecture: BSS, ESS ── -->
+    <div class="section">
+      <div class="section-label">802.11 Architecture</div>
+      <h3>Basic Service Set (BSS) and Extended Service Set (ESS)</h3>
+      <p>A <strong>BSS</strong> is the fundamental building block — a group of stations within mutual radio range. It can be either an ad hoc network (BSS without AP) or an infrastructure network (BSS with an AP).</p>
+      <p>An <strong>ESS</strong> connects multiple BSSs via APs, which are wired together through a <strong>Distribution System (DS)</strong> — typically an Ethernet backbone — that connects further to a server or gateway.</p>
+
+      <h4>Station Transition Types</h4>
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="vci">No-Transition</span>
+          <span class="arrow">→</span>
+          <span>Stationary or moving only within the same BSS</span>
+        </div>
+        <div class="vci-row">
+          <span class="vci">BSS-Transition</span>
+          <span class="arrow">→</span>
+          <span>Moving from one BSS to another within the same ESS</span>
+        </div>
+        <div class="vci-row">
+          <span class="vci">ESS-Transition</span>
+          <span class="arrow">→</span>
+          <span>Moving from one ESS to a different ESS</span>
+        </div>
+      </div>
+      <div class="callout pink">
+        <strong>Important:</strong> IEEE 802.11 does <em>not</em> guarantee continuous communication during a transition. The protocol does not handle seamless handover natively.
+      </div>
+    </div>
+
+    <!-- ── 5. PHY + DLL Stack ── -->
+    <div class="section">
+      <div class="section-label">802.11 Layer Stack</div>
+      <h3>PHY and Data Link Structure</h3>
+      <div class="impl-stack">
+        <div class="impl-row">
+          <div class="impl-layer impl-app">LLC Sublayer (IEEE 802.1)</div>
+          <div class="impl-impl">Upper DLL</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-trans">PCF — Point Coordination Function</div>
+          <div class="impl-impl">Contention-free</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-net">DCF — Distributed Coordination Function</div>
+          <div class="impl-impl">Contention (mandatory)</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-dl">MAC Sublayer</div>
+          <div class="impl-impl">Data Link</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-phys">PHY: FHSS / DSSS / Infrared / OFDM / HR-DSSS</div>
+          <div class="impl-impl">Physical</div>
+        </div>
+      </div>
+      <p>Everything above LLC (Network, Transport, Application) remains unchanged — 802.11 only modifies behaviour at L1 and L2.</p>
+    </div>
+
+    <!-- ── 6. PHY Layer Summary ── -->
+    <div class="section">
+      <div class="section-label">Wireless Physical Layer</div>
+      <h3>PHY Technologies at a Glance</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Technology</th>
+            <th>Standard</th>
+            <th>Key Characteristic</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Infrared</td>
+            <td>802.11</td>
+            <td>1–2 Mbps; 10–20m range; <strong>cannot penetrate walls</strong>; no outdoor use</td>
+          </tr>
+          <tr>
+            <td class="proto-name">FHSS</td>
+            <td>802.11</td>
+            <td>Frequency Hopping Spread Spectrum; 79 non-overlapping channels at 2.4 GHz; 400ms dwell time; multipath fading</td>
+          </tr>
+          <tr>
+            <td class="proto-name">DSSS</td>
+            <td>802.11</td>
+            <td>Direct Sequence Spread Spectrum; signal spread over entire spectrum via pseudo-random sequence; 1–2 Mbps</td>
+          </tr>
+          <tr>
+            <td class="proto-name">OFDM</td>
+            <td>802.11a</td>
+            <td>5 GHz; up to 54 Mbps; compatible with European HiperLAN/2; shorter range than 11b</td>
+          </tr>
+          <tr>
+            <td class="proto-name">HR-DSSS</td>
+            <td>802.11b</td>
+            <td>2.4 GHz; 11 million chips/sec; up to 11 Mbps; 7× range of 11a; interference from microwaves/cordless phones; <strong>incompatible with 802.11a</strong></td>
+          </tr>
+          <tr>
+            <td class="proto-name">OFDM</td>
+            <td>802.11g</td>
+            <td>2.4 GHz; up to 54 Mbps; <strong>backward compatible with 802.11b</strong>; best-of-both attempt</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 7. MAC Sublayer — Unique Problems ── -->
+    <div class="section">
+      <div class="section-label">MAC Sublayer Challenges</div>
+      <h3>Why Wired MAC Doesn't Work Here</h3>
+      <p>In 802.3 Ethernet, "seizing the channel" is well-defined — CSMA/CD works because every station can hear every other station. In wireless, this assumption breaks down because stations have limited, heterogeneous radio ranges. Two unique problems arise.</p>
+
+      <h3>Hidden Terminal Problem</h3>
+      <div class="callout pink">
+        <strong>Scenario:</strong> C is transmitting to B. A wants to transmit to B. A cannot hear C (outside C's range), so A senses the channel as idle and begins transmitting — causing a collision at B that A never detects. Simple CSMA fails because carrier sensing doesn't see what it can't hear.
+      </div>
+
+      <h3>Exposed Station Problem</h3>
+      <div class="callout yellow">
+        <strong>Scenario:</strong> A is transmitting to some node. B wants to transmit to C. B hears A's transmission and falsely assumes the channel is busy — so B holds back even though a B→C transmission would succeed without interference. B is <em>unnecessarily</em> blocked.
+      </div>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Hidden Terminal</div>
+          <div class="compare-body">
+            <div class="compare-row"><div>Transmitter is invisible to a third node. Station transmits when it shouldn't — causes collision at receiver.</div></div>
+            <div class="compare-row"><div>Under-sensing: senses channel as idle when it isn't (from receiver's perspective).</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Exposed Station</div>
+          <div class="compare-body">
+            <div class="compare-row"><div>Transmitter withholds when it shouldn't. Station holds back even though its transmission would not interfere.</div></div>
+            <div class="compare-row"><div>Over-sensing: senses channel as busy when that activity is irrelevant to the intended transmission.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 8. DCF / CSMA-CA / MACA / RTS-CTS / NAV ── -->
+    <div class="section">
+      <div class="section-label">Distributed Coordination Function (DCF)</div>
+      <h3>CSMA/CA — Why Not CSMA/CD?</h3>
+      <p>CSMA/CD requires simultaneous send and receive to detect collisions. Wireless channels are noisy, signals fade over distance, and mobile devices lack the resources for full-duplex collision detection. CSMA/CD is simply not feasible for WLANs — so 802.11 uses <strong>Collision Avoidance</strong> instead of collision detection.</p>
+      <p>DCF is <strong>mandatory</strong> in all 802.11 implementations. It supports two carrier sensing methods:</p>
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Virtual Carrier Sensing (MACA)</div>
+          <div class="concept-desc">Uses RTS/CTS handshake and the Network Allocation Vector (NAV) to inform all nearby stations how long the channel will be occupied — without physically monitoring the RF medium.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">1-Persistent Physical Carrier Sensing</div>
+          <div class="concept-desc">Station physically senses the channel before transmitting. If idle, transmit. If busy, defer until idle. On collision, apply binary exponential backoff.</div>
+        </div>
+      </div>
+
+      <h3>MACA: RTS / CTS Handshake</h3>
+      <p>Before sending data, the sender broadcasts an <strong>RTS (Request to Send)</strong> frame — containing the intended transmission duration. The receiver responds with a <strong>CTS (Clear to Send)</strong>. Any station that hears either frame sets its <strong>NAV (Network Allocation Vector)</strong> — a timer telling it how long to hold off before checking the channel again.</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">Station hears RTS</span>
+          <span class="arrow">→</span>
+          <span class="vci">Sets a long NAV</span>
+          <span style="color: var(--muted); font-size:13px; margin-left:8px;">waits full RTS duration before sensing</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Station hears CTS</span>
+          <span class="arrow">→</span>
+          <span class="vci">Sets a shorter NAV</span>
+          <span style="color: var(--muted); font-size:13px; margin-left:8px;">D in B's range: defers for CTS duration</span>
+        </div>
+      </div>
+
+      <div class="callout green">
+        <strong>NAV = virtual silence.</strong> Stations don't physically sense the medium — they read the duration field in RTS/CTS frames and set a countdown. Only after NAV expires do they check for channel idleness. This is why it's called <em>virtual</em> carrier sensing.
+      </div>
+
+      <h3>Full CSMA/CA Flow (with RTS/CTS)</h3>
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci">1</span><span class="arrow">→</span><span>Set backoff = 0. Apply persistence strategy if channel is busy.</span></div>
+        <div class="vci-row"><span class="vci">2</span><span class="arrow">→</span><span>Wait for <strong>DIFS</strong> (Distributed InterFrame Space).</span></div>
+        <div class="vci-row"><span class="vci">3</span><span class="arrow">→</span><span>Send <strong>RTS</strong> to destination. Start timer.</span></div>
+        <div class="vci-row"><span class="vci">4a</span><span class="arrow">→</span><span>If <strong>CTS not received</strong> before timeout → increment backoff, wait backoff period, retry from step 2.</span></div>
+        <div class="vci-row"><span class="vci">4b</span><span class="arrow">→</span><span>If <strong>CTS received</strong> → wait <strong>SIFS</strong> (Short InterFrame Space).</span></div>
+        <div class="vci-row"><span class="vci">5</span><span class="arrow">→</span><span>Send data frame. Start timer.</span></div>
+        <div class="vci-row"><span class="vci">6a</span><span class="arrow">→</span><span>If <strong>ACK not received</strong> before timeout → backoff and retry.</span></div>
+        <div class="vci-row"><span class="vci">6b</span><span class="arrow">→</span><span>If <strong>ACK received</strong> → success.</span></div>
+      </div>
+
+      <p>The full timing diagram (DIFS → RTS → SIFS → CTS → SIFS → Data → SIFS → ACK) with NAV periods shown for all other stations is a good visual to review. <a href="#" class="ts">~30:03</a></p>
+
+      <h3>1-Persistent Physical Carrier Sensing</h3>
+      <p>In this mode, the station physically listens to the RF medium rather than relying on NAV. It senses before transmitting, and does <em>not</em> sense while transmitting (no full-duplex detection). If busy, it waits until idle, then transmits. On collision: binary exponential backoff.</p>
+
+      <div class="callout">
+        Collisions can still occur in CSMA/CA — the wireless environment is inherently noisy and lossy. The mechanism reduces probability of collision, not to zero. If RTS or ACK is not received within the timer period, the station retries after backoff.
+      </div>
+    </div>
+
+    <!-- ── 9. PCF ── -->
+    <div class="section">
+      <div class="section-label">Point Coordination Function (PCF)</div>
+      <h3>Centralised, Collision-Free Access</h3>
+      <p>PCF uses the AP (base station) to <strong>poll</strong> individual stations to ask if they have frames to send. Because only the polled station transmits at any time, collisions are eliminated entirely.</p>
+      <div class="tag-row">
+        <span class="tag tag-good">No collisions</span>
+        <span class="tag tag-good">AP controls transmission order</span>
+        <span class="tag tag-bad">Optional — not mandatory</span>
+        <span class="tag tag-bad">More complex to implement</span>
+      </div>
+      <p>Additional capabilities: the AP sends periodic <strong>beacon frames</strong> for timing synchronisation, and can instruct stations to enter sleep mode to conserve battery — holding their frames until they wake.</p>
+    </div>
+
+    <!-- ── 10. IFS / Co-Existence ── -->
+    <div class="section">
+      <div class="section-label">DCF and PCF Co-Existence</div>
+      <h3>InterFrame Spacing (IFS) Types</h3>
+      <p>DCF and PCF coexist on the same channel by using different <strong>interframe spacings</strong> — mandatory waiting gaps between transmissions. Shorter gap = higher priority.</p>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Acronym</th>
+            <th>Full Name</th>
+            <th>When Used</th>
+            <th>Priority</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">SIFS</td>
+            <td>Short InterFrame Space</td>
+            <td>Between frames in an ongoing dialog: RTS → CTS → Data → ACK</td>
+            <td class="port-num">Highest</td>
+          </tr>
+          <tr>
+            <td class="proto-name">PIFS</td>
+            <td>PCF InterFrame Space</td>
+            <td>When no SIFS response; AP can issue beacon or poll</td>
+            <td class="port-num">High</td>
+          </tr>
+          <tr>
+            <td class="proto-name">DIFS</td>
+            <td>DCF InterFrame Space</td>
+            <td>When no PIFS; any station may contend for channel</td>
+            <td class="port-num">Normal</td>
+          </tr>
+          <tr>
+            <td class="proto-name">EIFS</td>
+            <td>Extended InterFrame Space</td>
+            <td>Reporting bad or unknown frames</td>
+            <td class="port-num">Lowest</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        Priority order: <strong>SIFS &gt; PIFS &gt; DIFS &gt; EIFS</strong>. Because PCF uses a shorter wait than DCF, the AP always gets channel access before any individual station attempting contention-based access.
+      </div>
+    </div>
+
+    <!-- ── Summary ── -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+      <h3>Key Takeaways</h3>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">BSS / ESS</div>
+          <div class="concept-desc">BSS = one AP's coverage zone. ESS = multiple BSSs connected via a wired distribution system. Stations can be stationary (No-Transition), move within an ESS (BSS-Transition), or cross ESS boundaries (ESS-Transition). 802.11 does not guarantee seamless handover.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Hidden / Exposed Terminal</div>
+          <div class="concept-desc">Hidden: A can't hear C → A transmits to B while C is transmitting to B → collision. Exposed: B hears A transmitting → unnecessarily holds back its own unrelated transmission to C. Both are uniquely wireless problems; CSMA/CD cannot solve them.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">CSMA/CA + RTS/CTS + NAV</div>
+          <div class="concept-desc">RTS announces intent to transmit and duration. CTS confirms and echoes duration. All overhearing stations set their NAV countdown accordingly and stay silent. No physical collision detection — avoidance through handshake and virtual reservation instead.</div>
+        </div>
+      </div>
+
+      <div class="two-col" style="margin-top:12px;">
+        <div class="interface-card">
+          <div class="interface-title">DCF (Mandatory)</div>
+          <div class="interface-desc">Distributed contention-based access. Uses CSMA/CA with RTS/CTS/NAV (virtual sensing) or 1-persistent physical carrier sensing. Binary exponential backoff on collision. Required on every 802.11 device.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">PCF (Optional)</div>
+          <div class="interface-desc">Centralised poll-based access via AP. Collision-free. AP sends beacons periodically; can command stations to sleep and buffers frames for them. More complex — optional in practice.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

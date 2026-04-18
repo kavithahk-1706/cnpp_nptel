@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 53 — Connecting LANs, VLAN</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec52.html" class="nav-lec">← prev</a>
+      <a href="lec54.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <!-- ── Header ── -->
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 53</span>
+    <span class="med-badge">Medium Priority</span>
+    <h1>Connecting LANs &amp; VLAN</h1>
+    <p>Data Link Layer — Prof. Soumya Kanti Ghosh, IIT Kharagpur</p>
+    <p><strong>Topics:</strong> Layer-wise LAN connectivity · Repeaters · Bridges · Bridge loop problem · Spanning Tree Protocol · Backbone networks · VLAN basics, operation, tagging, and types</p>
+  </div>
+
+  <!-- ── 1. Layer-wise Connectivity Recap ── -->
+  <div class="section">
+    <div class="section-label">1 — Layer-wise Connectivity Recap</div>
+    <p>Each intermediate device in a network can process packets up to the layer at which it operates. A higher-layer device inherits all capabilities of devices below it — at a cost of greater processing overhead and higher price.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Layer</th>
+          <th>Device</th>
+          <th>Function</th>
+          <th>Domains</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">L1 — Physical</td>
+          <td><span class="proto-name">Hub / Repeater</span></td>
+          <td>Signal regeneration only</td>
+          <td>Same collision + broadcast domain</td>
+        </tr>
+        <tr>
+          <td class="port-num">L2 — Data Link</td>
+          <td><span class="proto-name">Bridge / L2 Switch</span></td>
+          <td>MAC-based frame forwarding</td>
+          <td>Separate collision; same broadcast domain</td>
+        </tr>
+        <tr>
+          <td class="port-num">L3 — Network</td>
+          <td><span class="proto-name">Router / L3 Switch</span></td>
+          <td>IP routing between networks</td>
+          <td>Separate collision + broadcast domain</td>
+        </tr>
+        <tr>
+          <td class="port-num">L4–L7</td>
+          <td><span class="proto-name">Gateway</span></td>
+          <td>Application-to-application connectivity</td>
+          <td>Full protocol translation possible</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout yellow">
+      <strong>Cost tradeoff:</strong> Higher layer = more capabilities + more processing time + significantly higher cost. You design for the minimum layer your use case needs.
+    </div>
+
+    <p>The network should also be <strong>scalable</strong> — backbone infrastructure is expensive to change, so the design must accommodate growth without full replacement.</p>
+  </div>
+
+  <!-- ── 2. Repeaters and Hubs ── -->
+  <div class="section">
+    <div class="section-label">2 — Repeaters / Hubs (L1)</div>
+    <p>Operate purely at the physical layer. Their only job is to regenerate and retransmit signals, extending cable reach.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Characteristics</div>
+        <div class="compare-body">
+          <div class="compare-row">Acts as signal regenerator — no data inspection</div>
+          <div class="compare-row">No filtering (does not understand IP or MAC)</div>
+          <div class="compare-row">All ports in the <strong>same collision domain</strong></div>
+          <div class="compare-row">All ports in the <strong>same broadcast domain</strong></div>
+          <div class="compare-row">Hub = multi-port repeater</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Implications</div>
+        <div class="compare-body">
+          <div class="compare-row">More devices connected → more collisions → more retransmissions → bandwidth crunch</div>
+          <div class="compare-row">Can be arranged in a <strong>hierarchy of hubs</strong> to extend network reach</div>
+          <div class="compare-row">Cheap, simple — use only where L1 reach extension is all that's needed</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3. Bridges ── -->
+  <div class="section">
+    <div class="section-label">3 — Bridges (L2)</div>
+    <p>A bridge operates at the data link layer, connecting LAN segments using MAC address intelligence. A <strong>two-port bridge</strong> connects two LANs; a <strong>multi-port bridge</strong> is what we call a <strong>Layer 2 switch</strong>.</p>
+
+    <div class="tag-row">
+      <span class="tag tag-good">Separate collision domains</span>
+      <span class="tag tag-bad">Same broadcast domain</span>
+      <span class="tag tag-good">MAC-based filtering</span>
+      <span class="tag tag-good">Self-learning bridge table</span>
+    </div>
+
+    <h3>Bridge Table (Self-Learning)</h3>
+    <p>A bridge begins with an empty table. As frames are transmitted, the bridge reads the <strong>source MAC address</strong> of each incoming frame and records which port it arrived on. This builds a MAC → Port mapping over time.</p>
+
+    <div class="callout green">
+      <strong>Learning process:</strong> A sends to D → bridge learns A is on port 1. E sends to A → bridge learns E is on port 3. Once the table is populated, the bridge forwards unicast frames only to the correct port, not all ports — reducing unnecessary traffic and cleanly separating collision domains.
+    </div>
+
+    <p>Connected segments remain in the <strong>same broadcast domain</strong> — a broadcast (FF:FF:FF:FF:FF:FF) is still forwarded out all ports.</p>
+  </div>
+
+  <!-- ── 4. Loop Problem ── -->
+  <div class="section">
+    <div class="section-label">4 — Loop Problem in Bridged Networks</div>
+    <p>For redundancy, network administrators often install <strong>multiple connections between LANs</strong> so that if one link fails, another takes over. However, with Layer 2 bridges, this creates a serious problem: <strong>bridge loops</strong>.</p>
+
+    <div class="callout pink">
+      <strong>Why loops are catastrophic:</strong> Ethernet frames have <strong>no TTL field</strong> (unlike IP packets). A frame caught in a loop circulates forever. The bridge keeps updating its table with contradictory port-MAC mappings, consuming all available bandwidth and making communication between any source and destination impossible.
+    </div>
+
+    <p><strong>Scenario:</strong> A sends to D. Bridge 1 and Bridge 2 both see the frame and forward it. Each bridge then learns A from the opposite port (via the other bridge), leading to contradictory table entries. The frame circulates in a loop indefinitely between the two redundant paths.</p>
+  </div>
+
+  <!-- ── 5. STP ── -->
+  <div class="section">
+    <div class="section-label">5 — Spanning Tree Protocol (STP)</div>
+    <p>STP solves the loop problem by logically reducing a redundant mesh of bridges and LANs into a <strong>loop-free tree topology</strong>. Redundant links still exist physically — they are just placed in a <strong>blocking</strong> state and activated only on failure.</p>
+
+    <h3>STP Steps</h3>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">Step 1</span>
+        <span class="arrow">→</span>
+        <span>Every bridge has a <strong>unique ID</strong>. Select the bridge with the <strong>smallest ID</strong> as the <strong>Root Bridge</strong>.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 2</span>
+        <span class="arrow">→</span>
+        <span>On every non-root bridge, mark one port as the <strong>Root Port</strong> — the port with the least-cost path to the root bridge. Marked with ★.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 3</span>
+        <span class="arrow">→</span>
+        <span>For each LAN, elect a <strong>Designated Bridge</strong> — the bridge with the least-cost path between that LAN and the root bridge. The port connecting the LAN to its designated bridge is the <strong>Designated Port</strong>. Marked with ★★.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 4</span>
+        <span class="arrow">→</span>
+        <span>Ports with ★ or ★★ become <strong>Forwarding Ports</strong>. All others become <strong>Blocking Ports</strong>.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Result</span>
+        <span class="arrow">→</span>
+        <span>There is <strong>exactly one path</strong> between any two bridges. Loops are eliminated. Redundant links remain physically present but logically blocked.</span>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <strong>Failover:</strong> If the active (forwarding) path fails, the blocked redundant path is promoted to forwarding state, restoring connectivity. This is how STP enables redundant connections without loops.
+    </div>
+
+    <p><strong>Least-cost path</strong> criteria is administrator-defined — it may be minimum hop count, available bandwidth, link congestion, or other metrics.</p>
+  </div>
+
+  <!-- ── 6. Backbone Networks ── -->
+  <div class="section">
+    <div class="section-label">6 — Backbone Networks</div>
+    <p>Two common architectures for connecting multiple LANs at the backbone level:</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Star Backbone</div>
+        <div class="concept-desc">A central high-capacity multiport switch (typically 8–48+ ports) acts as the backbone hub. All LANs connect to it with star topology. Simple, high performance, easy to manage.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Bridge / Point-to-Point Backbone</div>
+        <div class="concept-desc">LANs connected via point-to-point links between bridges. More flexible for geographically spread networks. Multiple LANs can be daisy-chained through bridges.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. VLAN Motivation ── -->
+  <div class="section">
+    <div class="section-label">7 — Why VLANs?</div>
+    <p>A switched Layer 2 network, even with separate collision domains, still sits in a <strong>single broadcast domain</strong>. Every device receives every broadcast — inefficient, insecure, and unmanageable at scale.</p>
+
+    <p><strong>Real-world problem:</strong> An organisation has accounting, engineering, and sales departments spread across multiple floors and buildings, all connected to the same physical switches. They need to communicate as if they're on the same network — but without broadcasting to each other or sharing security boundaries.</p>
+
+    <div class="callout">
+      <strong>VLAN definition:</strong> A Virtual LAN is a <strong>broadcast domain created logically</strong> by one or more switches. It groups ports (and the devices on them) into isolated broadcast domains, <strong>regardless of physical location or switch</strong>.
+    </div>
+
+    <p>Traditional segmentation required physical routers — one per subnet boundary. VLANs replicate that segmentation <strong>logically within the switch fabric itself</strong>, at Layer 2, without needing separate physical hardware for each group.</p>
+  </div>
+
+  <!-- ── 8. VLAN Basics ── -->
+  <div class="section">
+    <div class="section-label">8 — VLAN Basics</div>
+
+    <div class="tag-row">
+      <span class="tag tag-good">Broadcast domain segmentation at L2</span>
+      <span class="tag tag-good">Location-independent logical grouping</span>
+      <span class="tag tag-good">Scalability &amp; security</span>
+      <span class="tag tag-bad">Inter-VLAN traffic needs L3 routing</span>
+    </div>
+
+    <p>Key properties of a VLAN:</p>
+    <p>All ports in the same VLAN share the same broadcast domain. Broadcasts sent by one VLAN member reach only other members of that VLAN — not devices on other VLANs. Switches will not bridge traffic between VLANs; doing so would violate VLAN broadcast domain integrity. <strong>Traffic between VLANs must be routed</strong> via a Layer 3 device (router or L3 switch).</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Without VLANs</div>
+        <div class="compare-body">
+          <div class="compare-row">All devices in one broadcast domain</div>
+          <div class="compare-row">ARP request floods to every host on the switch</div>
+          <div class="compare-row">Unnecessary bandwidth consumption</div>
+          <div class="compare-row">Security boundaries require physical routers per group</div>
+          <div class="compare-row">Moving a workstation = physical recabling</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">With VLANs</div>
+        <div class="compare-body">
+          <div class="compare-row">Each VLAN = separate broadcast domain</div>
+          <div class="compare-row">ARP request reaches only VLAN members</div>
+          <div class="compare-row">Bandwidth conserved; host CPU load reduced</div>
+          <div class="compare-row">Security policies applied per-VLAN</div>
+          <div class="compare-row">Moving a workstation = update port assignment in software</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 9. VLAN Operation ── -->
+  <div class="section">
+    <div class="section-label">9 — VLAN Operation</div>
+
+    <h3>Static (Port-Based) VLANs</h3>
+    <p>The network administrator manually assigns each switch port to a VLAN. When a device connects to that port, it automatically becomes a member of the assigned VLAN. This is the <strong>dominant method in practice</strong> — simple, predictable, easy to manage.</p>
+
+    <div class="callout green">
+      <strong>Management VLAN:</strong> The default VLAN for every switch port is <strong>VLAN 1</strong>. VLAN 1 is the management VLAN and <strong>cannot be deleted</strong>. All other ports may be reassigned to alternate VLANs.
+    </div>
+
+    <h3>Dynamic VLANs</h3>
+    <p>VLAN membership is determined by the <strong>MAC address</strong> of the connecting device, not the port. Requires dedicated network management software and a MAC-to-VLAN database. When a device connects, the switch queries this database to determine VLAN membership. More flexible but significantly more complex to administer.</p>
+
+    <h3>Assigning a Host to a VLAN — Two-Step Process</h3>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">Step 1</span>
+        <span class="arrow">→</span>
+        <span>Connect the host to the <strong>correct physical port</strong> of the switch (the port assigned to the target VLAN).</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 2</span>
+        <span class="arrow">→</span>
+        <span>Assign the host an <strong>IP address in the correct subnet</strong> for that VLAN. VLAN membership effectively implies subnet membership — VLAN ≡ Subnet.</span>
+      </div>
+    </div>
+    <p>Both steps are necessary. Physical port alone is not sufficient — the host's IP must also belong to the VLAN's subnet for correct routing.</p>
+  </div>
+
+  <!-- ── 10. VLAN Types ── -->
+  <div class="section">
+    <div class="section-label">10 — VLAN Types</div>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Basis</th>
+          <th>Status</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">Port-Based</td>
+          <td><span class="proto-name">Switch port</span></td>
+          <td><span class="transport both-badge">Dominant</span></td>
+          <td>Simple, widely used. DHCP handles IP assignment. Ports assigned individually, in rows, or across 2+ switches.</td>
+        </tr>
+        <tr>
+          <td class="port-num">MAC-Based</td>
+          <td><span class="proto-name">Device MAC address</span></td>
+          <td><span class="transport udp-badge">Rare</span></td>
+          <td>Each MAC manually entered and configured. Flexible but difficult to administer and troubleshoot at scale.</td>
+        </tr>
+        <tr>
+          <td class="port-num">Protocol-Based</td>
+          <td><span class="proto-name">IP address / protocol</span></td>
+          <td><span class="transport udp-badge">Rare</span></td>
+          <td>Similar to MAC-based but uses logical L3 address. No longer common due to DHCP.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 11. VLAN Tagging / Trunking ── -->
+  <div class="section">
+    <div class="section-label">11 — VLAN Tagging &amp; Trunking</div>
+    <p>When a single physical link between two switches must carry traffic for <strong>multiple VLANs simultaneously</strong>, plain forwarding is not enough — the receiving switch cannot tell which VLAN a given frame belongs to. This is solved by <strong>VLAN tagging</strong>.</p>
+
+    <h3>How Tagging Works</h3>
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">1. Tag</span>
+        <span class="arrow">→</span>
+        <span>When the source switch receives a frame from an end device, it inserts a <strong>VLAN ID tag</strong> into the frame header, identifying its VLAN membership.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">2. Transit</span>
+        <span class="arrow">→</span>
+        <span>The tagged frame travels over the <strong>trunk link</strong>. Intermediate switches forward it to the appropriate ports based on the VLAN ID and MAC address.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">3. Strip</span>
+        <span class="arrow">→</span>
+        <span>Upon reaching the destination switch, the <strong>VLAN tag is removed</strong> and the original frame is delivered to the attached end device.</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Trunk link</strong> (also called VLAN trunking): a single physical link configured to carry traffic for multiple VLANs simultaneously. Without trunking, each VLAN would require its own dedicated physical link between switches — wasteful and unscalable.
+    </div>
+
+    <p>VLAN tagging <strong>controls broadcast propagation</strong> — broadcasts are only sent to ports belonging to the same VLAN, preventing them from leaking into other broadcast domains over the trunk.</p>
+  </div>
+
+  <!-- ── 12. VLAN Deployment Models ── -->
+  <div class="section">
+    <div class="section-label">12 — VLAN Deployment Models</div>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">End-to-End / Campus-Wide VLANs</div>
+        <div class="concept-desc">VLANs span the entire campus network regardless of physical location. Based on <strong>function or workgroup</strong>. "VLAN everywhere" model — Accounting VLAN 10 exists across all switches in the organisation. Users retain the same VLAN membership even when they move to a different physical location.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Geographic / Local VLANs</div>
+        <div class="concept-desc">VLANs are scoped to a <strong>physical location</strong> (floor, building, switch cluster). Dedicated to an access-layer switch cluster. Accounting users on different floors/buildings may be in different VLANs (e.g., VLAN 10 vs VLAN 30). Simpler per-location management; less flexible for user mobility.</div>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Critical point:</strong> Devices on different VLANs — even on the same physical switch — are in separate broadcast and collision domains and cannot communicate directly. Communication between VLANs <strong>always requires a Layer 3 router or L3 switch</strong>. A plain L2 switch cannot bridge inter-VLAN traffic without violating VLAN isolation.
+    </div>
+  </div>
+
+  <!-- ── Summary ── -->
+  <div class="section">
+    <div class="section-label">Summary</div>
+
+    <h3>Concept Snapshots</h3>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Hub / Repeater</div>
+        <div class="concept-desc">L1 only. Signal regeneration. No filtering. Single collision + broadcast domain. Adding more = more collisions = bandwidth degraded.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Bridge / L2 Switch</div>
+        <div class="concept-desc">L2. Self-learning MAC table. Separate collision domains per port. Still one broadcast domain. Loop-prone when redundant links exist — requires STP.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">STP</div>
+        <div class="concept-desc">Elect root bridge (smallest ID). Assign root ports + designated ports. Block all redundant paths. One path active at a time — blocked paths activate on failure.</div>
+      </div>
+    </div>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">VLAN</div>
+        <div class="concept-desc">Logical broadcast domain created by switch config. Segments L2 network without physical routers. Each VLAN = its own subnet. Devices must have matching IP subnet to belong to the VLAN.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">VLAN Tagging / Trunking</div>
+        <div class="concept-desc">Trunk link carries multiple VLANs on one cable. VLAN ID inserted at source, stripped at destination. Enables VLAN extension across multiple switches efficiently.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Inter-VLAN Routing</div>
+        <div class="concept-desc">VLANs are isolated — traffic cannot cross between them at L2. A Layer 3 device (router or L3 switch) is always required to route packets between different VLANs.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

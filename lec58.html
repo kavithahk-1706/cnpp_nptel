@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 58 — Network Security: Overview</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec57.html" class="nav-lec">← prev</a>
+        <a href="lec59.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <div>
+        <span class="lec-tag">Lecture 58</span>
+        <span class="skip-badge">low priority — not in exam</span>
+      </div>
+      <h1>Network Security — Overview</h1>
+      <p>Prof. Soumya Kanti Ghosh &nbsp;·&nbsp; IIT Kharagpur &nbsp;·&nbsp; CNPP</p>
+      <a class="video-link" href="https://www.youtube.com/watch?v=placeholder" target="_blank">▶ Watch Lecture</a>
+    </div>
+
+    <!-- NOTE TO SELF -->
+    <div class="section">
+      <div class="callout yellow">
+        <strong>Exam note:</strong> The professor explicitly stated this lecture (and possibly the next) is <strong>likely not included in the exam</strong>. Treat as supplementary reading for conceptual completeness.
+      </div>
+    </div>
+
+    <!-- CIA TRIAD -->
+    <div class="section">
+      <div class="section-label">Security — Basic Components (CIA Triad)</div>
+      <p>Every security discussion — whether for networks, computers, or information systems — revolves around three core properties. A breach of any one constitutes a security failure.</p>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Confidentiality</div>
+          <div class="concept-desc">Keeping data and resources hidden from unauthorised parties. A message sent between two parties should not be readable by anyone else. Focuses on <strong>secrecy</strong>.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Integrity</div>
+          <div class="concept-desc">Ensuring data is not tampered with in transit (<strong>data integrity</strong>) and that the claimed sender is actually who they say they are (<strong>origin integrity / authentication</strong>).</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Availability</div>
+          <div class="concept-desc">Enabling legitimate access to data and resources. A system can have perfect confidentiality and integrity but still be under attack if it is made inaccessible — e.g., via flooding or congestion.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECURITY ATTACKS -->
+    <div class="section">
+      <div class="section-label">Four Types of Security Attacks</div>
+      <p>Any action that compromises the security of information is a security attack. All attacks map to a violation of one or more CIA properties, framed against a basic source-to-destination message model.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Attack Type</th>
+            <th>What Happens</th>
+            <th>CIA Property Violated</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Interruption</td>
+            <td>Message is blocked and never reaches destination (physically or via congestion). Also known as Denial of Service (DoS).</td>
+            <td><span class="transport tcp-badge">Availability</span></td>
+          </tr>
+          <tr>
+            <td class="proto-name">Interception</td>
+            <td>An unauthorised party (I) gains access to the message flowing from S to D — eavesdropping / wiretapping.</td>
+            <td><span class="transport udp-badge">Confidentiality</span></td>
+          </tr>
+          <tr>
+            <td class="proto-name">Modification</td>
+            <td>Attacker intercepts the message, alters it, then forwards the tampered version to the destination.</td>
+            <td><span class="transport both-badge">Integrity</span></td>
+          </tr>
+          <tr>
+            <td class="proto-name">Fabrication</td>
+            <td>Attacker (I) sends a message to D while impersonating S — the destination believes it is receiving from a legitimate source.</td>
+            <td><span class="transport udp-badge">Authenticity</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- CLASSES OF THREATS -->
+    <div class="section">
+      <div class="section-label">Classes of Threats</div>
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Disclosure</div>
+          <div class="concept-desc"><strong>Snooping</strong> — passive observation of data in transit without altering it.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Deception</div>
+          <div class="concept-desc">Modification, spoofing, repudiation of origin, denial of receipt — causing a party to believe something false.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Disruption</div>
+          <div class="concept-desc">Modification of system components to interrupt or degrade the service.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Usurpation</div>
+          <div class="concept-desc">Modification, spoofing, delay, denial of service — gaining unauthorised control over system resources.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSIVE VS ACTIVE -->
+    <div class="section">
+      <div class="section-label">Passive vs Active Attacks <a class="ts" href="#" title="Refer Slide Time: 02:35">02:35</a></div>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Passive Attacks</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Goal</span><span>Obtain/gather information only — no data alteration.</span></div>
+            <div class="compare-row"><span class="label">Types</span><span><strong>Release of message content</strong> (eavesdropping); <strong>Traffic analysis</strong> (inferring communication patterns, frequency, length).</span></div>
+            <div class="compare-row"><span class="label">Detection</span><span>Very difficult — attacker does not manifest on the system; operates silently.</span></div>
+            <div class="compare-row"><span class="label">Purpose</span><span>Often a precursor to active attacks; gathered intelligence enables targeted strikes.</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Active Attacks</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Goal</span><span>Modify the data stream or create a false data stream.</span></div>
+            <div class="compare-row"><span class="label">Types</span><span><strong>Masquerade</strong> (identity spoofing); <strong>Replay</strong> (retransmit captured data units); <strong>Modification</strong>; <strong>Denial of Service</strong>.</span></div>
+            <div class="compare-row"><span class="label">Detection</span><span>Easier to detect since they produce observable effects on the network or system.</span></div>
+            <div class="compare-row"><span class="label">DoS</span><span>Flooding communication facilities to prevent legitimate use — everything is in place but the resource is inaccessible.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POLICIES AND MECHANISMS -->
+    <div class="section">
+      <div class="section-label">Policies and Mechanisms <a class="ts" href="#" title="Refer Slide Time: 09:57">09:57</a></div>
+      <p>Security is enforced through the interaction of <strong>policies</strong> (what is and is not allowed) and <strong>mechanisms</strong> (technical means to enforce those policies).</p>
+
+      <div class="callout pink">
+        <strong>Policy conflict → vulnerability.</strong> In large organisations, policies are often defined piecemeal by different teams. When those partial policies are integrated or implemented in a distributed manner, they can conflict — creating exploitable gaps. A classic example: a rule restricting hall-to-internet access that does not also restrict hall-to-lab-to-internet hops effectively leaves a bypass open.
+      </div>
+
+      <div class="callout">
+        <strong>Trust and assumptions</strong> underlie every security decision. Policies must unambiguously partition system states into secure and non-secure sets. Mechanisms are assumed to correctly enforce the policy — if either assumption breaks, the system becomes vulnerable.
+      </div>
+    </div>
+
+    <!-- GOALS OF SECURITY -->
+    <div class="section">
+      <div class="section-label">Goals of Security <a class="ts" href="#" title="Refer Slide Time: 13:00">13:00</a></div>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Prevention</div>
+          <div class="concept-desc">Stop attackers from violating security policies in the first place. The primary and most desirable goal.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Detection</div>
+          <div class="concept-desc">Identify when and where a policy violation has occurred. Necessary because prevention alone is never fully achievable.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Recovery</div>
+          <div class="concept-desc">Stop the attack, assess and repair damage, and continue to function correctly even after a successful attack. Ensures resilience.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TYPES OF MECHANISMS -->
+    <div class="section">
+      <div class="section-label">Types of Mechanisms — Secure / Precise / Broad <a class="ts" href="#" title="Refer Slide Time: 15:49">15:49</a></div>
+      <p>A system transitions through security states as it evolves (new software installed, patches applied, devices added). The goal is to keep all reachable states within the set of secure states.</p>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Secure</div>
+          <div class="concept-desc">All reachable states are a <strong>subset</strong> of secure states. Ideal — the system never enters an insecure state.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Precise</div>
+          <div class="concept-desc">Reachable states map exactly onto secure states — a one-to-one correspondence. Theoretically ideal but hard to achieve in practice.</div>
+        </div>
+      </div>
+      <div class="callout yellow">
+        <strong>Broad security</strong> occurs when some reachable states fall outside the secure perimeter. Security exists but with gaps. Security also introduces cost: monetary overhead and performance degradation (authentication checks, encryption, filtering all add latency).
+      </div>
+    </div>
+
+    <!-- ASSURANCE -->
+    <div class="section">
+      <div class="section-label">Assurance <a class="ts" href="#" title="Refer Slide Time: 19:23">19:23</a></div>
+      <p>After deploying a security infrastructure, assurance answers the question: <em>up to what level is this system actually secured?</em> It requires:</p>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Specification</div>
+          <div class="concept-desc">Requirements analysis — what desired functionality must the security system provide?</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Design</div>
+          <div class="concept-desc">How will the system meet the specification — architectural decisions, component choices.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Implementation</div>
+          <div class="concept-desc">Programs and systems that carry out the design — the actual deployed software/hardware.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPERATIONAL ISSUES -->
+    <div class="section">
+      <div class="section-label">Operational Issues <a class="ts" href="#" title="Refer Slide Time: 20:32">20:32</a></div>
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Cost-Benefit Analysis</div>
+          <div class="concept-desc">Is it cheaper to prevent attacks or recover from them? Not every system needs the same level of protection — prioritise critical assets (e.g., a few hundred critical servers out of thousands).</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Risk Analysis</div>
+          <div class="concept-desc">Should we protect a particular asset? How much? Tiered security levels are common — strong protection for critical infrastructure, lighter protection elsewhere.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Laws and Customs</div>
+          <div class="concept-desc">Are the desired security measures legal in the jurisdiction? Will users comply with them? Regulatory and human compliance are part of the operational reality.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Human Issues</div>
+          <div class="concept-desc">Organisational problems (power, responsibility, financial incentives) and people problems (outsiders vs insiders, <strong>social engineering</strong>). Insiders are often the most difficult threat to prevent technically.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECURITY SERVICES -->
+    <div class="section">
+      <div class="section-label">Security Services <a class="ts" href="#" title="Refer Slide Time: 25:06">25:06</a></div>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>What It Provides</th>
+            <th>Example Mechanism</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Confidentiality</td>
+            <td>Protection against loss of privacy; data hidden from unauthorised parties.</td>
+            <td>Encryption</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Authentication</td>
+            <td>Identification of the legitimate creator or sender of data.</td>
+            <td>Digital certificates, passwords</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Integrity</td>
+            <td>Assurance that data has not been altered in transit.</td>
+            <td>Message digests, checksums</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Non-repudiation</td>
+            <td>Proof that an action occurred — the sender cannot deny having sent it. The order is final.</td>
+            <td>Digital signatures, OTP confirmation</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Access Control</td>
+            <td>Prevent misuse of resources. Defines what each user/role may access.</td>
+            <td>MAC, DAC, <strong>RBAC</strong> (Role-Based Access Control)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Availability</td>
+            <td>Ensure data/resources remain accessible to authorised parties; prevent erasure or denial.</td>
+            <td>Redundancy, anti-DoS filtering</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Safety</td>
+            <td>Protection against tampering, physical damage, and theft.</td>
+            <td>Physical security, backups</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout green">
+        <strong>Non-repudiation in practice:</strong> When you swipe a card at a shop and sign the slip, that slip is kept as proof — not sent to the bank immediately, but used if you later dispute the transaction. The same principle is applied digitally via OTPs, digital signatures, and transaction confirmation codes. Once you confirm, the order is final.
+      </div>
+    </div>
+
+    <!-- TYPES OF ATTACK -->
+    <div class="section">
+      <div class="section-label">Taxonomy of Attack Techniques <a class="ts" href="#" title="Refer Slide Time: 29:19">29:19</a></div>
+      <div class="tag-row">
+        <span class="tag tag-bad">Social Engineering / Phishing</span>
+        <span class="tag tag-bad">Physical Break-ins / Theft</span>
+        <span class="tag tag-bad">Password Attacks</span>
+        <span class="tag tag-bad">Buffer Overflows</span>
+        <span class="tag tag-bad">Command / SQL Injection</span>
+        <span class="tag tag-bad">Denial of Service (DoS)</span>
+        <span class="tag tag-bad">Faulty Application Logic Exploitation</span>
+        <span class="tag tag-bad">Snooping</span>
+        <span class="tag tag-bad">Packet Manipulation / Fabrication</span>
+        <span class="tag tag-bad">Backdoors</span>
+      </div>
+    </div>
+
+    <!-- NETWORK SECURITY OUTLINE -->
+    <div class="section">
+      <div class="section-label">Network Security — Process Outline <a class="ts" href="#" title="Refer Slide Time: 30:10">30:10</a></div>
+
+      <div class="impl-stack">
+        <div class="impl-row">
+          <div class="impl-layer impl-app"><span class="layer-name">1. Determine Security Policy</span></div>
+          <div class="impl-impl">Full security roadmap</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-trans"><span class="layer-name">2. Implement Security Policy</span></div>
+          <div class="impl-impl">Firewalls, IDS/IPS</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-net"><span class="layer-name">3. Reconnaissance</span></div>
+          <div class="impl-impl">Map the network</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-dl"><span class="layer-name">4. Vulnerability Scanning</span></div>
+          <div class="impl-impl">Find weak points</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-phys"><span class="layer-name">5. Penetration Testing</span></div>
+          <div class="impl-impl">Simulate attacks</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-phys" style="opacity:0.75;"><span class="layer-name">6. Post-Attack Investigation</span></div>
+          <div class="impl-impl">Forensics, recovery</div>
+        </div>
+      </div>
+
+      <h4>Step 1 — Determine Security Policy <a class="ts" href="#" title="Refer Slide Time: 31:12">31:12</a></h4>
+      <p>A security policy is the full roadmap. It must cover: usage policies for networks and servers; user training (password hygiene, social engineering awareness); privacy policies for stored data; schedules for updates and audits. The network design itself must reflect the policy — where database/file servers are placed, the location of <strong>Demilitarized Zones (DMZs)</strong>, firewall placement and rules, and deployment of <strong>Intrusion Detection Systems (IDS)</strong>.</p>
+
+      <div class="callout">
+        <strong>DMZ (Demilitarized Zone):</strong> The area between the secure internal network and the external internet. Services that must be publicly accessible (e.g., web servers) are placed in the DMZ — exposed to the outside but isolated from the internal network. Everything else stays behind the firewall.
+      </div>
+
+      <h4>Step 2 — Implement Security Policy <a class="ts" href="#" title="Refer Slide Time: 34:02">34:02</a></h4>
+      <p>Implementation involves installing and configuring firewalls and IDS systems. <strong>iptables</strong> is a widely-used free firewall configuration tool on Linux. Rules for incoming packets should be created (drop by default; allow specific services like HTTP). Rules for outgoing packets may also be created depending on policy. <strong>Snort</strong> is a common free and upgradeable IDS; most IDS tools log alerts to files and can trigger paging, email, or telephone notifications on serious events.</p>
+    </div>
+
+    <!-- TYING IT TOGETHER -->
+    <div class="section">
+      <div class="section-label">Tying It Together — The Security Lifecycle</div>
+      <p>Security is a continuous, dynamic process — not a one-time deployment. The lifecycle flows as: <strong>Threats → Policy → Specification → Design → Implementation → Operation</strong> and then loops back. New threats emerge from operation, prompting policy revision. This cycle must be actively managed.</p>
+
+      <div class="callout yellow">
+        <strong>TCP/IP and security:</strong> The TCP/IP and OSI models do not natively include security provisions. Security mechanisms are layered on top. Any security additions must be designed carefully — intermediate devices (routers, switches) must still be able to forward packets correctly. If a security mechanism interferes with standard protocol behaviour, packet forwarding breaks.
+      </div>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+      <div class="callout green">
+        <strong>CIA Triad:</strong> Confidentiality (secrecy), Integrity (data + origin), Availability (access). Every security mechanism ultimately protects one or more of these.
+      </div>
+      <div class="callout green">
+        <strong>4 attack types:</strong> Interruption (→ availability), Interception (→ confidentiality), Modification (→ integrity), Fabrication (→ authenticity). All are variations of an attacker interfering with a source→destination message flow.
+      </div>
+      <div class="callout green">
+        <strong>Passive vs Active:</strong> Passive = eavesdrop only, hard to detect. Active = alter/create data, detectable but damaging.
+      </div>
+      <div class="callout green">
+        <strong>Security goals:</strong> Prevention → Detection → Recovery. In order of preference; in practice all three are needed.
+      </div>
+      <div class="callout green">
+        <strong>Non-repudiation</strong> is the property that prevents a sender from denying they sent a message. Implemented via digital signatures, OTPs, and confirmation flows.
+      </div>
+      <div class="callout green">
+        <strong>Network security workflow:</strong> Policy → Implementation (firewalls + IDS) → Reconnaissance → Vulnerability scan → Penetration testing → Post-attack investigation.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

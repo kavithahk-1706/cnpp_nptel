@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 60 — Network Security III: TCP/IP Security</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec59.html" class="nav-lec">← prev</a>
+        <a href="lec61.html" class="nav-lec disabled">next →</a>
+      </div>
+    </nav>
+
+    <!-- ── Header ── -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 60</span>
+      <span class="skip-badge">low priority</span>
+      <h1>Network Security III — TCP/IP Security</h1>
+      <p>Coverage of layer-wise security mechanisms across the TCP/IP stack: IPSec at the network layer, SSL/TLS at the transport layer, PGP at the application layer, and firewalls as perimeter defences. <strong>Prof. note: security is not a core exam topic for this course</strong> — treat this as conceptual exposure, not something to grind.</p>
+    </div>
+
+    <!-- ── 1. Why security is hard to retrofit ── -->
+    <div class="section">
+      <div class="section-label">Motivation</div>
+      <h3>Security as a Vertical Concern</h3>
+      <p>The TCP/IP and OSI stacks were designed for <strong>communication</strong>, not security. Security was bolted on later, and that creates two fundamental tensions:</p>
+      <div class="callout yellow">
+        <strong>Backward compatibility constraint:</strong> A security-enabled packet must still be forwardable by intermediate devices (routers, switches) that are <em>not</em> security-aware. If adding a security header breaks the packet format such that a legacy router cannot parse it, the router drops the packet entirely. Every security mechanism must respect this.
+      </div>
+      <p>Security is also an <strong>end-to-end phenomenon</strong> — it has to be maintained across all layers, peer-to-peer, from source to destination. Piecemeal security at just one layer leaves gaps everywhere else.</p>
+      <p>Physical and data link layers are <strong>hop-to-hop</strong> and typically under the administrative control of a single authority (e.g. within a campus), so security there is more of a physical management concern. From the <strong>network layer upward</strong>, traffic traverses paths outside your control — unknown intermediate routers, ISPs, etc. — which is where cryptographic security becomes essential.</p>
+    </div>
+
+    <!-- ── 2. Common structure ── -->
+    <div class="section">
+      <div class="section-label">Common Structure</div>
+      <h3>Generic Security Protocol Packet Structure</h3>
+      <p>Regardless of which layer applies security, the pattern is the same: the original payload is wrapped in a security envelope.</p>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">outer wrapper</div>
+          <div class="proto-names">Header of security protocol</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">content (encrypted)</div>
+          <div class="proto-names">Payload (IP / TCP / SMTP data)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">integrity check</div>
+          <div class="proto-names">MAC — Message Authentication Code</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">outer wrapper</div>
+          <div class="proto-names">Trailer of security protocol</div>
+        </div>
+      </div>
+      <div class="callout pink">
+        <strong>MAC ≠ MAC address.</strong> In this context MAC = <em>Message Authentication Code</em> — a cryptographic tag used to verify message integrity and authenticity. Nothing to do with Layer 2 hardware addresses.
+      </div>
+      <p>The encapsulated payload + MAC portion is encrypted. The security header/trailer must remain parseable to legacy devices even if they cannot understand or decrypt the contents — otherwise they drop the packet.</p>
+    </div>
+
+    <!-- ── 3. IPSec ── -->
+    <div class="section">
+      <div class="section-label">Network Layer Security</div>
+      <h3>IPSec — IP Security</h3>
+      <p>IPSec is a collection of protocols standardised by the IETF to provide security at the <strong>network (IP) layer</strong>. It slots in where IP normally sits, so upper layers (TCP, UDP, applications) ride on top of it transparently.</p>
+
+      <h4>Two Modes</h4>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Transport Mode</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">protects</div><div>Transport layer payload only (TCP/UDP segment)</div></div>
+            <div class="compare-row"><div class="label">IP header</div><div>Original IP header is <strong>NOT</strong> protected — left intact for routing</div></div>
+            <div class="compare-row"><div class="label">structure</div><div>IP-H → IPSec-H → IPSec payload → IPSec-T</div></div>
+            <div class="compare-row"><div class="label">use case</div><div>Host-to-host communication where both endpoints understand IPSec</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Tunnel Mode</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">protects</div><div>Entire original IP packet including the original IP header</div></div>
+            <div class="compare-row"><div class="label">IP header</div><div>A <strong>new IP header</strong> is prepended; original is encapsulated and encrypted</div></div>
+            <div class="compare-row"><div class="label">structure</div><div>New IP-H → IPSec-H → [orig IP-H + payload] → IPSec-T</div></div>
+            <div class="compare-row"><div class="label">use case</div><div>VPN gateways; creates a virtual tunnel between two endpoints</div></div>
+          </div>
+        </div>
+      </div>
+
+      <h4>IPSec Sub-Protocols: AH vs ESP</h4>
+      <p>IPSec uses two types of security headers. You do not need the packet format details — knowing what each provides is sufficient.</p>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>AH (Authentication Header)</th>
+            <th>ESP (Encapsulating Security Payload)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Access control</td><td class="port-num">✓ Yes</td><td class="port-num">✓ Yes</td></tr>
+          <tr><td>Message integrity / authentication</td><td class="port-num">✓ Yes</td><td class="port-num">✓ Yes</td></tr>
+          <tr><td>Entity authentication (data source)</td><td class="port-num">✓ Yes</td><td class="port-num">✓ Yes</td></tr>
+          <tr><td>Confidentiality (encryption)</td><td class="port-num" style="color:var(--accent2)">✗ No</td><td class="port-num">✓ Yes</td></tr>
+          <tr><td>Replay attack protection</td><td class="port-num">✓ Yes</td><td class="port-num">✓ Yes</td></tr>
+        </tbody>
+      </table>
+      <div class="callout green">
+        Key takeaway: AH authenticates but does not encrypt. ESP does both. In practice, ESP is more commonly used precisely because confidentiality is usually required.
+      </div>
+    </div>
+
+    <!-- ── 4. SSL/TLS ── -->
+    <div class="section">
+      <div class="section-label">Transport Layer Security</div>
+      <h3>SSL / TLS</h3>
+      <p><strong>SSL (Secure Sockets Layer)</strong> is the original protocol. <strong>TLS (Transport Layer Security)</strong> is the IETF-standardised successor — TLS is to SSL what TCP/IP is to ARPANET protocols. When people say "SSL" today they almost always mean TLS.</p>
+      <p>SSL/TLS operates between the application layer and TCP — it provides security at the transport layer so that the application layer riding on top does not need to implement its own crypto. HTTPS = HTTP over TLS.</p>
+
+      <h4>Four SSL Sub-Protocols</h4>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Handshake Protocol</div>
+          <div class="concept-desc">Negotiation between client and server — agree on cipher suites, exchange certificates, authenticate identities, establish session keys.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">ChangeCipherSpec Protocol</div>
+          <div class="concept-desc">Signals that subsequent messages will use the newly negotiated cipher parameters. Essentially a "switching lanes" notification.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Alert Protocol</div>
+          <div class="concept-desc">Communicates error conditions and warnings (e.g. bad certificate, decryption failure, connection close). Can be fatal or non-fatal.</div>
+        </div>
+      </div>
+      <div class="two-col" style="margin-top:0">
+        <div class="interface-card">
+          <div class="interface-title">Record Protocol</div>
+          <div class="interface-desc">The workhorse — takes data from the three protocols above plus application data, fragments it, compresses, applies MAC, encrypts, and hands it down to TCP. This is what actually interfaces with the transport layer.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Architecture note</div>
+          <div class="interface-desc">SSL sits conceptually <em>between</em> application and transport. The three upper sub-protocols feed into the Record Protocol, which then sends down to TCP. Peer Record Protocols on both sides must agree on how to extract secured data.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 5. PGP ── -->
+    <div class="section">
+      <div class="section-label">Application Layer Security</div>
+      <h3>PGP — Pretty Good Privacy</h3>
+      <p>PGP is an example of security implemented at the <strong>application layer</strong>, specifically for email. The application layer has the advantage of being resource-rich — it can handle complex crypto without constraints that lower layers face.</p>
+      <p>PGP provides <strong>authentication and confidentiality</strong> for email messages. The flow (simplified):</p>
+      <div class="callout">
+        <strong>Alice → Bob:</strong><br>
+        1. Alice's email message is hashed → creates a digest.<br>
+        2. Alice signs the digest with her <strong>private key</strong> (authentication).<br>
+        3. A one-time symmetric <strong>session key</strong> encrypts the message + digest (confidentiality).<br>
+        4. The session key itself is encrypted with <strong>Bob's public key</strong>.<br>
+        5. Bob uses his private key to recover the session key, decrypts the message, verifies Alice's signature.
+      </div>
+      <p>Four algorithm components are involved: a public-key algorithm for session key encryption (PA1), a public-key algorithm for signing the digest (PA2), a symmetric algorithm for encrypting message + digest (SA), and a hash algorithm for creating the digest (HA).</p>
+      <div class="callout green">
+        The same philosophy applies to any application-layer security — the specific crypto scheme may differ (SMTP uses STARTTLS, HTTPS has its own cert infrastructure, SFTP has SSH), but the pattern of authenticate + encrypt + integrity-check is universal.
+      </div>
+    </div>
+
+    <!-- ── 6. Firewalls ── -->
+    <div class="section">
+      <div class="section-label">Perimeter Defence</div>
+      <h3>Firewalls</h3>
+      <p>A firewall is a <strong>logical boundary</strong> between a trusted internal network and an untrusted external network (typically the internet). It monitors and controls both <strong>incoming</strong> (internet → internal) and <strong>outgoing</strong> (internal → internet) traffic based on a defined policy.</p>
+
+      <h4>What Firewalls Are Effective At</h4>
+      <div class="tag-row">
+        <span class="tag tag-good">Protect local systems</span>
+        <span class="tag tag-good">Block network-based threats</span>
+        <span class="tag tag-good">Control outbound access to internet</span>
+        <span class="tag tag-good">Restrict inbound access to internal servers</span>
+      </div>
+
+      <h4>Types of Firewalls</h4>
+
+      <div class="layer-row">
+        <span class="layer-badge layer-net">Packet Filter</span>
+        <div class="layer-content">
+          <div class="layer-name">Packet Filtering Firewall</div>
+          <div class="layer-detail">Operates at network + transport layers (L3/L4). Filters traffic by inspecting IP headers and TCP/UDP headers — source/destination IP address, source/destination port, protocol type. Rules are set up as an Access Control List (ACL): each incoming packet is matched against the list and either forwarded or discarded. Two default policies: <em>discard all unless explicitly allowed</em> (whitelist) or <em>allow all unless explicitly blocked</em> (blacklist).</div>
+          <div class="layer-unit">
+            <span class="tag tag-good">Simple</span>
+            <span class="tag tag-good">Transparent to users</span>
+            <span class="tag tag-good">High speed</span>
+            <span class="tag tag-bad">Difficult to configure rules for large orgs</span>
+            <span class="tag tag-bad">No authentication of source</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-row">
+        <span class="layer-badge layer-app">App Gateway</span>
+        <div class="layer-content">
+          <div class="layer-name">Application-Level Gateway (Proxy Firewall)</div>
+          <div class="layer-detail">Operates at the application layer. Acts as a relay — the outside host connects to the proxy, the proxy connects to the inside host. The outside host never has a direct connection to the internal network. Service-specific: separate proxies for HTTP, FTP, SMTP, Telnet etc. Filters based on application-level rules (e.g. which URLs are allowed, which SMTP commands are permitted).</div>
+          <div class="layer-unit">
+            <span class="tag tag-good">Higher security than packet filters</span>
+            <span class="tag tag-good">Easy to log and audit all traffic</span>
+            <span class="tag tag-bad">Additional processing overhead per connection</span>
+            <span class="tag tag-bad">Gateway is a single point of failure</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer-row">
+        <span class="layer-badge layer-trans">Circuit Gateway</span>
+        <div class="layer-content">
+          <div class="layer-name">Circuit-Level Gateway</div>
+          <div class="layer-detail">Operates at the transport layer. Does not permit a direct end-to-end TCP connection between outside and inside hosts. Instead, the gateway sets up <strong>two separate TCP connections</strong> — one from outside host to gateway, one from gateway to inside host — and relays TCP segments between them without inspecting content. The security function is simply deciding <em>which connections are allowed</em>, based on session-level rules (e.g. recognised computer initiating the session). The SOCKS package is a classic example.</div>
+          <div class="layer-unit">
+            <span class="tag tag-good">Breaks direct external-to-internal TCP path</span>
+            <span class="tag tag-bad">Does not inspect payload content</span>
+            <span class="tag tag-bad">Less common in practice</span>
+          </div>
+        </div>
+      </div>
+
+      <h4>Firewall Configurations</h4>
+      <p>Beyond a single firewall device, real deployments combine components for layered defence. Three common configurations:</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="vci" style="min-width:220px">Screened Host (Single-Homed)</span>
+          <span style="color:var(--muted);font-size:13px">Packet filtering router + bastion host. Router only passes packets to/from the bastion host. Bastion host handles authentication and proxy functions. An attacker must compromise <em>two</em> systems to breach the internal network.</span>
+        </div>
+        <div class="vci-row">
+          <span class="vci" style="min-width:220px">Screened Host (Dual-Homed)</span>
+          <span style="color:var(--muted);font-size:13px">Bastion host has two physical network interfaces — one facing internet, one facing internal network. IP forwarding disabled, so packets physically cannot pass from one interface to the other without going through the bastion host software. Stronger isolation than single-homed.</span>
+        </div>
+        <div class="vci-row">
+          <span class="vci" style="min-width:220px">Screened Subnet (DMZ)</span>
+          <span style="color:var(--muted);font-size:13px">Two routers (outside + inside) with a subnet in between — the DMZ. Public-facing servers (DNS, mail, web) live in the DMZ. To reach the internal network an attacker must breach the outer firewall, traverse the DMZ, AND breach the inner firewall. Most secure common configuration. Highest hardware and management cost.</span>
+        </div>
+      </div>
+
+      <h4>Typical Enterprise Deployment</h4>
+      <p>A full perimeter defence combines: outer firewall router → DMZ zone (DNS/mail/web servers + honeypot + IDS) → inner firewall router → intranet. IDS (Intrusion Detection Systems) sit both on the internet-facing side and within the DMZ to catch traffic that slips past the outer firewall. The honeypot in the DMZ deliberately attracts attacks to study attacker signatures.</p>
+
+      <div class="callout pink">
+        <strong>DMZ = Demilitarised Zone.</strong> A deliberately semi-exposed subnet. Servers here are accessible from the internet but separated from the trusted internal network by a second firewall. If a DMZ server gets compromised, the attacker still cannot directly reach internal hosts.
+      </div>
+    </div>
+
+    <!-- ── Summary ── -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+      <h3>Quick Reference: Security by Layer</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Protocol / Mechanism</th>
+            <th>What it secures</th>
+            <th>Key point</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Network (L3)</td>
+            <td><span class="tcp-badge transport">IPSec</span></td>
+            <td>IP packet payload (transport mode) or entire IP packet (tunnel mode)</td>
+            <td>AH = auth only; ESP = auth + encryption</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Transport (L4)</td>
+            <td><span class="both-badge transport">SSL/TLS</span></td>
+            <td>TCP connection payload</td>
+            <td>4 sub-protocols: Handshake, ChangeCipherSpec, Alert, Record</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Application (L5/L7)</td>
+            <td><span class="udp-badge transport">PGP</span></td>
+            <td>Application-level messages (e.g. email)</td>
+            <td>App layer has most resources; security is service-specific</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Perimeter</td>
+            <td><span class="tcp-badge transport">Firewall</span></td>
+            <td>Network boundary — inbound + outbound traffic</td>
+            <td>Packet filter (L3/4), App gateway (L7), Circuit gateway (L4)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Things to Remember</h3>
+      <div class="callout">
+        <strong>IPSec transport mode</strong> protects the payload but leaves the IP header exposed. <strong>Tunnel mode</strong> wraps the entire original packet in a new IP header — the original header is encrypted inside. Tunnel mode is what VPNs use.
+      </div>
+      <div class="callout green">
+        <strong>SSL/TLS</strong> is not a single protocol — it's four sub-protocols working together. The Record Protocol is the one that actually integrates with TCP. The Handshake Protocol is the one doing the heavy crypto lifting at connection setup.
+      </div>
+      <div class="callout yellow">
+        <strong>Packet filter firewall</strong> = fast but dumb (no auth, hard to configure for large nets). <strong>Application gateway</strong> = smart but slow (full application awareness, logs everything, but overhead per connection). <strong>Circuit gateway</strong> = breaks the TCP path without reading content (niche use, assumes trusted users inside).
+      </div>
+      <div class="callout pink">
+        <strong>Screened subnet / DMZ</strong> is the gold standard configuration in practice. Outer router + DMZ + inner router = three layers an attacker must penetrate. Honeypot in the DMZ is a bonus: let attackers think they're succeeding so you can learn their methods.
+      </div>
+    </div>
+
+    <!-- ── Course close ── -->
+    <div class="section">
+      <div class="section-label">End of Course</div>
+      <div class="callout green">
+        This is the final lecture of CNPP. The course followed a top-down approach — application layer → transport → network → data link → physical — covering protocols, switching, routing, QoS, SDN, and security. Prof. explicitly notes network security is not a core exam topic but is important practical knowledge. Use these notes as a pointer for further reading if interested.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
