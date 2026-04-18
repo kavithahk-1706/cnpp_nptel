@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 36 — IP Routing: Introduction & Routing Table</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec35.html" class="nav-lec">← prev</a>
+      <a href="lec37.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 36</span>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>IP Routing — Introduction &amp; Routing Table</h1>
+    <p>Network layer routing fundamentals: IPv4 addressing recap, hierarchical prefix-based forwarding, longest prefix match, forwarding table construction, and ARP overview.</p>
+    <a href="https://nptel.ac.in/courses/106105183" class="video-link" target="_blank">▶ Watch Lecture</a>
+  </div>
+
+  <!-- ── 1. IPv4 Address Recap ── -->
+  <div class="section">
+    <div class="section-label">IPv4 Address — Quick Recap</div>
+    <p>IPv4 addresses are <strong>32-bit logical identifiers</strong> written in dotted-quad notation (four 8-bit octets). They uniquely identify an <strong>interface</strong> on a host or router — not the device itself. Every system on the internet must have a unique IP address; duplicates break routing entirely.</p>
+
+    <div class="callout green">
+      <strong>Example:</strong> 14.35.158.15 → binary: <code>00001110.00100011.10011110.00001111</code>. The IP layer operates at Layer 3; routers understand up to this layer to make forwarding decisions.
+    </div>
+
+    <p>IP addresses are assigned either statically by a sysadmin or dynamically via <strong>DHCP</strong>. MAC addresses (physical/hardware addresses burned into the NIC) are separate — they live at Layer 2 and are used for local delivery.</p>
+  </div>
+
+  <!-- ── 2. Internetworking ── -->
+  <div class="section">
+    <div class="section-label">Internetworking</div>
+    <p>The internet is a <strong>network of networks</strong>. Individual LANs (e.g., CSE dept, Admin block at IIT KGP) are connected via routers into a Wide Area Network. Routers are Layer 3 devices — they read the IP header, consult a forwarding table, and push packets toward the destination network.</p>
+
+    <div class="callout">
+      A router has multiple <strong>interfaces</strong> (each connecting to a different network/router). Each interface has its own IP address. Packets arrive on one interface and are forwarded out another based on the destination address.
+    </div>
+  </div>
+
+  <!-- ── 3. Scalability Problem ── -->
+  <div class="section">
+    <div class="section-label">The Scalability Problem</div>
+    <p>If routers stored one entry <em>per host</em> globally, every addition or removal of a machine would require updating routing tables across <strong>every router in the world</strong>. With billions of devices, this is completely infeasible. The solution: route by <strong>network prefix</strong>, not by individual host address.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Per-Host Routing (Bad)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>Table size</span><span>One entry per device globally — billions of rows</span></div>
+          <div class="compare-row"><span>On change</span><span>Every router worldwide must update</span></div>
+          <div class="compare-row"><span>Feasibility</span><span>Completely impractical at internet scale</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Per-Network (Prefix) Routing (Good)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>Table size</span><span>One entry per network prefix — manageable</span></div>
+          <div class="compare-row"><span>On change</span><span>New host in same network → no table update needed</span></div>
+          <div class="compare-row"><span>Feasibility</span><span>Scales to global internet</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 4. Hierarchical Addressing ── -->
+  <div class="section">
+    <div class="section-label">Hierarchical Addressing — IP Prefixes &amp; Subnet Masks</div>
+    <p>An IP address is split into a <strong>network portion</strong> and a <strong>host portion</strong> using a <strong>subnet mask</strong> — a 32-bit value consisting of a contiguous run of 1s followed by 0s. Applying the mask via bitwise AND extracts the network address.</p>
+
+    <div class="callout green">
+      <strong>Example — /24 mask:</strong><br/>
+      IP: <code>12.34.158.5</code><br/>
+      Mask: <code>255.255.255.0</code> (i.e., /24 → first 24 bits = network)<br/>
+      Network address: <code>12.34.158.0/24</code> — covers 2<sup>8</sup> = 256 host addresses.
+    </div>
+
+    <p>This is analogous to a postal address: Country → State → District → City → Street → House. Each level narrows scope. Only the local post office needs to know individual house addresses; the national postal system only routes to the city.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Prefix Length</th>
+          <th>Subnet Mask</th>
+          <th>Network Bits</th>
+          <th>Host Bits</th>
+          <th>Hosts per Network</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="port-num">/8</td><td>255.0.0.0</td><td>8</td><td>24</td><td>~16.7 million</td></tr>
+        <tr><td class="port-num">/16</td><td>255.255.0.0</td><td>16</td><td>16</td><td>~65,536</td></tr>
+        <tr><td class="port-num">/24</td><td>255.255.255.0</td><td>24</td><td>8</td><td>256</td></tr>
+        <tr><td class="port-num">/15</td><td>255.254.0.0</td><td>15</td><td>17</td><td>~131,072</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout yellow">
+      <strong>Key scalability win:</strong> Adding a new host to network <code>5.6.7.0/24</code> (e.g., <code>5.6.7.213</code>) requires <em>zero changes</em> to any router's forwarding table. The table entry <code>5.6.7.0/24</code> already covers it.
+    </div>
+  </div>
+
+  <!-- ── 5. Classful Addressing ── -->
+  <div class="section">
+    <div class="section-label">Classful Addressing</div>
+    <p>The original IPv4 scheme assigned fixed-size blocks based on the leading bits of the address. The mask is implicit — determined solely from the address itself.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Leading Bits</th>
+          <th>Prefix</th>
+          <th>Example</th>
+          <th>Use</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">A</td><td><code>0*</code></td><td class="port-num">/8</td><td>20.0.0.0/8</td><td>Very large orgs (~16M hosts)</td></tr>
+        <tr><td class="proto-name">B</td><td><code>10*</code></td><td class="port-num">/16</td><td>128.40.0.0/16</td><td>Large orgs (~65K hosts)</td></tr>
+        <tr><td class="proto-name">C</td><td><code>110*</code></td><td class="port-num">/24</td><td>192.60.225.0/24</td><td>Small orgs (256 hosts)</td></tr>
+        <tr><td class="proto-name">D</td><td><code>1110*</code></td><td>—</td><td>—</td><td>Multicast groups</td></tr>
+        <tr><td class="proto-name">E</td><td><code>11110*</code></td><td>—</td><td>—</td><td>Reserved for future use</td></tr>
+      </tbody>
+    </table>
+
+    <p>Classful addressing is <strong>too coarse</strong> — a Class B block wastes tens of thousands of addresses for an org needing only a few hundred. This led to CIDR.</p>
+  </div>
+
+  <!-- ── 6. CIDR ── -->
+  <div class="section">
+    <div class="section-label">CIDR — Classless Inter-Domain Routing</div>
+    <p>CIDR decouples the prefix length from the address value entirely. A network is represented as <strong>IP address + explicit mask</strong> of any length.</p>
+
+    <div class="callout green">
+      <strong>Format:</strong> <code>Network_Address / prefix_length</code><br/>
+      Example: <code>12.4.0.0/15</code> — first 15 bits are the network prefix, remaining 17 bits for hosts.
+    </div>
+
+    <h3>CIDR: Hierarchical Address Allocation</h3>
+    <p>CIDR enables <strong>address aggregation</strong>: a provider assigned <code>201.10.0.0/21</code> can sub-allocate to customers (<code>201.10.0.0/22</code>, <code>201.10.4.0/24</code>, etc.). Routers outside that provider's domain only need one routing entry — <code>201.10.0.0/21</code> — and the provider internally handles the rest.</p>
+
+    <div class="callout yellow">
+      <strong>Aggregation challenge — multi-homing:</strong> If a customer (<code>201.10.6.0/23</code>) is connected to <em>two</em> different ISPs, the simple aggregation breaks — the internet must know how to reach that customer through both providers separately. This is a known hard problem.
+    </div>
+
+    <h3>CIDR Complicates Forwarding</h3>
+    <p>With variable-length masks, a single destination IP may match <strong>multiple</strong> forwarding table entries simultaneously. For example, <code>201.10.6.17</code> matches both <code>201.10.0.0/21</code> and <code>201.10.6.0/23</code>. The router must resolve this ambiguity — which leads to the Longest Prefix Match rule.</p>
+  </div>
+
+  <!-- ── 7. Address Allocation Hierarchy ── -->
+  <div class="section">
+    <div class="section-label">IP Address Allocation Hierarchy</div>
+    <p>IP address blocks are allocated top-down through a strict hierarchy:</p>
+
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">ICANN</div>
+        <div class="impl-impl">Allocates large blocks to RIRs globally</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">RIRs (e.g., ARIN for Americas)</div>
+        <div class="impl-impl">Allocates blocks to ISPs &amp; large institutions</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">ISPs</div>
+        <div class="impl-impl">Allocates sub-blocks to their customers</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">Institutions (e.g., IIT KGP)</div>
+        <div class="impl-impl">Assigns individual host addresses internally</div>
+      </div>
+    </div>
+
+    <p>Address registries are public records. Ownership can be queried via <code>whois</code> (e.g., <code>whois -h whois.arin.net &lt;address&gt;</code>), though records are notoriously out of date.</p>
+  </div>
+
+  <!-- ── 8. IPv4 Exhaustion ── -->
+  <div class="section">
+    <div class="section-label">Are 32-Bit Addresses Enough?</div>
+    <p>2<sup>32</sup> = ~4.29 billion addresses. With reserved blocks, multi-device households, IoT, and server farms, this is genuinely insufficient. Short-term and long-term solutions coexist:</p>
+
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Long-Term</div>
+        <div class="proto-names">IPv6</div>
+        <p style="font-size:13px; margin-top:6px;">128-bit addresses → 2<sup>128</sup> ≈ 3.4 × 10<sup>38</sup> addresses. Effectively unlimited.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Short-Term (IPv4)</div>
+        <div class="proto-names">Private Addressing + NAT</div>
+        <p style="font-size:13px; margin-top:6px;">Non-routable private ranges (e.g., <code>10.x.x.x</code>) used internally; NAT translates to a public IP at the gateway.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Short-Term (IPv4)</div>
+        <div class="proto-names">DHCP</div>
+        <p style="font-size:13px; margin-top:6px;">Dynamic allocation — IPs reused as devices connect/disconnect rather than permanently assigned.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 9. Hop-by-Hop Packet Forwarding ── -->
+  <div class="section">
+    <div class="section-label">Hop-by-Hop Packet Forwarding</div>
+    <p>IP routing is <strong>hop-by-hop</strong> and <strong>destination-based</strong>. Each router independently makes a local forwarding decision based solely on the packet's destination IP — no router has end-to-end knowledge of the full path.</p>
+
+    <div class="callout">
+      <strong>Router forwarding algorithm (per packet):</strong><br/>
+      1. Receive packet on an input interface.<br/>
+      2. Extract destination IP address from the IP header.<br/>
+      3. Perform a lookup in the <strong>forwarding/routing table</strong> → find the longest matching prefix.<br/>
+      4. Forward the packet out the corresponding outgoing interface.<br/>
+      5. The next router repeats this process until the destination is reached.
+    </div>
+
+    <p>If no matching prefix is found, the router uses a <strong>default route</strong> (typically <code>0.0.0.0/0</code>) — a catch-all entry that matches everything with a zero-length prefix.</p>
+
+    <div class="callout green">
+      <strong>Routing table vs Forwarding table:</strong> These terms are used interchangeably in this course. Strictly: the routing table contains richer protocol metadata; the forwarding table is the optimized lookup structure derived from it.
+    </div>
+  </div>
+
+  <!-- ── 10. Longest Prefix Match ── -->
+  <div class="section">
+    <div class="section-label">Longest Prefix Match (LPM) Forwarding</div>
+    <p>When CIDR allows multiple table entries to match a destination, the router selects the entry with the <strong>longest (most specific) matching prefix</strong>.</p>
+
+    <div class="callout pink">
+      <strong>Example:</strong> Destination = <code>201.10.6.17</code>. Forwarding table has entries:<br/>
+      <code>201.10.0.0/21</code> — matches (21-bit prefix)<br/>
+      <code>201.10.6.0/23</code> — also matches (23-bit prefix)<br/>
+      <strong>LPM selects: <code>201.10.6.0/23</code></strong> — longer prefix = more specific = correct choice.
+    </div>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Destination IP</th>
+          <th>Forwarding Table Entry (match)</th>
+          <th>Outgoing Interface</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>201.10.6.17</code></td><td><code>201.10.6.0/23</code> ✓ (longest)</td><td>Serial0/0.1</td></tr>
+        <tr><td><code>201.10.4.5</code></td><td><code>201.10.4.0/24</code> ✓ (longest)</td><td>eth0/1</td></tr>
+        <tr><td><code>8.8.8.8</code></td><td><code>0.0.0.0/0</code> (default route)</td><td>WAN uplink</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 11. LPM Algorithm & Efficiency ── -->
+  <div class="section">
+    <div class="section-label">LPM Algorithm &amp; Efficiency Challenge</div>
+    <p>A naive <strong>linear scan</strong> of the forwarding table is O(n) in the number of entries. Modern routing tables have <strong>200,000–300,000+ entries</strong>. With packets arriving every few nanoseconds at line rate, linear scan is completely unacceptable.</p>
+
+    <h3>Patricia Tree (Binary Trie)</h3>
+    <p>A traditional solution: store prefixes in a binary trie where each level corresponds to one bit of the address. Lookup traverses at most 32 levels (one per bit) rather than scanning all entries. However, the tree can be skewed and deep with large tables, limiting efficiency.</p>
+
+    <div class="callout yellow">
+      <strong>Hint:</strong> The Patricia tree/trie structure is best understood visually — refer to the lecture diagram at <a class="ts" href="#">33:00</a>. The binary branching (0 → left, 1 → right) at each bit position is shown explicitly.
+    </div>
+
+    <h3>Faster Alternatives</h3>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">k-ary Tree</div>
+        <div class="proto-names">Multi-way Trie</div>
+        <p style="font-size:13px; margin-top:6px;">Instead of binary, each node has k children (e.g., 4-way trie processes 2 bits per level). Fewer levels, faster lookup — at the cost of more memory per node.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Special Hardware</div>
+        <div class="proto-names">CAM (Content Addressable Memory)</div>
+        <p style="font-size:13px; margin-top:6px;">Lookup by key rather than by address. Ternary CAM (TCAM) supports wildcard matching — essential for LPM. Used in high-speed routers; lookup in O(1) hardware time.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 12. Forwarding Table Sources ── -->
+  <div class="section">
+    <div class="section-label">Where Do Forwarding Tables Come From?</div>
+    <p>Forwarding tables map IP prefixes to outgoing interfaces. They can be populated two ways:</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Static Configuration</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>How</span><span>Admin manually adds entries (e.g., "map 12.34.158.0/24 to Serial0/0.1")</span></div>
+          <div class="compare-row"><span>Pros</span><span>Simple, predictable, zero overhead</span></div>
+          <div class="compare-row"><span>Cons</span><span>Not adaptive — fails to react to topology changes, new devices, or link failures</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Routing Protocols (Dynamic)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span>How</span><span>Routers exchange reachability information automatically (covered in subsequent lectures)</span></div>
+          <div class="compare-row"><span>Pros</span><span>Adaptive — handles failures, load balancing, topology changes</span></div>
+          <div class="compare-row"><span>Cons</span><span>Protocol overhead; convergence time after failure</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Terminology distinction:</strong> A <em>routing protocol</em> (e.g., OSPF, BGP) builds and maintains the routing table. A <em>routed protocol</em> (e.g., IP) is the protocol whose packets are being forwarded. These are different things.
+    </div>
+  </div>
+
+  <!-- ── 13. Packet Forwarding by End Hosts ── -->
+  <div class="section">
+    <div class="section-label">Packet Forwarding by End Hosts</div>
+    <p>End hosts (PCs, laptops) do not run routing protocols. Their forwarding logic is simple:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Destination</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Self (e.g., 127.0.0.1 or own IP)</td><td>Deliver locally (loopback)</td></tr>
+        <tr><td>Same LAN (e.g., 1.2.3.0/24)</td><td>Send directly out the interface (resolve MAC via ARP)</td></tr>
+        <tr><td>External (0.0.0.0/0)</td><td>Send to the configured <strong>default gateway</strong></td></tr>
+      </tbody>
+    </table>
+
+    <p>The gateway address is learned either via static configuration (manual IP setup) or dynamically via <strong>DHCP</strong>.</p>
+  </div>
+
+  <!-- ── 14. Final-Hop Delivery: ARP ── -->
+  <div class="section">
+    <div class="section-label">Final-Hop Delivery — ARP</div>
+    <p>IP routing gets a packet to the correct network, but the actual frame delivery on a local link requires a <strong>MAC address</strong>. Each NIC has a globally unique MAC address burned into its ROM — a flat, non-hierarchical 48-bit identifier with no routing semantics.</p>
+
+    <p>To find the MAC address corresponding to a known IP address, the network layer uses <strong>ARP (Address Resolution Protocol)</strong>:</p>
+
+    <div class="callout green">
+      <strong>ARP role:</strong> Maps IP address (Layer 3) → MAC address (Layer 2). The last router on the path broadcasts an ARP request on the local link; the target host responds with its MAC. The router then encapsulates the IP packet in a frame addressed to that MAC and delivers it.
+    </div>
+
+    <div class="callout">
+      <strong>RARP (Reverse ARP)</strong> goes the other direction: MAC → IP. Used historically by diskless workstations to learn their own IP address. Largely superseded by DHCP.
+    </div>
+  </div>
+
+  <!-- ── 15. Scalability Through Hierarchy — Summary ── -->
+  <div class="section">
+    <div class="section-label">Scalability Through Hierarchy — Key Principles</div>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Principle 1</div>
+        <div class="proto-names">No global knowledge needed</div>
+        <p style="font-size:13px; margin-top:6px;">Each router only needs to know how to reach the <em>next hop</em>, not the full path. Hierarchy ensures each level only needs knowledge of its own sub-tree.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Principle 2</div>
+        <div class="proto-names">Updates are localized</div>
+        <p style="font-size:13px; margin-top:6px;">Changes within an institution (new host, subnet restructure) only require updates at that institution's level — not propagated globally.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Principle 3</div>
+        <div class="proto-names">CIDR over classful</div>
+        <p style="font-size:13px; margin-top:6px;">Classful addressing was too coarse (forced large wasteful blocks). CIDR's variable-length prefixes allow right-sized allocations but introduce LPM complexity.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Principle 4</div>
+        <div class="proto-names">Aggregation reduces table size</div>
+        <p style="font-size:13px; margin-top:6px;">Multiple sub-networks summarized into one prefix at higher levels. External internet only sees the aggregate; internal routing handles details.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Concept Summary ── -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+    <div class="callout green">
+      <strong>IPv4:</strong> 32-bit, dotted-quad, identifies an interface. Assigned by sysadmin or DHCP.
+    </div>
+    <div class="callout green">
+      <strong>Subnet mask:</strong> 32-bit value (contiguous 1s then 0s). Bitwise AND with IP extracts network address. Written as /prefix_length (CIDR notation).
+    </div>
+    <div class="callout green">
+      <strong>Classful addressing:</strong> Fixed mask inferred from leading bits (A=/8, B=/16, C=/24). Too coarse → replaced by CIDR.
+    </div>
+    <div class="callout green">
+      <strong>CIDR:</strong> Variable-length prefix. Enables efficient allocation and aggregation but introduces multiple-match ambiguity in forwarding tables.
+    </div>
+    <div class="callout green">
+      <strong>Hop-by-hop forwarding:</strong> Each router independently consults its forwarding table using the destination IP. No router knows the full path end-to-end.
+    </div>
+    <div class="callout green">
+      <strong>Longest Prefix Match (LPM):</strong> When multiple table entries match, the most specific (longest prefix) wins. This is the fundamental forwarding rule under CIDR.
+    </div>
+    <div class="callout green">
+      <strong>LPM efficiency:</strong> Linear scan is too slow (200K+ entries, nanosecond packet rates). Solutions: Patricia trie (O(32)), k-ary trie, TCAM hardware (O(1)).
+    </div>
+    <div class="callout green">
+      <strong>Forwarding table sources:</strong> Static config (simple but not adaptive) or routing protocols (dynamic, adaptive — covered in subsequent lectures).
+    </div>
+    <div class="callout green">
+      <strong>ARP:</strong> Resolves IP address → MAC address for final local-link delivery. Required because IP routing operates at Layer 3 but frames are delivered at Layer 2.
+    </div>
+    <div class="callout yellow">
+      <strong>Address hierarchy (ICANN → RIR → ISP → Institution → Host):</strong> Prefix assigned to institution; institution assigns host addresses internally. Only the institution's border needs updating when internal topology changes.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

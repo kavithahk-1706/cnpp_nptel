@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 37 — IP Routing I: Intra-domain Routing</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec36.html" class="nav-lec">← prev</a>
+        <a href="lec38.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- ── Header ── -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 37</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>IP Routing — I: Intra-domain Routing</h1>
+      <p>Network Layer · Routing algorithms · Autonomous Systems · Distance Vector intro</p>
+    </div>
+
+    <!-- ── 1. Routing vs Forwarding ── -->
+    <div class="section">
+      <div class="section-label">Core Concept</div>
+      <h3>Routing vs Forwarding</h3>
+      <p>These two terms are used together constantly and it's important to not conflate them. They refer to two distinct jobs a router does.</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Forwarding</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">What</div><div>Moving a single packet from an input port to the correct output port</div></div>
+            <div class="compare-row"><div class="label">How</div><div>Looks up destination address in the local forwarding/routing table and finds the &lt;out-port, MAC addr&gt; pair</div></div>
+            <div class="compare-row"><div class="label">Scope</div><div>Local, per-packet, happens in real time at line speed</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Routing</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">What</div><div>The process of <strong>populating</strong> the forwarding table with correct entries</div></div>
+            <div class="compare-row"><div class="label">How</div><div>Routers exchange messages about reachable networks; routing algorithms compute optimal paths</div></div>
+            <div class="compare-row"><div class="label">Scope</div><div>Network-wide, runs in background, updates periodically or on topology changes</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        A router is a <strong>Layer 3 device</strong>. It opens packets up to the network layer, extracts the destination IP, consults its forwarding table, and pushes the packet out the correct interface. To actually build the frame at Layer 2, it then needs the MAC address of the next hop — which is resolved via <strong>ARP</strong> (covered in a later lecture).
+      </div>
+    </div>
+
+    <!-- ── 2. Stability vs Optimality ── -->
+    <div class="section">
+      <div class="section-label">Design Tradeoff</div>
+      <h3>Stability vs Optimality</h3>
+      <p>Stable routing tables are preferred over rapidly fluctuating ones — even if a slightly suboptimal path results. Two reasons:</p>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Manageability</div>
+          <div class="concept-desc">Transient (rapidly-changing) routes are extremely difficult to debug. At internet scale this is a nightmare. A stable table means consistent, reproducible behaviour.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Higher-layer Optimizations</div>
+          <div class="concept-desc">TCP RTT estimation depends on a reasonably consistent path. If routes alternate between 500 ms and 50 ms every few milliseconds, TCP's congestion window and retransmission logic go haywire.</div>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        <strong>The tradeoff:</strong> Maximum stability = nothing ever changes = potentially stale, suboptimal routes. Maximum optimality = routes update instantly with every change = instability cascades. Real protocols balance both — they update on change but avoid thrashing.
+      </div>
+    </div>
+
+    <!-- ── 3. Routing Algorithms ── -->
+    <div class="section">
+      <div class="section-label">Classification</div>
+      <h3>Routing Algorithms</h3>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Global (Centralized)</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Topology</div><div>All routers have complete knowledge of the entire network topology</div></div>
+            <div class="compare-row"><div class="label">Advantage</div><div>Can compute truly optimal routes</div></div>
+            <div class="compare-row"><div class="label">Problem</div><div>Not scalable — impractical for internet-scale networks</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Decentralized</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Topology</div><div>Each router only knows its immediate neighbors and information shared from them</div></div>
+            <div class="compare-row"><div class="label">Advantage</div><div>Scales to internet size; no single point of knowledge required</div></div>
+            <div class="compare-row"><div class="label">Problem</div><div>Convergence is slower; can suffer routing loops and counting-to-infinity</div></div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Intra-domain vs Inter-domain Routing</h3>
+
+      <div class="compare">
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Intra-domain</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Scope</div><div>All routers under <strong>one administrative control</strong> (e.g. IIT KGP's campus network)</div></div>
+            <div class="compare-row"><div class="label">Priority</div><div><strong>Optimality</strong> — single admin can enforce and optimize freely</div></div>
+            <div class="compare-row"><div class="label">Protocols</div><div>RIP (Distance Vector), OSPF (Link State)</div></div>
+          </div>
+        </div>
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Inter-domain</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Scope</div><div>Between different organizations / Autonomous Systems — decentralized, internet scale</div></div>
+            <div class="compare-row"><div class="label">Priority</div><div><strong>Policy</strong> — economic and political agreements matter more than pure optimality</div></div>
+            <div class="compare-row"><div class="label">Protocols</div><div>BGP (Path Vector) — covered in a later lecture</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4. Optimality ── -->
+    <div class="section">
+      <div class="section-label">Key Challenge</div>
+      <h3>Optimality: Network as a Graph</h3>
+      <p>Model the network as a weighted directed graph where nodes = routers and edges = links. Each edge carries a cost based on one or more metrics:</p>
+
+      <div class="tag-row">
+        <span class="tag tag-good">Latency</span>
+        <span class="tag tag-good">Bandwidth</span>
+        <span class="tag tag-good">Utilization</span>
+        <span class="tag tag-good">Queue Length</span>
+        <span class="tag tag-good">Hop Count</span>
+      </div>
+
+      <p><strong>Goal:</strong> Find the lowest-cost path between source and destination nodes. Each router individually computes cost; in a distributed system they cooperate to converge on globally optimal (or near-optimal) paths. If a truly optimal path cannot be found, a <strong>default route</strong> acts as a fallback — any unrecognized destination gets forwarded there.</p>
+    </div>
+
+    <!-- ── 5. Scaling ── -->
+    <div class="section">
+      <div class="section-label">Key Challenge</div>
+      <h3>Scaling</h3>
+      <p>Every router must be able to forward any destination IP address. A naive approach — one routing table entry per IP address — is completely infeasible. The internet has on the order of 10<sup>8</sup>–10<sup>9</sup> addressable devices.</p>
+
+      <div class="callout green">
+        <strong>Solution: Entry covers a range of addresses.</strong> Instead of one row per host, a single entry covers an entire network block (e.g. a /24). One entry in an upstream router handles all 20,000 devices on IIT KGP's campus. This is called <strong>address aggregation</strong>.
+      </div>
+
+      <p>This only works if addresses are allocated in a structured, hierarchical way — i.e., based on network topology. It does <strong>not</strong> work with randomly assigned addresses (like Ethernet MAC addresses, which are assigned by manufacturer and carry no topological meaning). This is exactly why IP addresses must be allocated based on network structure.</p>
+
+      <p><em>Analogy:</em> A postman can bundle mail for houses 1–6 on the same street. If the houses were numbered 1, 49, 101, 216 at random, bundling is impossible.</p>
+    </div>
+
+    <!-- ── 6. Delivery types ── -->
+    <div class="section">
+      <div class="section-label">Packet Delivery</div>
+      <h3>Direct vs Indirect Delivery</h3>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Direct Delivery</div>
+          <div class="concept-desc">Source and destination are on the <strong>same network</strong>. Packet goes straight from sender to receiver without passing through a router. Final delivery is always direct — even in multi-hop paths, the last hop from the last router to the destination host is a direct delivery.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Indirect Delivery</div>
+          <div class="concept-desc">Source and destination are on <strong>different networks</strong>. Packet must pass through one or more routers. Each router performs a next-hop lookup and forwards the packet hop by hop until it reaches the destination network, after which final delivery is direct.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 7. Route vs Next-hop ── -->
+    <div class="section">
+      <div class="section-label">Routing Table Design</div>
+      <h3>Route Method vs Next-hop Method</h3>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Route Method</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Entry</div><div>Destination → Full explicit path (e.g. R1 → R2 → Host B)</div></div>
+            <div class="compare-row"><div class="label">Problem</div><div>Each router must store the complete end-to-end path. Table sizes are enormous. Any topology change invalidates stored paths.</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Next-hop Method <span class="high-badge">used in practice</span></div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Entry</div><div>Destination → Next hop only (e.g. to reach Host B, send to R1)</div></div>
+            <div class="compare-row"><div class="label">Why better</div><div>Each router only stores one next hop per destination. Individual routers maintain local tables and the correct path emerges from cooperative forwarding decisions.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 8. Host-specific vs Network-specific ── -->
+    <div class="section">
+      <div class="section-label">Routing Table Design</div>
+      <h3>Host-specific vs Network-specific Routing</h3>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Host-specific</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Entry</div><div>One row per individual host (A → R1, B → R1, C → R1, D → R1...)</div></div>
+            <div class="compare-row"><div class="label">Problem</div><div>Table grows linearly with number of hosts — completely unscalable</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Network-specific <span class="high-badge">used in practice</span></div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Entry</div><div>One row per network block (Network N2 → R1). All hosts A, B, C, D on N2 are covered by this single entry.</div></div>
+            <div class="compare-row"><div class="label">Why better</div><div>Dramatically reduces table size. Routers forward based on network address, not individual host address.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 9. Default Route ── -->
+    <div class="section">
+      <div class="section-label">Fallback Mechanism</div>
+      <h3>Default Route</h3>
+      <p>When a packet's destination does not match any specific entry in the routing table, the router forwards it to the <strong>default route</strong> — a catch-all entry typically pointing toward an upstream router or the rest of the internet. Without it, unrecognized destinations would simply be dropped.</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="vci">Destination: N2</span>
+          <span class="arrow">→</span>
+          <span class="port">Next Hop: R1</span>
+        </div>
+        <div class="vci-row">
+          <span class="vci">Destination: Any other</span>
+          <span class="arrow">→</span>
+          <span class="port">Next Hop: R2 (default router)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 10. Basic Routing Module ── -->
+    <div class="section">
+      <div class="section-label">Router Internals</div>
+      <h3>Basic Routing Module (Classless Addressing)</h3>
+      <p>When a packet arrives, the forwarding module does the following in order:</p>
+
+      <div class="impl-stack">
+        <div class="impl-row">
+          <div class="impl-layer impl-app">1. Extract destination IP address from packet header</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-trans">2. Apply subnet masks (longest prefix first) to find matching network entry</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-net">3. Retrieve next-hop IP address and output interface number from table</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-dl">4. Pass to ARP — resolve next-hop IP → MAC address for Layer 2 framing</div>
+        </div>
+        <div class="impl-row">
+          <div class="impl-layer impl-phys">5. Forward frame out the identified interface</div>
+        </div>
+      </div>
+
+      <p>The routing table stores rows of: <strong>Mask (/n) | Network Address | Next-hop Address | Interface</strong>. On a lookup miss across all entries, the packet hits the default entry (mask = Any, network = Any).</p>
+    </div>
+
+    <!-- ── 11. Longest Prefix Match ── -->
+    <div class="section">
+      <div class="section-label">Forwarding Mechanism</div>
+      <h3>Longest Prefix Match (LPM) — Worked Examples</h3>
+      <p>The routing table is searched from longest mask to shortest. The first match wins. This ensures the most specific route is always preferred.</p>
+
+      <div class="callout">
+        <strong>Routing table for R1 (example from lecture):</strong>
+      </div>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Mask</th>
+            <th>Network Address</th>
+            <th>Next Hop</th>
+            <th>Interface</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">/26</td>
+            <td>180.70.65.192</td>
+            <td>—</td>
+            <td class="proto-name">m2</td>
+          </tr>
+          <tr>
+            <td class="port-num">/25</td>
+            <td>180.70.65.128</td>
+            <td>—</td>
+            <td class="proto-name">m0</td>
+          </tr>
+          <tr>
+            <td class="port-num">/24</td>
+            <td>201.4.22.0</td>
+            <td>—</td>
+            <td class="proto-name">m3</td>
+          </tr>
+          <tr>
+            <td class="port-num">/22</td>
+            <td>201.4.16.0</td>
+            <td>—</td>
+            <td class="proto-name">m1</td>
+          </tr>
+          <tr>
+            <td class="port-num">Any</td>
+            <td>Any</td>
+            <td>180.70.65.200</td>
+            <td class="proto-name">m2 (default)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout green">
+        <strong>Example 1:</strong> Destination = 180.70.65.140 <a class="ts" href="#">25:19</a><br><br>
+        Apply /26 → result 180.70.65.128 → no match with 180.70.65.192.<br>
+        Apply /25 → result 180.70.65.128 → <strong>MATCH</strong> with row 2.<br>
+        Packet forwarded to interface <strong>m0</strong>. ARP resolves m0's MAC for Layer 2 delivery.
+      </div>
+
+      <div class="callout green">
+        <strong>Example 2:</strong> Destination = 201.4.22.35 <a class="ts" href="#">27:16</a><br><br>
+        Apply /26 → result 201.4.22.0 → no match with 180.70.65.192.<br>
+        Apply /25 → result 201.4.22.0 → no match with 180.70.65.128.<br>
+        Apply /24 → result 201.4.22.0 → <strong>MATCH</strong> with row 3.<br>
+        Packet forwarded to interface <strong>m3</strong>.
+      </div>
+    </div>
+
+    <!-- ── 12. Address Aggregation ── -->
+    <div class="section">
+      <div class="section-label">Scaling Mechanism</div>
+      <h3>Address Aggregation</h3>
+      <p>Multiple downstream organizations can be summarized into a single upstream routing entry if their IP blocks are contiguous and allocatable under a common prefix.</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">R1 (local router)</div>
+          <div class="proto-names">4 entries: /26 each for Org 1–4<br>140.24.7.0/26, .64/26, .128/26, .192/26</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">R2 (upstream router)</div>
+          <div class="proto-names">1 aggregated entry: /24<br>140.24.7.0/24 → m0<br>Covers all 4 organizations</div>
+        </div>
+      </div>
+
+      <p>From R2's perspective, all four organizations collapse into a single /24 entry. If there were 400 organizations under R1 instead of 4, R2's table would still have just one entry. This is the power of hierarchical, topology-based address allocation.</p>
+    </div>
+
+    <!-- ── 13. Autonomous Systems ── -->
+    <div class="section">
+      <div class="section-label">Internet Architecture</div>
+      <h3>Autonomous Systems (AS)</h3>
+      <p>The internet is not a single monolithic network. It is composed of many independently administered networks called <strong>Autonomous Systems</strong>. Examples: IIT Kharagpur, Stanford, a large ISP, a corporation.</p>
+
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Goal 1</div>
+          <div class="concept-desc">Each AS chooses its own <strong>local (intra-domain) routing algorithm</strong>. IIT KGP can run OSPF internally; another AS can run RIP. Nobody else's business.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Goal 2</div>
+          <div class="concept-desc">Each AS sets <strong>policies for non-local (inter-domain) routing</strong> — which external ASes it will accept transit traffic for, which it won't, based on business agreements.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Identifier</div>
+          <div class="concept-desc">Each AS is assigned a unique <strong>16-bit AS Number (ASN)</strong> by a regional internet registry.</div>
+        </div>
+      </div>
+
+      <h4>AS Traffic Types</h4>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Local Traffic</td>
+            <td>Source and destination both within the same AS</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Transit Traffic</td>
+            <td>Traffic passing <em>through</em> an AS to reach another AS</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Stub AS</td>
+            <td>Connected to only one other AS — single entry/exit point. Cannot carry transit traffic.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Multihomed AS</td>
+            <td>Connected to multiple ASes for redundancy, but carries <strong>no transit traffic</strong> (refuses to be a middle-man)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Transit AS</td>
+            <td>Connected to multiple ASes <em>and</em> carries transit traffic — acts as a routing intermediary (e.g. large ISPs)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── 14. Intra-domain routing algorithms ── -->
+    <div class="section">
+      <div class="section-label">Algorithm Types</div>
+      <h3>Intra-domain Routing Algorithms</h3>
+      <p>Within an AS, <strong>optimality</strong> is the primary goal (unlike inter-AS routing where policy dominates). Two fundamental approaches exist:</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Distance Vector (DV)</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Knowledge</div><div>Each node only knows costs to its <strong>immediate neighbors</strong></div></div>
+            <div class="compare-row"><div class="label">Exchange</div><div>Shares its full routing table with neighbors periodically and on change</div></div>
+            <div class="compare-row"><div class="label">Overhead</div><div>Low — only local state needed, smaller memory footprint</div></div>
+            <div class="compare-row"><div class="label">Problems</div><div>Harder to debug; susceptible to <strong>routing loops</strong> and <strong>count-to-infinity</strong></div></div>
+            <div class="compare-row"><div class="label">Protocol</div><div>RIP (Routing Information Protocol)</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Link State (LS)</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Knowledge</div><div>Each node has a <strong>complete view</strong> of the entire network topology</div></div>
+            <div class="compare-row"><div class="label">Exchange</div><div>Floods link-state advertisements to all nodes; each independently runs Dijkstra</div></div>
+            <div class="compare-row"><div class="label">Overhead</div><div>Higher — requires storing and maintaining global state</div></div>
+            <div class="compare-row"><div class="label">Problems</div><div>More bandwidth and memory intensive, but loop-free and simpler to debug</div></div>
+            <div class="compare-row"><div class="label">Protocol</div><div>OSPF (Open Shortest Path First)</div></div>
+          </div>
+        </div>
+      </div>
+
+      <h4>Routing Protocol Taxonomy</h4>
+      <div class="hourglass">
+        <div class="hg-row hg-wide">Routing Protocols</div>
+        <div class="hg-row hg-mid">Intra-domain</div>
+        <div class="hg-row hg-mid">Distance Vector → <strong>RIP</strong> &nbsp;|&nbsp; Link State → <strong>OSPF</strong></div>
+        <div class="hg-row hg-mid">Inter-domain</div>
+        <div class="hg-row hg-narrow">Path Vector → <strong>BGP</strong></div>
+      </div>
+    </div>
+
+    <!-- ── 15. Distance Vector Intro ── -->
+    <div class="section">
+      <div class="section-label">Algorithm Deep-dive Preview</div>
+      <h3>Distance Vector Routing — Overview</h3>
+      <p>Each node maintains a table of (destination, cost, next-hop) for every known destination. The table is shared with immediate neighbors <strong>periodically</strong> (e.g. every 30 s) and <strong>on change</strong> (triggered update).</p>
+
+      <div class="callout">
+        <strong>Initialization:</strong> A node starts knowing only directly connected neighbors with their link costs. All other destinations are set to cost = <strong>∞</strong> (unknown). Over successive exchanges, costs propagate and tables converge. <a class="ts" href="#">35:31</a>
+      </div>
+
+      <p><em>Example:</em> Node A is directly connected to B (cost 5) and C (cost 2). A cannot reach E directly, so cost(A→E) = ∞ initially. C knows E with cost 4. After C sends its table update to A, A learns: cost(A→E) = cost(A→C) + cost(C→E) = 2 + 4 = 6, via C. Table converges iteratively.</p>
+
+      <div class="callout yellow">
+        The update process and convergence mechanics (Bellman-Ford equation, count-to-infinity, split horizon) are covered in detail in the next lecture.
+      </div>
+    </div>
+
+    <!-- ── Summary ── -->
+    <div class="section">
+      <div class="section-label">Lecture Summary</div>
+      <h3>Key Takeaways</h3>
+
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Forwarding ≠ Routing</div>
+          <div class="interface-desc">Forwarding = fast per-packet table lookup. Routing = background process that builds those tables. Both are router responsibilities.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Stability vs Optimality</div>
+          <div class="interface-desc">Real protocols don't chase the absolute optimal path on every update — unstable routes break TCP and make debugging impossible.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Longest Prefix Match</div>
+          <div class="interface-desc">Routing table lookup always tries the most specific (longest) mask first. Default route is the catch-all of last resort.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Address Aggregation</div>
+          <div class="interface-desc">Works only when addresses are allocated hierarchically (IP), not randomly (MAC). It's the key to keeping routing tables manageable at internet scale.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Autonomous Systems</div>
+          <div class="interface-desc">Internet = collection of independently administered ASes. Intra-AS = optimality-first. Inter-AS = policy-first. These require fundamentally different routing protocols.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">DV vs LS</div>
+          <div class="interface-desc">Distance Vector (RIP) = local knowledge, light overhead, loop-prone. Link State (OSPF) = global topology, heavier overhead, loop-free.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

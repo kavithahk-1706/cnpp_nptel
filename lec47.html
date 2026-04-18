@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 47 — Data Link Layer: Basic Concepts</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec46.html" class="nav-lec">← prev</a>
+      <a href="lec48.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 47</span>
+    <span class="med-badge">medium priority</span>
+    <h1>Data Link Layer — Basic Concepts</h1>
+    <p>MAC sublayer structure, frame format, MAC techniques (CSMA/CD &amp; Token Passing), LAN addressing, and MAC protocol taxonomy.</p>
+  </div>
+
+  <!-- 1. DLL Structure Recap -->
+  <div class="section">
+    <div class="section-label">Data Link Layer Structure</div>
+    <p>The Data Link Layer (Layer 2) is divided into two sublayers, standardised under the <strong>IEEE 802</strong> family of standards which covers both Layer 2 and the Physical layer.</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">LLC — Logical Link Control</div>
+        <p class="concept-desc">Handles upper-layer negotiation and connectivity. Exposes a <strong>LLC Service Access Point (LSAP)</strong> to upper-layer protocols, identifying which process or service should receive the data.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">MAC — Medium Access Control</div>
+        <p class="concept-desc">Interfaces directly with the physical layer. Manages access to the shared medium and carries the hardware (MAC) address that uniquely identifies a network interface card worldwide.</p>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Cross-layer optimisation:</strong> Although layered design enables interoperability, strict layer separation can limit performance. Cross-layer optimisation — jointly tuning multiple layers — is an active research area, especially for QoS, security, and multimedia applications.
+    </div>
+  </div>
+
+  <!-- 2. Generic MAC Frame Format -->
+  <div class="section">
+    <div class="section-label">Generic MAC Frame Format</div>
+    <p>When the MAC sublayer receives a LLC PDU (Protocol Data Unit) from LLC, it wraps it into a <strong>MAC frame</strong> by adding a header and a trailer.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">MAC Control</td>
+          <td>Control information for MAC protocol operation, e.g. priority level.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Destination MAC Address</td>
+          <td>Hardware address of the destination's physical attachment point (NIC) on the LAN. This is a <em>hop-to-hop</em> address — the next stop (e.g. a switch or wireless access point), not the final endpoint.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Source MAC Address</td>
+          <td>Hardware address of the sender's physical attachment point (NIC).</td>
+        </tr>
+        <tr>
+          <td class="proto-name">LLC PDU (Payload)</td>
+          <td>Data received from the LLC sublayer (which contains the network-layer datagram wrapped in LLC header).</td>
+        </tr>
+        <tr>
+          <td class="proto-name">CRC (Trailer)</td>
+          <td>Cyclic Redundancy Check — appended at the end. The receiving station recomputes the CRC and compares it to detect transmission errors.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>MAC address (hardware address):</strong> Burned into the NIC at manufacture. Globally unique. Layer 2 operates purely in terms of MAC addresses — it has no knowledge of IP. ARP (Address Resolution Protocol) bridges this gap by resolving an IP address to the corresponding MAC address at each hop.
+    </div>
+  </div>
+
+  <!-- 3. MAC Techniques -->
+  <div class="section">
+    <div class="section-label">MAC Techniques</div>
+    <p>MAC techniques govern how stations get the right to transmit over a shared medium. There are two broad categories:</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Synchronous</div>
+        <p class="concept-desc">A fixed capacity is dedicated to each connection — analogous to circuit-switched FDM or TDM. <strong>Not suitable for LANs/MANs</strong> because station demand is unpredictable; pre-allocated bandwidth is wasted when a station is idle.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Asynchronous</div>
+        <p class="concept-desc">Capacity is allocated dynamically in response to actual demand. The dominant approach for LANs. Subdivided into three strategies: <strong>Round Robin</strong>, <strong>Reservation</strong>, and <strong>Contention</strong>.</p>
+      </div>
+    </div>
+
+    <h3>Asynchronous Sub-categories</h3>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Strategy</th>
+          <th>Mechanism</th>
+          <th>Best for</th>
+          <th>Weakness</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Round Robin</td>
+          <td>Each station is granted the right to transmit in turn. After finishing, it passes the right to the next station in the logical sequence.</td>
+          <td>When many stations have data to send uniformly over time.</td>
+          <td>Wasteful if some stations have nothing to transmit — they still consume their turn.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Reservation</td>
+          <td>Time is divided into slots (like synchronous TDM). A station reserves slots in advance for an extended period before transmitting.</td>
+          <td>Steady streaming traffic — voice, bulk file transfer.</td>
+          <td>Over-allocates for bursty traffic; requires advance coordination.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Contention</td>
+          <td>No centralised control — stations compete freely for the medium. No turn-taking, no pre-reservation.</td>
+          <td>Bursty, sporadic traffic — interactive terminal/host traffic. Simple to implement.</td>
+          <td>Efficient under light load; degrades under heavy load due to collisions.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 4. Medium Access Control Methods -->
+  <div class="section">
+    <div class="section-label">Medium Access Control Methods</div>
+    <p>Two principal MAC-level access methods exist in practice:</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">CSMA/CD</div>
+        <p class="concept-desc">Carrier Sense Multiple Access with Collision Detection. Used in <strong>bus topologies</strong>. The dominant technique — forms the basis of traditional <strong>Ethernet</strong>.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Token Passing (Control Token)</div>
+        <p class="concept-desc">A permission token circulates around a logical ring. Applicable to both <strong>bus and ring topologies</strong>. Less common today; mostly superseded by Ethernet.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. CSMA/CD -->
+  <div class="section">
+    <div class="section-label">CSMA/CD — Deep Dive</div>
+    <p>CSMA/CD is used only in bus-type networks where all nodes share a single common communication medium. It combines three mechanisms:</p>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Carrier Sense (CS)</div>
+        <p class="concept-desc">Before transmitting, a station <em>listens</em> to the medium. If busy, it waits until the channel becomes idle. If idle, it transmits.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Multiple Access (MA)</div>
+        <p class="concept-desc">Multiple stations share the same medium. Even after sensing idle, two stations may begin transmitting simultaneously, causing a collision.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Collision Detection (CD)</div>
+        <p class="concept-desc">While transmitting, the station keeps listening. A collision produces a voltage fluctuation detectable by the hardware. On detection, a <strong>jam signal</strong> is broadcast to alert all stations.</p>
+      </div>
+    </div>
+
+    <h3>CSMA/CD Operation — Step by Step</h3>
+    <div class="callout green">
+      <strong>1.</strong> Source station assembles a MAC frame (destination address + data + control info).<br/>
+      <strong>2.</strong> Listen to the medium — <em>carrier sensing</em>. If busy, wait. If idle, transmit.<br/>
+      <strong>3.</strong> Continue listening while transmitting — <em>collision detection</em>.<br/>
+      <strong>4.</strong> If a collision is detected (voltage fluctuation), immediately transmit a random bit pattern — the <strong>jam sequence</strong> — to notify all stations.<br/>
+      <strong>5.</strong> All stations involved in the collision <strong>back off</strong> for a random time period, then retry from step 2.<br/>
+      <strong>6.</strong> If the back-off retry limit is exceeded, the transmission is <strong>aborted</strong> (link failure declared).
+    </div>
+
+    <h3>Collision Detection Time</h3>
+    <p>The worst-case time to detect a collision is <strong>2 × end-to-end propagation delay</strong>. This is because station A starts transmitting; just before A's signal reaches station B at the far end of the bus, B also starts transmitting. B detects the collision immediately, but A must wait for B's jam signal to propagate all the way back — a full round-trip propagation delay — before it realises a collision occurred.</p>
+
+    <div class="callout pink">
+      <strong>Visual hint — CSMA/CD flowchart (Refer Slide Time: 18:33):</strong> The lecture shows a detailed procedure flowchart covering the start → persistence strategy → send frame → collision? → jam signal → increment backoff → backoff limit? → abort/retry loop. Worth reviewing visually for exam diagrams.
+    </div>
+  </div>
+
+  <!-- 6. Token Passing -->
+  <div class="section">
+    <div class="section-label">Control Token / Token Passing</div>
+    <p>An alternative MAC access method where a special <strong>permission token</strong> circulates among all stations in a logical ring. Only the station holding the token may transmit.</p>
+
+    <h3>Key Properties</h3>
+    <p>Works on both bus and ring physical topologies by establishing a <strong>logical ring</strong> overlaid on the physical medium. A single token is created at one node and passed from node to node in the logical ring sequence.</p>
+
+    <h3>Token Passing Operation — Step by Step</h3>
+    <div class="callout">
+      <strong>1.</strong> Station waits for the token to arrive.<br/>
+      <strong>2.</strong> Station <strong>captures</strong> the token (gains exclusive transmission right).<br/>
+      <strong>3.</strong> If it has data to send: transmit frames. If not: immediately release the token.<br/>
+      <strong>4.</strong> A station may hold the token only for a fixed <strong>allocated time limit</strong>. Once the time expires, it must release the token regardless of remaining data.<br/>
+      <strong>5.</strong> Token is <strong>released</strong> to the next node in the logical ring.
+    </div>
+
+    <div class="callout yellow">
+      <strong>Status:</strong> Token passing (Token Ring — IEEE 802.4/802.5) was historically used but is now largely obsolete. Modern networks are almost entirely Ethernet (CSMA/CD) based.
+    </div>
+  </div>
+
+  <!-- 7. LAN Addressing -->
+  <div class="section">
+    <div class="section-label">LAN Addressing</div>
+    <p>Communication involves three agents: <strong>processes</strong> (software running on a machine), <strong>stations</strong> (end devices), and <strong>networks</strong> (interconnecting infrastructure). To deliver data to the correct process on the correct machine, the data link layer uses two levels of addressing:</p>
+
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">MAC Address (Hardware Address)</div>
+        <p class="interface-desc">Identifies a <strong>physical interface</strong> (NIC) — the station's attachment point to the LAN. One-to-one relationship between station and MAC address. Wired or wireless, every NIC has a globally unique MAC address burned in by the manufacturer.</p>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">LLC Address (LSAP)</div>
+        <p class="interface-desc">Identifies an <strong>LLC user</strong> — a particular process, service, or hardware port within a station. The LLC Service Access Point (LSAP) is how the data link layer knows which upper-layer protocol or process should receive the incoming data.</p>
+      </div>
+    </div>
+
+    <h3>Encapsulation Flow at Layer 2</h3>
+    <p>When an IP datagram arrives from the network layer:</p>
+    <div class="callout green">
+      <strong>User data (IP datagram)</strong><br/>
+      ↓ <em>LLC adds LLC header (containing source/dest LSAP)</em><br/>
+      <strong>LLC PDU</strong><br/>
+      ↓ <em>MAC adds MAC header (source/dest MAC addresses) + MAC trailer (CRC)</em><br/>
+      <strong>MAC Frame</strong> — transmitted on the physical medium to the next hop
+    </div>
+    <p>The MAC header's destination address is always the <em>next-hop</em> MAC address, not the final destination. At every hop, the MAC frame is stripped, the LLC PDU is extracted, and a new MAC frame is constructed for the next segment.</p>
+  </div>
+
+  <!-- 8. MAC Protocol Taxonomy -->
+  <div class="section">
+    <div class="section-label">MAC Protocols — Taxonomy</div>
+    <p>All MAC protocols fall into three broad classes:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Principle</th>
+          <th>Example</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Channel Partitioning</td>
+          <td>Divide the channel into smaller pieces (time slots or frequency bands). Allocate a piece to each node for exclusive use.</td>
+          <td>TDMA, FDMA</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Random Access</td>
+          <td>Allow collisions to occur freely; define mechanisms to recover from them.</td>
+          <td>CSMA/CD (Ethernet)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Shared / Controlled Access</td>
+          <td>Tightly coordinate access to the shared medium so collisions are avoided entirely.</td>
+          <td>Token Passing</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Design Goals of Any MAC Protocol</h3>
+    <div class="tag-row">
+      <span class="tag tag-good">Efficient — maximise channel utilisation</span>
+      <span class="tag tag-good">Fair — no node gets unfair preference</span>
+      <span class="tag tag-good">Simple — low implementation complexity</span>
+      <span class="tag tag-good">Decentralised — no single point of control</span>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <div class="callout green">
+      <strong>Data Link Layer</strong> = LLC (upper-layer interface) + MAC (medium access + hardware addressing). IEEE 802 standardises both.<br/><br/>
+      <strong>MAC Frame</strong> = MAC Control | Dest MAC | Src MAC | LLC PDU | CRC. All addresses are hop-to-hop, not end-to-end.<br/><br/>
+      <strong>MAC Techniques:</strong> Synchronous (fixed allocation, like circuit switching) vs Asynchronous (dynamic — Round Robin / Reservation / Contention).<br/><br/>
+      <strong>CSMA/CD:</strong> Sense before transmit → detect collision by voltage fluctuation → jam signal → random backoff → retry. Worst-case collision detection = 2 × propagation delay. Foundation of Ethernet.<br/><br/>
+      <strong>Token Passing:</strong> Permission token circulates in a logical ring. Holder may transmit within a time limit. Collision-free by design. Now largely obsolete.<br/><br/>
+      <strong>LAN Addressing:</strong> Two levels — MAC address (identifies NIC/physical attachment) and LLC address/LSAP (identifies process or upper-layer service). ARP maps IP → MAC at each hop.<br/><br/>
+      <strong>MAC Protocol Goals:</strong> Efficient, Fair, Simple, Decentralised.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

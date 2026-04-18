@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 39 — AS & Path Vector Routing | CNPP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec38.html" class="nav-lec">← prev</a>
+        <a href="lec40.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- ── Header ── -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 39</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>IP Routing — III: Autonomous Systems &amp; Path Vector Routing</h1>
+      <p>Covers the architecture of Autonomous Systems, IGP vs EGP protocols, BGP path vector routing mechanics, loop prevention, policy routing, and a recap of OSPF LSA types.</p>
+    </div>
+
+    <!-- ── 1. Autonomous Systems ── -->
+    <div class="section">
+      <div class="section-label">1. Autonomous Systems (AS)</div>
+
+      <p>The internet is not managed by a single administrative authority. Instead, it is divided into <strong>Autonomous Systems</strong> — logical portions of a large IP network, each under one administrative control (an organisation, ISP, university, etc.). Each AS is assigned a globally unique <strong>AS number</strong> by an international regulatory authority.</p>
+
+      <div class="callout green">
+        <strong>Definition:</strong> An Autonomous System is a logically grouped set of routers and networks operated under a single administrative domain, identifiable by a unique AS number, capable of connecting to other ASes (public or private, same or different organisations).
+      </div>
+
+      <h3>Intra-Domain vs Inter-Domain Routing</h3>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Intra-Domain (IGP)</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Scope</span> Within a single AS</div>
+            <div class="compare-row"><span class="label">Control</span> Fully under one admin authority</div>
+            <div class="compare-row"><span class="label">Examples</span> OSPF, RIP</div>
+            <div class="compare-row"><span class="label">Basis</span> Distance Vector / Link State</div>
+            <div class="compare-row"><span class="label">Policy</span> Internal to org</div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Inter-Domain (EGP)</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Scope</span> Across multiple ASes</div>
+            <div class="compare-row"><span class="label">Control</span> Collaborative / negotiated</div>
+            <div class="compare-row"><span class="label">Examples</span> BGP</div>
+            <div class="compare-row"><span class="label">Basis</span> Path Vector</div>
+            <div class="compare-row"><span class="label">Policy</span> Can enforce AS-level policies</div>
+          </div>
+        </div>
+      </div>
+
+      <h3>Border Routers</h3>
+      <p>Each AS has a designated <strong>Border Router (AS Boundary Router)</strong> that maintains summarised information about the entire AS, updated by IGPs (OSPF/RIP) internally. These border routers exchange summarised information with border routers of other ASes, enabling inter-domain path computation.</p>
+    </div>
+
+    <!-- ── 2. Routing Protocols in AS ── -->
+    <div class="section">
+      <div class="section-label">2. Routing Protocols in AS</div>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Interior Gateway Protocols (IGPs)</div>
+          <p class="concept-desc">Exchange routing information <strong>within</strong> an AS. The routing policy is entirely at the discretion of the owning organisation. Examples: <strong>OSPF</strong> (link-state) and <strong>RIP</strong> (distance-vector). Each AS can independently choose which IGP to run.</p>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Exterior Gateway Protocols (EGPs)</div>
+          <p class="concept-desc">Exchange <strong>summary</strong> routing information <strong>between</strong> ASes. Border routers advertise reachability of their AS's networks to neighbouring border routers. The canonical example is <strong>BGP (Border Gateway Protocol)</strong>.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3. Areas in AS ── -->
+    <div class="section">
+      <div class="section-label">3. Areas within an AS</div>
+
+      <p>A single AS can be further divided into <strong>Areas</strong> — each a collection of routers, networks, and hosts within the AS, identified by an <strong>Area ID</strong>. All networks within an area must be connected (area = connected subgraph).</p>
+
+      <div class="callout yellow">
+        <strong>Backbone Area (Area 0):</strong> A special area inside every AS. All other areas must connect to the backbone. It acts as the <em>primary</em> area; all others are secondary. Routers within area 0 are called <strong>backbone routers</strong>.
+      </div>
+
+      <h3>Router Roles in an AS</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Router Type</th>
+            <th>Role</th>
+            <th>Scope</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Internal Router</td>
+            <td>Floods routing info within its area</td>
+            <td>Single area</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Area Border Router (ABR)</td>
+            <td>Summarises area info; connects area to backbone (area 0)</td>
+            <td>Between areas within AS</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Backbone Router</td>
+            <td>Operates in Area 0; maintains backbone topology</td>
+            <td>Area 0</td>
+          </tr>
+          <tr>
+            <td class="proto-name">AS Boundary Router (ASBR)</td>
+            <td>Lives in Area 0; holds summarised AS info; communicates with other ASes via EGP (BGP)</td>
+            <td>Between ASes</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        A backbone router <strong>can also</strong> be an Area Border Router. These roles are not mutually exclusive. The ASBR is the outward-facing representative of the entire AS to the rest of the internet.
+      </div>
+
+      <h3>Information Flow (Hierarchy)</h3>
+      <div class="stack">
+        <div class="stack-layer layer-app">
+          <span class="layer-name">Other ASes</span>
+          <span class="layer-desc">inter-domain via BGP</span>
+        </div>
+        <div class="stack-layer layer-trans">
+          <span class="layer-name">AS Boundary Router</span>
+          <span class="layer-desc">in Area 0, speaks BGP outward</span>
+        </div>
+        <div class="stack-layer layer-net">
+          <span class="layer-name">Backbone Routers (Area 0)</span>
+          <span class="layer-desc">backbone topology via OSPF</span>
+        </div>
+        <div class="stack-layer layer-dl">
+          <span class="layer-name">Area Border Routers</span>
+          <span class="layer-desc">summarise area → backbone</span>
+        </div>
+        <div class="stack-layer layer-phys">
+          <span class="layer-name">Internal Routers (Area N)</span>
+          <span class="layer-desc">flood info within area via OSPF/RIP</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4. Path Vector Routing ── -->
+    <div class="section">
+      <div class="section-label">4. Path Vector Routing</div>
+
+      <p>Path vector routing is the mechanism used for <strong>inter-domain (EGP)</strong> routing. Unlike distance-vector (stores cost to destination) or link-state (stores full topology), path vector stores the <strong>actual sequence of ASes</strong> a packet must traverse.</p>
+
+      <h3>Routing Table Format</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Destination</td>
+            <td>Destination network address</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Next Router</td>
+            <td>Immediate next-hop router</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Path</td>
+            <td><strong>Ordered list of AS IDs</strong> to traverse (e.g. AS14 → AS23 → AS67)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout green">
+        <strong>Example entry:</strong> To reach network N1, next router = R1, path = AS14, AS23, AS67. Each AS boundary router prepends its own AS ID when advertising to neighbours, growing the path list hop by hop.
+      </div>
+
+      <h3>Key Properties of Path Vector Routing</h3>
+
+      <h4>Path Vector Messages</h4>
+      <p>AS boundary routers advertise reachability of networks within their AS to <strong>neighbouring boundary routers</strong> (two boundary routers on the same network = neighbours). These advertisements contain the path list. Boundary routers are first updated internally by OSPF/RIP before advertising outward.</p>
+      <p>Each receiving router <strong>verifies the advertised path against its local policy</strong> before accepting it.</p>
+
+      <h4>Loop Prevention</h4>
+      <p>Because each path advertisement is an ordered list of AS IDs, a loop is trivially detectable — if the receiving router's own AS ID appears anywhere in the path, that message is <strong>discarded</strong>. A repeated AS ID in the path = loop detected.</p>
+      <div class="callout pink">
+        Example of a looped path: AS1 → AS2 → AS6 → AS9 → AS6 → AS13 — AS6 appears twice. This message is dropped.
+      </div>
+
+      <h4>Policy Routing</h4>
+      <p>This is the biggest advantage of path vector over other protocols. An AS can define policies such as: "never route through AS X," "must route through AS Y," "prefer path through friendly ASes." If a received path violates local policy, the message is discarded — a clean, enforceable mechanism unavailable in pure distance-vector or link-state schemes.</p>
+
+      <h4>Path Attributes</h4>
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Well-Known Attributes</div>
+          <p class="interface-desc">Must be recognised by every BGP router. Further divided into <strong>Mandatory</strong> (must be present and propagated, e.g. AS_PATH, ORIGIN, NEXT_HOP) and <strong>Discretionary</strong> (recognised but not required in every update).</p>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Optional Attributes</div>
+          <p class="interface-desc">Not required to be recognised. Can be <strong>transitive</strong> (pass on even if not understood) or <strong>non-transitive</strong> (discard if not understood). Allow extensibility without breaking older routers.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 5. BGP ── -->
+    <div class="section">
+      <div class="section-label">5. Border Gateway Protocol (BGP) — RFC 1771</div>
+
+      <p>BGP is <em>the</em> internet's inter-domain routing protocol, based on path vector. It is the protocol that makes the global internet's AS-level routing work.</p>
+
+      <h3>Why Not Distance Vector or Link State for Inter-AS?</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Protocol Type</th>
+            <th>Problem at Internet Scale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Distance Vector</td>
+            <td>Assumes all routers share a common distance metric. Different ASes have different priorities and meanings for metrics — a stable, loop-free topology becomes impossible. Also gives no information about <em>which</em> ASes will be traversed.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Link State</td>
+            <td>Flooding is completely impractical at internet scale — consuming enormous bandwidth, and convergence of a full global topology is computationally and practically infeasible. Every router would need the entire internet's topology.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Path Vector (BGP)</td>
+            <td>No distance metric needed. Carries ordered AS path list. Loop detection is trivial. Policy enforcement is natural. Scales to internet size.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>BGP vs Distance Vector — Key Difference</h3>
+      <div class="callout">
+        Path vector does <strong>not</strong> compute a cost or distance estimate. It lists all ASes to be visited. This is both more informative (you know the exact route) and more policy-flexible than a simple cost number.
+      </div>
+
+      <h3>BGP Messages</h3>
+      <p>All BGP messages are sent over a <strong>TCP connection on port 179</strong>. There are four message types:</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Type 1</div>
+          <div class="proto-names">OPEN</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Initiates a BGP session with a neighbouring router. Establishes the connection.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Type 2</div>
+          <div class="proto-names">UPDATE</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Advertises new reachable paths or withdraws previously advertised paths. Carries path attributes.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Type 3</div>
+          <div class="proto-names">KEEPALIVE</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Periodic heartbeat — signals that the router is alive and ready to receive messages. Maintains the TCP session.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Type 4</div>
+          <div class="proto-names">NOTIFICATION</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Sent when an error or exceptional condition is detected. Closes the BGP session after delivery.</p>
+        </div>
+      </div>
+
+      <h3>BGP Functional Procedures</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Procedure</th>
+            <th>Messages Used</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Neighbour Acquisition</td>
+            <td>OPEN + KEEPALIVE</td>
+            <td>Establish BGP session with a neighbouring AS boundary router</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Neighbour Reachability</td>
+            <td>Periodic KEEPALIVE</td>
+            <td>Verify that neighbour is still operational</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Network Reachability</td>
+            <td>UPDATE (broadcast)</td>
+            <td>Advertise which networks are reachable via this AS, and the preferred path</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout yellow">
+        <strong>Note:</strong> The BGP RFC (1771) does <em>not</em> specify how a router learns the address of its BGP neighbours — that is left to the network administrator to configure manually.
+      </div>
+
+      <h3>BGP Routing Table Example</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Network</th>
+            <th>Next Router</th>
+            <th>AS Path</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">N1</td>
+            <td class="proto-name">R1</td>
+            <td>AS14 → AS23 → AS67</td>
+          </tr>
+          <tr>
+            <td class="port-num">N2</td>
+            <td class="proto-name">R5</td>
+            <td>AS22 → AS67 → AS5 → AS89</td>
+          </tr>
+          <tr>
+            <td class="port-num">N3</td>
+            <td class="proto-name">R6</td>
+            <td>AS67 → AS89 → AS8 → AS34</td>
+          </tr>
+          <tr>
+            <td class="port-num">N4</td>
+            <td class="proto-name">R12</td>
+            <td>AS62 → AS2 → AS9</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Path Advertisement Propagation</h3>
+      <p>When AS2 receives an advertisement from AS1 saying "to reach N1, path = AS1", AS2 prepends itself and advertises to AS3: "to reach N1, next router = R2, path = AS2 → AS1." AS3 in turn advertises: "path = AS3 → AS2 → AS1." Each hop adds itself to the front of the path, building the full ordered list.</p>
+    </div>
+
+    <!-- ── 6. OSPF Recap ── -->
+    <div class="section">
+      <div class="section-label">6. OSPF Recap (RFC 1247) — IGP / Intra-AS</div>
+
+      <p>OSPF operates <em>within</em> an AS. It uses a value in the <strong>8-bit Protocol field</strong> of the IP header. Metric is flexible: minimum delay (RTT), maximum throughput, reliability, etc. It divides the AS into areas and uses link-state advertisements (LSAs) to share topology.</p>
+
+      <h3>OSPF Link Types</h3>
+      <div class="tag-row">
+        <span class="tag tag-good">Point-to-Point</span>
+        <span class="tag tag-good">Transient</span>
+        <span class="tag tag-good">Stub</span>
+        <span class="tag tag-good">Virtual</span>
+      </div>
+
+      <h3>OSPF Link State Advertisement (LSA) Types</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>LSA Type</th>
+            <th>Originator</th>
+            <th>Describes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Router Link</td>
+            <td>Every router</td>
+            <td>All links/interfaces of the originating router within its area</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Network Link</td>
+            <td>Designated Router (DR)</td>
+            <td>All routers attached to the transient (multi-access) network</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Summary Link to Network</td>
+            <td>Area Border Router (ABR)</td>
+            <td>Routes to networks in other areas — flooded by ABR into the area</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Summary Link to AS Boundary</td>
+            <td>Area Border Router (ABR)</td>
+            <td>Routes to the AS Boundary Router — used so routers know how to reach external destinations</td>
+          </tr>
+          <tr>
+            <td class="proto-name">External Link</td>
+            <td>AS Boundary Router (ASBR)</td>
+            <td>Routes to networks external to the AS — flooded throughout the AS</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>OSPF Packet Types</h3>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Type 1</div>
+          <div class="proto-names">Hello</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Neighbour discovery and keepalive within OSPF.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Type 2</div>
+          <div class="proto-names">Database Description</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Summary of link-state database exchanged during initial synchronisation.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Type 3</div>
+          <div class="proto-names">Link State Request</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Request for specific LSA entries not yet received.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Type 4</div>
+          <div class="proto-names">Link State Update</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Carries the actual LSAs (router link, network link, summary link to network/ASBR, external link).</p>
+        </div>
+      </div>
+      <div class="proto-card" style="margin-top:10px;max-width:340px;">
+        <div class="proto-layer">Type 5</div>
+        <div class="proto-names">Link State Acknowledgement</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px;">Acknowledges received LSAs — ensures reliable flooding.</p>
+      </div>
+
+      <div class="callout">
+        The <strong>Link State Update</strong> packet is the most important OSPF packet type for exam purposes. The LSA types it carries directly map to the AS area hierarchy: router links for internal topology, summary links for cross-area info, and external links for inter-AS info.
+      </div>
+    </div>
+
+    <!-- ── Summary ── -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h3>The Big Picture</h3>
+      <p>The internet is carved into ASes, each with its own internal routing (IGP: OSPF/RIP). Between ASes, BGP (an EGP based on path vector routing) governs how reachability is advertised. Within each AS, a strict hierarchy exists: internal routers → area border routers → backbone routers → AS boundary router → BGP to the outside world.</p>
+
+      <h3>Why Path Vector Wins for Inter-AS Routing</h3>
+      <p>Distance vector fails because ASes don't share a common metric and gives no AS traversal info. Link-state flooding is impossible at global scale. Path vector carries just enough: an ordered list of ASes to cross, no metric computation, with built-in loop detection (repeated AS in path = drop) and natural policy enforcement (forbidden AS in path = drop).</p>
+
+      <h3>BGP in One Sentence</h3>
+      <div class="callout green">
+        BGP is a path-vector EGP that runs over TCP (port 179), where AS boundary routers exchange OPEN/UPDATE/KEEPALIVE/NOTIFICATION messages to build and maintain routing tables containing destination networks, next-hop routers, and the ordered list of ASes to traverse — with loop prevention and policy filtering built in.
+      </div>
+
+      <h3>Terms Cheatsheet</h3>
+      <table class="port-table">
+        <thead>
+          <tr><th>Term</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="proto-name">AS</td><td>Autonomous System — logically unified network under one admin, identified by unique AS number</td></tr>
+          <tr><td class="proto-name">IGP</td><td>Interior Gateway Protocol — routing within an AS (OSPF, RIP)</td></tr>
+          <tr><td class="proto-name">EGP</td><td>Exterior Gateway Protocol — routing between ASes (BGP)</td></tr>
+          <tr><td class="proto-name">ABR</td><td>Area Border Router — connects an area to the AS backbone (Area 0)</td></tr>
+          <tr><td class="proto-name">ASBR</td><td>AS Boundary Router — connects the AS to other ASes via BGP</td></tr>
+          <tr><td class="proto-name">BGP</td><td>Border Gateway Protocol — THE inter-domain routing protocol of the internet (RFC 1771)</td></tr>
+          <tr><td class="proto-name">Path Vector</td><td>Routing where the table stores the full ordered sequence of ASes to destination, not a distance cost</td></tr>
+          <tr><td class="proto-name">LSA</td><td>Link State Advertisement — OSPF's mechanism for sharing topology info</td></tr>
+          <tr><td class="proto-name">Area 0</td><td>Backbone area in an AS; all other areas must connect to it</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 49 — Data Link Layer: Ethernet</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec48.html" class="nav-lec">← prev</a>
+      <a href="lec50.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <!-- ── Header ── -->
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 49</span>
+    <span class="med-badge">medium priority</span>
+    <h1>Data Link Layer — Ethernet</h1>
+    <p>Continuation of the Ethernet deep-dive: frame structure, collision mechanics, addressing, and the full evolution from Standard → Bridged → Switched → Full-Duplex → Fast → Gigabit Ethernet.</p>
+  </div>
+
+  <!-- ── 1. Background & Standards ── -->
+  <div class="section">
+    <div class="section-label">Background</div>
+    <h3>Ethernet Origins &amp; Standards</h3>
+    <p>Ethernet was developed by <strong>Bob Metcalfe</strong> and his team at Xerox PARC in the mid-1970s, with roots in the Aloha packet-radio network. It was standardised jointly by Xerox, DEC, and Intel in 1978.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Standard</th>
+          <th>Speed</th>
+          <th>MAC Policy</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">IEEE 802.3</td>
+          <td class="port-num">10 Mbps</td>
+          <td><span class="transport tcp-badge">CSMA/CD</span></td>
+          <td>Original "Standard Ethernet"</td>
+        </tr>
+        <tr>
+          <td class="proto-name">IEEE 802.3u</td>
+          <td class="port-num">100 Mbps</td>
+          <td><span class="transport tcp-badge">CSMA/CD</span></td>
+          <td>Fast Ethernet; adds auto-negotiation</td>
+        </tr>
+        <tr>
+          <td class="proto-name">IEEE 802.3z</td>
+          <td class="port-num">1,000 Mbps</td>
+          <td><span class="transport tcp-badge">CSMA/CD</span></td>
+          <td>Gigabit Ethernet; full-duplex in practice</td>
+        </tr>
+        <tr>
+          <td class="proto-name">IEEE 802.3ae</td>
+          <td class="port-num">10 Gbps</td>
+          <td><span class="transport both-badge">Full-duplex</span></td>
+          <td>Ten-Gigabit; backbone use</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 2. Ethernet Frame ── -->
+  <div class="section">
+    <div class="section-label">Frame Structure</div>
+    <h3>Ethernet Frame (IEEE 802.3)</h3>
+    <p>The standard 802.3 frame has the following field layout. Note that some literature counts the Preamble as 8 bytes total; the standard separates it into 7-byte Preamble + 1-byte SFD.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Size</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Preamble</td>
+          <td class="port-num">7 bytes</td>
+          <td>Informs the receiver a frame is arriving; enables clock synchronisation.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">SFD (Start Frame Delimiter)</td>
+          <td class="port-num">1 byte</td>
+          <td>Signals that the Destination MAC field begins at the very next byte.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Destination MAC</td>
+          <td class="port-num">6 bytes</td>
+          <td>Identifies the receiving system.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Source MAC</td>
+          <td class="port-num">6 bytes</td>
+          <td>Identifies the sending system. Always a unicast address.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Type</td>
+          <td class="port-num">2 bytes</td>
+          <td>Identifies the higher-layer protocol encapsulated (e.g., IPv4, IPv6).</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Data &amp; Pad</td>
+          <td class="port-num">46–1500 bytes</td>
+          <td>Payload from the network layer. Padding added if data &lt; 46 bytes to meet the 64-byte minimum frame requirement.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">FCS (Frame Check Sequence)</td>
+          <td class="port-num">4 bytes</td>
+          <td>32-bit CRC for detection of corrupted frames.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Header accounting:</strong> Excluding Preamble and SFD (8 bytes), the actual header is 14 bytes (Dest MAC + Src MAC + Type) at the front and 4 bytes (FCS) at the rear. The payload field therefore spans bytes 15 through (frame length − 4).
+    </div>
+
+    <h4>Why the 46-byte minimum payload?</h4>
+    <p>This is a collision-detection constraint, not an arbitrary choice — see the Collision Detection section below for the full derivation.</p>
+  </div>
+
+  <!-- ── 3. MAC Address ── -->
+  <div class="section">
+    <div class="section-label">Addressing</div>
+    <h3>MAC Address &amp; the NIC</h3>
+    <p>Every network-enabled device has a <strong>Network Interface Card (NIC)</strong> that provides a unique 48-bit (6-byte) physical address burned into hardware. The NIC abstracts the physical medium — wired (coaxial, twisted-pair, fibre) or wireless (Wi-Fi, Bluetooth).</p>
+
+    <div class="callout green">
+      <strong>Finding your MAC:</strong> On Windows run <code>ipconfig /all</code> and look for "Physical Address". On Linux/macOS run <code>ifconfig</code> or <code>ip link</code>. The address appears as six hex pairs, e.g., <code>64:00:6A:1C:63:XX</code>. <em>(Demonstrated at 05:20 in the lecture video — worth watching for the live terminal output.)</em>
+    </div>
+
+    <p><strong>At every hop</strong>, the MAC address must be re-resolved via ARP. The source and destination MAC fields in the frame change at each link; the IP addresses in the encapsulated datagram remain unchanged end-to-end.</p>
+
+    <h4>Unicast, Multicast, and Broadcast</h4>
+    <p>The <strong>least significant bit of the first byte</strong> of the destination address determines the address type.</p>
+
+    <div class="domain-grid">
+      <div class="domain-card">
+        <div class="domain-title">Unicast</div>
+        <div class="domain-desc">LSB of first byte = <strong>0</strong>. Frame destined for exactly one station. Source MAC is always unicast.</div>
+      </div>
+      <div class="domain-card">
+        <div class="domain-title">Multicast</div>
+        <div class="domain-desc">LSB of first byte = <strong>1</strong>. Frame destined for a group of stations that have joined the multicast group.</div>
+      </div>
+    </div>
+    <div class="callout pink">
+      <strong>Broadcast</strong> — a special case of multicast where all 48 bits are 1: <code>FF:FF:FF:FF:FF:FF</code>. Every station on the segment accepts and processes it.
+    </div>
+  </div>
+
+  <!-- ── 4. Collisions & CSMA/CD ── -->
+  <div class="section">
+    <div class="section-label">Media Access Control</div>
+    <h3>CSMA/CD — Carrier Sense Multiple Access with Collision Detection</h3>
+    <p>On shared-medium (half-duplex) Ethernet, two adaptors may simultaneously sense the channel as idle and begin transmitting, causing a <strong>collision</strong>. The adaptor detects this via an anomalous voltage difference on the wire.</p>
+
+    <div class="callout yellow">
+      <strong>Wireless note:</strong> Collision <em>detection</em> is not feasible in wireless media because a transmitting node cannot listen to the channel simultaneously. Wireless uses <strong>CSMA/CA</strong> (Collision Avoidance) instead — covered in a later lecture.
+    </div>
+
+    <h4>How does sender A know a collision occurred?</h4>
+    <p>If A sends at time 0 and its frame reaches B at time T, then B's collision signal reaches A at time <strong>2T</strong>. A must still be transmitting at 2T to hear the collision. IEEE 802.3 specifies the maximum value of 2T as <strong>51.2 µs</strong>, corresponding to a maximum segment distance of 2,500 m at 10 Mbps.</p>
+
+    <div class="callout">
+      At 10 Mbps it takes <strong>0.1 µs to transmit 1 bit</strong>. In 51.2 µs, a total of <strong>512 bits = 64 bytes</strong> can be transmitted. This is why the minimum Ethernet frame is 64 bytes.
+      <br><br>
+      <strong>Breakdown of the 64-byte minimum:</strong> 14 bytes header + 46 bytes data/pad + 4 bytes FCS = 64 bytes. If the payload is less than 46 bytes, padding is added.
+    </div>
+
+    <p>Upon detecting a collision, the adaptor broadcasts a <strong>48-bit jam signal</strong> to ensure all stations on the segment are aware of the collision before it fades.</p>
+  </div>
+
+  <!-- ── 5. Exponential Backoff ── -->
+  <div class="section">
+    <div class="section-label">Retransmission</div>
+    <h3>Binary Exponential Backoff</h3>
+    <p>After a collision, the sender does not retransmit immediately. It waits a <em>random</em> delay chosen from a progressively larger window to reduce the probability of repeated collisions.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Attempt (n)</th>
+          <th>K drawn from</th>
+          <th>Wait time</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">1st</td><td class="port-num">{0, 1}</td><td>K × 51.2 µs</td></tr>
+        <tr><td class="proto-name">2nd</td><td class="port-num">{0, 1, 2, 3}</td><td>K × 51.2 µs</td></tr>
+        <tr><td class="proto-name">nth</td><td class="port-num">{0 … 2ⁿ − 1}</td><td>K × 51.2 µs</td></tr>
+        <tr><td class="proto-name">max K</td><td class="port-num">1023</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <p>After approximately <strong>16 failed attempts</strong>, the adaptor gives up and reports a transmit error to the host. A fixed (non-random) delay would cause senders to retransmit in lockstep, guaranteeing repeated collisions. A very small fixed window works for small networks but degrades severely under many nodes.</p>
+
+    <h4>Receiver-side MAC algorithm</h4>
+    <p>The receiver passively accepts all frames whose destination address matches one of four cases: addressed to its own unicast MAC, addressed to broadcast (FF:FF:FF:FF:FF:FF), addressed to a multicast group it belongs to, or <em>all</em> frames if the NIC is in <strong>promiscuous mode</strong> (used by packet sniffers/network analysers).</p>
+  </div>
+
+  <!-- ── 6. Ethernet Issues ── -->
+  <div class="section">
+    <div class="section-label">Limitations</div>
+    <h3>Ethernet Issues (Traditional / Half-Duplex)</h3>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Low Peak Utilisation</div>
+        <div class="concept-desc">Ethernet works best under light loads. Utilisation over ~30% is considered heavy because collisions waste bandwidth proportionally.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">More Hosts → More Collisions</div>
+        <div class="concept-desc">Each additional host increases the probability of simultaneous transmission, requiring more arbitration cycles.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Longer Cables → Worse Recovery</div>
+        <div class="concept-desc">Larger 2T means the sender must hold the channel longer during collision detection, wasting more bandwidth per event.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Practical Limits</div>
+        <div class="concept-desc">Specification allows up to 1,024 hosts; real deployments cap at ~200 for acceptable performance. RTT is typically 5–10 µs on short segments.</div>
+      </div>
+    </div>
+    <p>Transport-layer flow control (TCP window management) partially mitigates collision pressure by reducing the number of back-to-back packets. Ethernet is nonetheless considered inexpensive, fast, and easy to administer relative to alternatives.</p>
+  </div>
+
+  <!-- ── 7. Ethernet Evolution ── -->
+  <div class="section">
+    <div class="section-label">Evolution</div>
+    <h3>How Ethernet Evolved</h3>
+
+    <h4>Bridged Ethernet</h4>
+    <p>A <strong>bridge</strong> is a Layer 2 device placed between two LAN segments. It creates separate collision domains on each side — collisions in segment A cannot propagate to segment B. This effectively doubles usable bandwidth and is the foundational idea behind the modern switch.</p>
+
+    <h4>Switched Ethernet (Multiport Bridge)</h4>
+    <p>A switch is simply a bridge with many ports — each port is its own collision domain. A 12-port switch creates 12 isolated collision domains. Switches can be arranged hierarchically (access switches → distribution switch → router) to scale large campuses. The switch learns MAC addresses dynamically and forwards unicast frames only to the correct port.</p>
+
+    <h4>Full-Duplex Ethernet</h4>
+    <p>In full-duplex mode, each station is connected to the switch via <strong>two separate wires</strong>: one dedicated transmit line and one dedicated receive line. Because transmit and receive never share a medium, collisions are <em>physically impossible</em>.</p>
+    <div class="callout green">
+      <strong>Key consequence:</strong> Full-duplex Ethernet requires <strong>no CSMA/CD</strong>. The MAC layer is dramatically simplified. A 10 Mbps link effectively becomes 20 Mbps aggregate (10 Mbps each direction simultaneously). To support flow and error control in this new model, a <strong>MAC Control sublayer</strong> is inserted between the LLC sublayer and the MAC sublayer.
+    </div>
+
+    <h4>Fast Ethernet (802.3u) — 100 Mbps</h4>
+    <p>Designed to compete with FDDI and Fibre Channel. Fast Ethernet is <strong>backward-compatible</strong> with Standard Ethernet: same 48-bit addressing, same frame format, same min/max frame length. The only physical-layer change is the encoding scheme (4B5B). Many NICs support <strong>10/100 auto-sensing</strong>.</p>
+    <p>The key new feature is <strong>auto-negotiation</strong>, which lets two connected devices automatically agree on the best common mode and data rate. Its three objectives are: allow incompatible-speed devices to interoperate, allow a device to advertise multiple capabilities, and allow a station to query the switch/hub capability.</p>
+
+    <h4>Gigabit Ethernet (802.3z) — 1,000 Mbps</h4>
+    <p>Compatible with lower Ethernet speeds. Uses standard framing and CSMA/CD algorithm (though in practice always full-duplex). Maximum cable length is determined by <strong>signal attenuation</strong>, not collision timing. Primarily deployed for backbone and inter-router connectivity. Distance is severely limited compared to lower-speed variants.</p>
+
+    <div class="callout yellow">
+      <strong>Ten-Gigabit Ethernet (802.3ae) — 10 Gbps</strong> is the current generation, used exclusively for backbone links. Higher speeds carry increased cost and management complexity; most end-user applications cannot saturate even 100 Mbps, making high-speed uplinks a backbone concern rather than an access concern.
+    </div>
+
+    <!-- Evolution summary table -->
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Generation</th>
+          <th>Speed</th>
+          <th>Standard</th>
+          <th>Topology</th>
+          <th>CSMA/CD?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Standard Ethernet</td>
+          <td class="port-num">10 Mbps</td>
+          <td>802.3</td>
+          <td>Bus / Hub</td>
+          <td><span class="transport tcp-badge">Yes</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Bridged Ethernet</td>
+          <td class="port-num">10 Mbps</td>
+          <td>802.3</td>
+          <td>Bridge-segmented</td>
+          <td><span class="transport tcp-badge">Per segment</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Switched Ethernet</td>
+          <td class="port-num">10–100 Mbps</td>
+          <td>802.3/u</td>
+          <td>Star (switch)</td>
+          <td><span class="transport udp-badge">No (FD)</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Fast Ethernet</td>
+          <td class="port-num">100 Mbps</td>
+          <td>802.3u</td>
+          <td>Star (switch)</td>
+          <td><span class="transport udp-badge">No (FD)</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Gigabit Ethernet</td>
+          <td class="port-num">1 Gbps</td>
+          <td>802.3z</td>
+          <td>Star / Backbone</td>
+          <td><span class="transport udp-badge">No (FD)</span></td>
+        </tr>
+        <tr>
+          <td class="proto-name">Ten-Gigabit Ethernet</td>
+          <td class="port-num">10 Gbps</td>
+          <td>802.3ae</td>
+          <td>Backbone</td>
+          <td><span class="transport udp-badge">No (FD)</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 8. Summary ── -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+    <h3>Key Takeaways</h3>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">64-byte minimum frame</div>
+        <div class="concept-desc">Derived from the 2T propagation constraint at 10 Mbps over 2,500 m. 14 bytes header + 46 bytes data/pad + 4 bytes FCS = 64 bytes. Padding fills the gap when payload &lt; 46 bytes.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Jam signal</div>
+        <div class="concept-desc">After detecting a collision via voltage anomaly, the sender emits a 48-bit jam signal to ensure every node on the segment is aware before it stops transmitting.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Exponential backoff</div>
+        <div class="concept-desc">Randomised, growing wait window prevents retransmission lockstep. Maximum K = 1023 slots; give up after ~16 attempts.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">MAC address types</div>
+        <div class="concept-desc">Determined by LSB of first byte of destination: 0 = unicast, 1 = multicast. All-ones (FF:FF:FF:FF:FF:FF) = broadcast, a special multicast case.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Full-duplex eliminates CSMA/CD</div>
+        <div class="concept-desc">Separate TX/RX wires per station mean no shared medium and no collisions. MAC Control sublayer added for flow and error control.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Auto-negotiation (Fast Ethernet)</div>
+        <div class="concept-desc">Allows devices of different speeds/modes to advertise capabilities and agree on the best common operating mode automatically.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

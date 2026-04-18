@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 41 — IP Routers</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec40.html" class="nav-lec">← prev</a>
+        <a href="lec42.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 41</span>
+      <span class="med-badge">medium priority</span>
+      <h1>IP Routers</h1>
+      <p>Internal architecture of an IP router — control plane vs data plane, TCAM, FIB, RIB, switch fabric, and the evolution of router hardware across five generations.</p>
+    </div>
+
+    <!-- LIFE OF A ROUTER -->
+    <div class="section">
+      <div class="section-label">The Life of a Router</div>
+      <p>A router's entire existence can be summarised as a <strong>do-repeat loop</strong>: find a path to a destination, forward packets to it, find the next path, forward more packets — repeat until powered off.</p>
+      <p>This gives us the two fundamental operations every router performs:</p>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Control Plane</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Constructs the routing table by running routing protocols (RIP, OSPF, BGP). Executed <strong>periodically</strong> or on topology change — relatively low frequency.</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Data Plane <small>(Forwarding Plane)</small></div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Performs a routing table lookup per arriving packet and forwards it to the correct output interface. Executed <strong>per packet</strong> — extremely high frequency.</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="callout yellow">
+        <strong>Why this split matters for hardware design:</strong> At 100 Gbps with average packet size 1 MB, a router must process ~12,500 packets per second per interface. The forwarding operation must happen in hardware — software would never keep up. Control plane operations (routing protocol exchanges) happen orders of magnitude less often, so software is fine there.
+      </div>
+    </div>
+
+    <!-- EVOLUTION -->
+    <div class="section">
+      <div class="section-label">Evolution of Router Architecture</div>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Generation</th>
+            <th>Era</th>
+            <th>Architecture</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="port-num">1st</td><td class="proto-name">Until 1980s</td><td>Standard general-purpose computer with multiple network interfaces</td></tr>
+          <tr><td class="port-num">2nd</td><td class="proto-name">Early 1990s</td><td>Dedicated device with delegated interfaces — purpose-built hardware</td></tr>
+          <tr><td class="port-num">3rd</td><td class="proto-name">Late 1990s</td><td>Distributed router architecture — processing distributed across components</td></tr>
+          <tr><td class="port-num">4th</td><td class="proto-name">Early 2000s</td><td>Distributed over multiple racks — multiple routers interconnected to scale interface count (e.g. 4 × 32-port routers = 128 interfaces)</td></tr>
+          <tr><td class="port-num">5th</td><td class="proto-name">Today</td><td>Software Defined Networking (SDN) routers — control plane decoupled and centralised; widely used in large-scale data centres</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- BASIC ARCHITECTURE -->
+    <div class="section">
+      <div class="section-label">Basic Architectural Components</div>
+      <p>At the broadest level, a router consists of:</p>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Processor (Route Processor)</div>
+          <div class="concept-desc">General-purpose CPU + memory. Runs the router OS and routing protocols. Responsible for the control plane — builds and maintains the routing table.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Interconnection Network</div>
+          <div class="concept-desc">Internal bus/fabric connecting the processor to all interface cards. Routes packets internally from the input interface to the correct output interface.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Interface Cards (NICs)</div>
+          <div class="concept-desc">Network I/O interfaces — RJ45 ports for wired, transmitter/receiver for wireless. Each card has its own microcontroller that handles the data plane (forwarding) for packets arriving on that interface.</div>
+        </div>
+      </div>
+
+      <h3>Router Internals: The Full Picture</h3>
+      <div class="callout">
+        <strong>Interface Processor → Packet Processor</strong> (forwarding engine, implemented in TCAM hardware) → <em>Data Plane</em><br><br>
+        <strong>Route Processor</strong> (routing engine, general-purpose CPU running routing algorithms) → <em>Control Plane</em>
+      </div>
+      <p>The packet processor uses TCAM to do hardware-speed lookups against the routing table. The route processor runs software (the router OS) to keep that table accurate.</p>
+    </div>
+
+    <!-- SLOTTED CHASSIS -->
+    <div class="section">
+      <div class="section-label">Physical Infrastructure — Slotted Chassis</div>
+      <p>Large production routers are built as a <strong>slotted chassis</strong>: a physical enclosure with multiple card slots. Each interface card slots in individually, as does the route processor card. This modular design means individual components can be repaired or upgraded without replacing the entire unit — hot-swappable in many enterprise models.</p>
+      <div class="callout green">A demo of a physical router chassis and its components is promised in the next couple of lectures. <a class="ts" href="#">~11:11</a></div>
+    </div>
+
+    <!-- FUNCTIONAL COMPONENTS -->
+    <div class="section">
+      <div class="section-label">Functional Component Breakdown</div>
+      <h3>Control Plane — Routing Functions</h3>
+      <p>The control plane is a <strong>special-purpose software environment</strong> (the Router OS) running on the route processor. Three functions it must perform:</p>
+      <div class="tag-row">
+        <span class="tag tag-good">Route Calculation</span>
+        <span class="tag tag-good">Routing Table Maintenance</span>
+        <span class="tag tag-good">Execution of Routing Protocol</span>
+      </div>
+      <p>On commercial routers, all three are handled by a single general-purpose CPU — the <strong>route processor</strong>. Example: <strong>Cisco IOS</strong> (Internetwork Operating System) — a router OS that implements multiple routing protocols (RIP, OSPF, BGP) as part of its software stack.</p>
+
+      <h3>Data Plane — IP Forwarding</h3>
+      <p>The data plane implements <strong>per-packet forwarding</strong>. Its logic mirrors a Layer 2 switch's switch fabric — except decisions are based on IP destination addresses, not MAC addresses.</p>
+      <p><strong>Switch Fabric:</strong> a hardware interconnect that maps any input port to any output port. In a router, all interfaces are simultaneously potential input and output ports. The fabric logic (a set of logic gates) copies packet data from the input port to the determined output port.</p>
+      <p>Each interface also maintains an <strong>interface buffer</strong> to implement store-and-forward: packets queue up, are examined, and are transmitted one by one over the data link layer.</p>
+
+      <div class="callout">
+        <strong>IP Forwarding is distributed:</strong> each individual interface controller (a microcontroller on the NIC) handles forwarding for packets arriving on that specific interface — not a central CPU. This is why TCAM hardware lives on the NIC.
+      </div>
+    </div>
+
+    <!-- TCAM -->
+    <div class="section">
+      <div class="section-label">TCAM — Ternary Content Addressable Memory</div>
+      <p><strong>Ternary Content Addressable Memory (TCAM)</strong> is the specialised hardware that makes per-packet forwarding fast enough to sustain line-rate processing.</p>
+      <p>A normal memory lookup: give an address, get the value. TCAM flips this: give the content (the destination IP), get the matching table entry — in a single clock cycle, regardless of table size. "Ternary" means each bit can be 0, 1, or <em>wildcard</em> (don't care), which is exactly what you need for longest-prefix matching in IP routing tables.</p>
+      <p>TCAM lives on the interface card and is used to implement the <strong>Forwarding Information Base (FIB)</strong> — the hardware-resident copy of the routing table.</p>
+    </div>
+
+    <!-- FIB AND RIB -->
+    <div class="section">
+      <div class="section-label">FIB vs RIB</div>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">RIB — Routing Information Base</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Lives in</span><span>Software (control plane, route processor memory)</span></div>
+            <div class="compare-row"><span class="label">Contains</span><span>Complete routing information from all protocols — BGP table, OSPF link-state database, static routes</span></div>
+            <div class="compare-row"><span class="label">Updated by</span><span>Routing protocols, continuously and dynamically</span></div>
+            <div class="compare-row"><span class="label">Scope</span><span>Entire routing topology</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">FIB — Forwarding Information Base</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Lives in</span><span>TCAM hardware on each interface card (data plane)</span></div>
+            <div class="compare-row"><span class="label">Contains</span><span>Only the routes relevant to that interface — a subset of the RIB, copied on demand</span></div>
+            <div class="compare-row"><span class="label">Updated by</span><span>RIB, only when a FIB miss occurs</span></div>
+            <div class="compare-row"><span class="label">Scope</span><span>Local forwarding decisions for one interface</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h3>FIB Lookup Flow — Per Packet</h3>
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci">1. PACKET_IN</span><span class="arrow">→</span><span>Arrives at input interface</span></div>
+        <div class="vci-row"><span class="vci">2. FIB Lookup</span><span class="arrow">→</span><span>TCAM checks local FIB for destination IP match</span></div>
+        <div class="vci-row"><span class="port">FIB HIT</span><span class="arrow">→</span><span>Forward packet directly to output interface → <strong>PACKET_OUT</strong></span></div>
+        <div class="vci-row"><span class="port">FIB MISS</span><span class="arrow">→</span><span>Escalate to Route Lookup → query RIB via routing protocol → update FIB → then forward</span></div>
+      </div>
+
+      <div class="callout green">
+        <strong>RIB feeds FIB:</strong> Multiple routing protocol tables (BGP, OSPF link-state DB, manually configured static routes) all feed into the RIB. The RIB selects the best routes and pushes relevant entries into the TCAM FIB at each interface as needed.
+      </div>
+    </div>
+
+    <!-- PER PACKET PROCESSING ARCHITECTURE -->
+    <div class="section">
+      <div class="section-label">Per-Packet Processing — Full Architecture</div>
+      <p>Putting it all together, the sequence for every packet:</p>
+      <div class="stack">
+        <div class="stack-layer layer-app">
+          <span class="layer-name">Extract destination IP from IP header</span>
+        </div>
+        <div class="stack-layer layer-trans">
+          <span class="layer-name">TCAM lookup against FIB</span>
+          <span class="layer-desc">HIT or MISS</span>
+        </div>
+        <div class="stack-layer layer-net">
+          <span class="layer-name">Routing decision — determine output interface</span>
+        </div>
+        <div class="stack-layer layer-dl">
+          <span class="layer-name">Enqueue in input buffer</span>
+        </div>
+        <div class="stack-layer layer-phys">
+          <span class="layer-name">Switch fabric copies to output queue → transmit</span>
+        </div>
+      </div>
+      <p>The routing table (FIB copy) is distributed — a relevant subset lives at each individual interface controller. Each interface makes its own forwarding decision independently, which is what makes line-rate processing achievable.</p>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h4>Control Plane vs Data Plane — the core design insight</h4>
+      <p>The control plane (routing protocol execution, RIB construction) runs infrequently in software on a general-purpose processor. The data plane (per-packet lookup and forwarding) runs at line rate in hardware (TCAM + switch fabric) on each interface card. These two planes are implemented on completely different hardware because their performance requirements differ by orders of magnitude.</p>
+
+      <h4>TCAM enables hardware-speed longest-prefix matching</h4>
+      <p>Standard RAM can't do this fast enough. TCAM stores routing table entries and matches an incoming destination IP against all of them simultaneously in one cycle, using wildcard bits to handle prefix masks.</p>
+
+      <h4>FIB is not the same as the routing table (RIB)</h4>
+      <p>The RIB is the complete, software-maintained routing table in the control plane. The FIB is a per-interface hardware cache of only the routes that interface currently needs. FIB misses trigger a RIB lookup, which updates the FIB. This caching design keeps TCAM usage efficient while keeping forwarding decisions fast.</p>
+
+      <h4>Switch fabric = the internal crossbar</h4>
+      <p>Once the forwarding decision is made (which output interface?), the switch fabric physically moves the packet data from the input port's buffer to the correct output port's queue. In a router, every interface is both a potential input and output port.</p>
+    </div>
+
+  </div>
+</body>
+</html>

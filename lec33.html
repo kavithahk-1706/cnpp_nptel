@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 33 — Internet QoS III: Traffic Policing & Shaping</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec32.html" class="nav-lec">← prev</a>
+        <a href="lec34.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 33</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>Internet QoS — III<br>Traffic Policing &amp; Traffic Shaping</h1>
+      <p>Algorithms for regulating output rate and enforcing traffic contracts: leaky bucket, token bucket, and the playout buffer extension.</p>
+      <a href="https://nptel.ac.in/courses/106105183" class="video-link" target="_blank">▶ Watch on NPTEL</a>
+    </div>
+
+    <!-- SECTION 1: Policing vs Shaping Recap -->
+    <div class="section">
+      <div class="section-label">Quick Recap</div>
+      <h3>Traffic Policing vs Traffic Shaping <a href="https://nptel.ac.in/courses/106105183" class="ts">00:26</a></h3>
+      <p>Both mechanisms enforce a traffic contract but differ in what they do with excess traffic:</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Traffic Policing</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Identifies peaks that <strong>violate</strong> the QoS contract and <strong>drops</strong> those packets immediately.</span></div>
+            <div class="compare-row"><span>Output is still bursty — peaks are simply cut off.</span></div>
+            <div class="compare-row"><span>Implemented via the <strong>bucket capacity (τ)</strong> in leaky bucket.</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Traffic Shaping</div>
+          <div class="compare-body">
+            <div class="compare-row"><span>Absorbs bursts and <strong>smooths</strong> the output rate to a steady flow.</span></div>
+            <div class="compare-row"><span>Output appears nearly constant over time.</span></div>
+            <div class="compare-row"><span>Implemented via the <strong>constant drain rate (r)</strong> in leaky bucket.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        In practice, achieving a perfectly constant bit rate across multiple routers is difficult. Real implementations combine both policing and shaping — the leaky bucket and token bucket are hybrid mechanisms.
+      </div>
+    </div>
+
+    <!-- SECTION 2: Leaky Bucket -->
+    <div class="section">
+      <div class="section-label">Algorithm 1</div>
+      <h3>Leaky Bucket Algorithm <a href="https://nptel.ac.in/courses/106105183" class="ts">02:23</a></h3>
+      <p>Analogy: a physical bucket with a small hole at the bottom. Water (packets) pours in at any rate; it drains at a constant rate determined by the hole size. If you pour in more than the bucket can hold, the excess overflows (is dropped).</p>
+
+      <h4>Mechanics</h4>
+      <p>Incoming packets enter a <strong>packet queue</strong> (the bucket). A single server services this queue at a <strong>constant rate r</strong> (packets/sec or bits/sec). The queue has a fixed maximum capacity <strong>τ</strong>.</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Parameter</div>
+          <div class="proto-names">r — drain rate</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Constant rate at which packets exit the queue. Controls traffic shaping.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Parameter</div>
+          <div class="proto-names">τ — bucket capacity</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Maximum queue depth. Packets arriving when queue is full are dropped. Controls traffic policing.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Input</div>
+          <div class="proto-names">R — incoming rate</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Variable; can be bursty. Absorbed by the queue up to capacity τ.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Output</div>
+          <div class="proto-names">≤ r (capped)</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Never exceeds r. Drops to zero if queue empties (application generates nothing).</p>
+        </div>
+      </div>
+
+      <h4>Dual Role</h4>
+      <div class="tag-row">
+        <span class="tag tag-good">Shaping → constant drain rate r</span>
+        <span class="tag tag-good">Policing → drop when queue full (τ exceeded)</span>
+        <span class="tag tag-bad">No burst support — always one-by-one</span>
+      </div>
+
+      <div class="callout">
+        The output dips below r only when the application itself isn't generating data — not a failure of the algorithm. The output never <em>exceeds</em> r.
+      </div>
+
+      <p><strong>⚠️ Visual demonstration of the leaky bucket diagram (input wave vs. smoothed output) at <a href="https://nptel.ac.in/courses/106105183" class="ts">06:11</a> — worth watching to see how drops occur at peaks and how the output hugs rate r.</strong></p>
+    </div>
+
+    <!-- SECTION 3: Token Bucket -->
+    <div class="section">
+      <div class="section-label">Algorithm 2</div>
+      <h3>Token Bucket Algorithm <a href="https://nptel.ac.in/courses/106105183" class="ts">08:22</a></h3>
+      <p>Extends the leaky bucket by introducing <strong>traffic burst support</strong>. Unused bandwidth is "saved" as tokens, which can be spent later to send a burst of packets all at once.</p>
+
+      <h4>Components</h4>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Token Bucket</div>
+          <div class="proto-names">size = b tokens</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Logical container. Tokens are virtual — just a counter in software. Filled at rate r tokens/sec. Capped at b; excess tokens discarded.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Packet Queue</div>
+          <div class="proto-names">incoming packets</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Holds arriving packets waiting to be dispatched. A scheduler monitors both the token bucket and this queue.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Scheduler Rule</div>
+          <div class="proto-names">token → send packet</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">One token consumed per packet sent. If no token available, packet waits. If tokens available, multiple packets can be sent at once.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Output Rate</div>
+          <div class="proto-names">R(t) = min(Pt, b + rt)</div>
+          <p style="font-size:13px;color:var(--muted);margin-top:6px;">Pt = incoming packet rate. b + rt = cumulative tokens available. Output is bounded by whichever is smaller.</p>
+        </div>
+      </div>
+
+      <h4>How Bursting Works</h4>
+      <p>When no packets arrive, tokens accumulate in the bucket (up to max b). When a burst of packets arrives, all accumulated tokens are spent immediately — sending up to b + (tokens generated since) packets at once rather than one-by-one. This is the key difference from leaky bucket.</p>
+
+      <div class="callout green">
+        <strong>Use case:</strong> Buffered video streaming. When the network is idle, tokens accumulate. When a burst of video data arrives, it can be sent immediately to fill the player's playout buffer — instead of being artificially throttled one packet at a time.
+      </div>
+
+      <h4>Maximum Burst Size (MBS) Derivation <a href="https://nptel.ac.in/courses/106105183" class="ts">16:35</a></h4>
+      <p>The cross-point between the incoming packet line and the token line gives the maximum burst moment:</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="port">Incoming packets</span>
+          <span class="arrow">→</span>
+          <span class="vci">Y = Pt</span>
+          <span style="font-size:12px;color:var(--muted);">(cumulative packets received)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Token availability</span>
+          <span class="arrow">→</span>
+          <span class="vci">Y = b + rt</span>
+          <span style="font-size:12px;color:var(--muted);">(start full at b, grow at rate r)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Cross-point (max burst)</span>
+          <span class="arrow">→</span>
+          <span class="vci">Pt₁ = b + rt₁ → t₁ = b / (P − r)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port"><strong>MBS</strong></span>
+          <span class="arrow">→</span>
+          <span class="vci" style="color:var(--accent2);font-size:15px;">MBS = Pb / (P − r)</span>
+        </div>
+      </div>
+
+      <p>Where <strong>P</strong> is the peak incoming rate, <strong>r</strong> is the token generation rate, and <strong>b</strong> is the bucket size. The MBS is the maximum number of packets that can be transmitted in a single burst.</p>
+
+      <p><strong>⚠️ The professor draws this graphically with cumulative packet count on Y-axis and time on X-axis at <a href="https://nptel.ac.in/courses/106105183" class="ts">16:35</a> — highly recommended to watch for the MBS derivation geometry.</strong></p>
+    </div>
+
+    <!-- SECTION 4: Comparison -->
+    <div class="section">
+      <div class="section-label">Comparison</div>
+      <h3>Leaky Bucket vs Token Bucket <a href="https://nptel.ac.in/courses/106105183" class="ts">20:07</a></h3>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Property</th>
+            <th>Leaky Bucket</th>
+            <th>Token Bucket</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Traffic smoothing</td>
+            <td><span class="transport tcp-badge">Yes</span></td>
+            <td><span class="transport tcp-badge">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Burst support</td>
+            <td><span class="transport udp-badge">No</span></td>
+            <td><span class="transport both-badge">Yes (up to MBS)</span></td>
+          </tr>
+          <tr>
+            <td>Output when queue empty</td>
+            <td>Zero</td>
+            <td>Tokens accumulate for future burst</td>
+          </tr>
+          <tr>
+            <td>Output rate formula</td>
+            <td>max r (if data present)</td>
+            <td>R(t) = min(Pt, b + rt)</td>
+          </tr>
+          <tr>
+            <td>Key parameter (policing)</td>
+            <td>Queue capacity τ</td>
+            <td>Bucket size b</td>
+          </tr>
+          <tr>
+            <td>Key parameter (shaping)</td>
+            <td>Drain rate r</td>
+            <td>Token generation rate r</td>
+          </tr>
+          <tr>
+            <td>Suitable for</td>
+            <td>Strict CBR enforcement</td>
+            <td>Variable-rate apps with bursts (video, file transfer)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SECTION 5: Playout Buffer -->
+    <div class="section">
+      <div class="section-label">Extension</div>
+      <h3>Playout Buffer</h3>
+      <p>Both leaky and token bucket can still produce dips in output rate when the application generates less data than r. For applications requiring a <strong>perfectly smooth</strong> output, a <strong>playout buffer</strong> is added in front of the traffic shaper.</p>
+
+      <div class="callout pink">
+        The playout buffer introduces <strong>additional delay</strong> to packets that arrive too early, holding them back until they are needed. This "fills in" the dips in output rate. Used in strict real-time applications where jitter must be minimised.
+      </div>
+
+      <div class="stack">
+        <div class="stack-layer layer-app">
+          <span class="layer-name">Application</span>
+          <span class="layer-desc">generates variable-rate data</span>
+        </div>
+        <div class="stack-layer layer-trans">
+          <span class="layer-name">Playout Buffer</span>
+          <span class="layer-desc">adds delay to early packets</span>
+        </div>
+        <div class="stack-layer layer-net">
+          <span class="layer-name">Traffic Shaper</span>
+          <span class="layer-desc">leaky / token bucket</span>
+        </div>
+        <div class="stack-layer layer-dl">
+          <span class="layer-name">Output Queue</span>
+          <span class="layer-desc">near-constant rate to network</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 6: Summary -->
+    <div class="section">
+      <div class="section-label">Summary</div>
+      <h3>Key Takeaways</h3>
+
+      <div class="callout green">
+        <strong>Leaky Bucket:</strong> Single queue drained at constant rate r, capacity τ. Enforces both policing (drop when full) and shaping (constant output). No burst support — packets always exit one by one.
+      </div>
+      <div class="callout">
+        <strong>Token Bucket:</strong> Virtual tokens generated at rate r, bucket size b. A packet is sent only when a token is available. Allows burst up to MBS = Pb/(P−r). Output rate R(t) = min(Pt, b+rt).
+      </div>
+      <div class="callout yellow">
+        <strong>Playout Buffer:</strong> Optional addition that holds early-arriving packets to smooth out dips. Used in strict jitter-sensitive applications.
+      </div>
+      <div class="callout pink">
+        <strong>Up next — Lecture 34:</strong> Traffic Scheduling algorithms — Priority Queuing, Weighted Fair Queuing (WFQ), Custom Queuing.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

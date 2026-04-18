@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 46 — Data Link Layer: Overview</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec45.html" class="nav-lec">← prev</a>
+      <a href="lec47.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <!-- ── Header ── -->
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 46</span>
+    <span class="med-badge">med priority</span>
+    <h1>Data Link Layer — Overview</h1>
+    <p>Introductory lecture for a series on the Data Link Layer (L2). Covers its position in the protocol stack, its two sub-layers (LLC and MAC), the core problems it solves, IEEE 802 standards, and how framing/encapsulation works.</p>
+  </div>
+
+  <!-- ── 1. Position in the Stack ── -->
+  <div class="section">
+    <div class="section-label">1 — Where DLL Sits</div>
+    <p>The Data Link Layer is <strong>Layer 2</strong> in both the OSI and TCP/IP stacks, sandwiched between the Network Layer (L3) above and the Physical Layer (L1) below. In many references — and especially in the <strong>IEEE 802 standard family</strong> — the Data Link and Physical layers are treated together as a combined layer.</p>
+
+    <div class="stack">
+      <div class="stack-layer layer-app">
+        <span class="layer-name">Application</span>
+        <span class="layer-desc">SMTP, HTTP, FTP…</span>
+      </div>
+      <div class="stack-layer layer-trans">
+        <span class="layer-name">Transport</span>
+        <span class="layer-desc">TCP / UDP</span>
+      </div>
+      <div class="stack-layer layer-net">
+        <span class="layer-name">Network</span>
+        <span class="layer-desc">IP — logical, end-to-end</span>
+      </div>
+      <div class="stack-layer layer-dl">
+        <span class="layer-name">Data Link ← you are here</span>
+        <span class="layer-desc">Hop-to-hop, MAC frame</span>
+      </div>
+      <div class="stack-layer layer-phys">
+        <span class="layer-name">Physical</span>
+        <span class="layer-desc">Bits on the wire</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      Even when two <strong>L3 routers</strong> need to communicate, they must still come down to Layer 2 to resolve the next-hop MAC address (via ARP) and push the frame onto the physical medium. DLL is therefore unavoidable — even at the inter-router level.
+    </div>
+
+    <p>Recall the domain-isolation properties by layer:</p>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Layer 1 — Hub</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Collision</span>One shared domain — all devices collide</div>
+          <div class="compare-row"><span class="label">Broadcast</span>One shared broadcast domain</div>
+          <div class="compare-row"><span class="label">Efficiency</span>Lowest</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Layer 2 — Switch</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Collision</span>Each port = isolated collision domain</div>
+          <div class="compare-row"><span class="label">Broadcast</span>Still one shared broadcast domain</div>
+          <div class="compare-row"><span class="label">Efficiency</span>Better — no collisions across ports</div>
+        </div>
+      </div>
+    </div>
+    <p>A <strong>router (L3)</strong> splits both collision and broadcast domains — broadcasts cannot cross a router interface.</p>
+  </div>
+
+  <!-- ── 2. Sub-layers ── -->
+  <div class="section">
+    <div class="section-label">2 — The Two Sub-layers</div>
+    <p>The Data Link Layer is split into two distinct sub-layers, each with a specific responsibility:</p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">LLC — Logical Link Control</div>
+        <div class="concept-desc">
+          Interfaces with the <strong>layer above</strong> (Network Layer). Provides Service Access Points (SAPs) so different upper-layer protocols can share the same data link. Handles flow and error control at the link level. The LLC is relatively stable — it doesn't change when the physical medium changes.
+        </div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">MAC — Medium Access Control</div>
+        <div class="concept-desc">
+          Interfaces with the <strong>layer below</strong> (Physical Layer). Assembles data into frames with addressing and error-detection fields; governs <em>when and how</em> a device accesses the shared transmission medium. Multiple MAC options can exist for the same LLC (e.g., Ethernet vs. Wi-Fi vs. Token Ring all using the same LLC).
+        </div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      The LLC/MAC split gives flexibility: changing the physical medium (Ethernet → Wi-Fi) requires changing only the MAC protocol, not the LLC or any higher layers.
+    </div>
+  </div>
+
+  <!-- ── 3. Core Problems DLL Solves ── -->
+  <div class="section">
+    <div class="section-label">3 — Core Problems at Layer 2</div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-app" style="">Issue 1</span>
+      <div class="layer-content">
+        <div class="layer-name">Sharing a Wire</div>
+        <div class="layer-detail">When multiple hosts share a single medium (bus topology), there must be a mechanism to coordinate who transmits and when. A direct dedicated wire per pair becomes unscalable; a shared bus or switch fabric is needed.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-trans" style="">Issue 2</span>
+      <div class="layer-content">
+        <div class="layer-name">Collision — Simultaneous Transmission</div>
+        <div class="layer-detail">When two devices transmit at the same time on a shared medium, their signals collide and corrupt each other. Both frames must be retransmitted, wasting bandwidth. The principle: <strong>listen before you speak.</strong> If multiple transmit simultaneously anyway, both must back off and retransmit — this is the basis of CSMA/CD.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-net" style="">Issue 3</span>
+      <div class="layer-content">
+        <div class="layer-name">Addressing — Who Receives the Frame?</div>
+        <div class="layer-detail">On a shared medium, every device sees every frame. There must be a <strong>Layer 2 addressing scheme</strong> (MAC address) so a device can identify whether a frame is meant for it. Additionally, a sender knowing only a destination IP address must resolve the corresponding MAC address — this is ARP's job.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 4. IEEE 802 Standards ── -->
+  <div class="section">
+    <div class="section-label">4 — IEEE 802 Standard Family</div>
+    <p>The IEEE 802 standards govern the Data Link and Physical layers. They ensure interoperability between devices from different manufacturers. The scope spans from the Physical Layer up through the MAC and LLC sub-layers.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Standard</th>
+          <th>Name</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">802.2</td>
+          <td class="proto-name">Logical Link Control (LLC)</td>
+          <td>Common LLC layer across all 802 MACs</td>
+        </tr>
+        <tr>
+          <td class="port-num">802.3</td>
+          <td class="proto-name">CSMA/CD — Ethernet</td>
+          <td>Dominant standard today; 10 Mbps → 100 Mbps → Gbps</td>
+        </tr>
+        <tr>
+          <td class="port-num">802.4</td>
+          <td class="proto-name">Token Bus</td>
+          <td>Largely obsolete</td>
+        </tr>
+        <tr>
+          <td class="port-num">802.5</td>
+          <td class="proto-name">Token Ring</td>
+          <td>Largely obsolete</td>
+        </tr>
+        <tr>
+          <td class="port-num">802.11</td>
+          <td class="proto-name">Wireless LAN (Wi-Fi)</td>
+          <td>Uses CSMA/<strong>CA</strong> (collision avoidance, not detection)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout yellow">
+      <strong>CSMA/CD vs CSMA/CA:</strong> Wired Ethernet detects collisions after they happen (CD = Collision Detection). Wireless cannot do this reliably, so 802.11 tries to <em>avoid</em> collisions before transmission (CA = Collision Avoidance). More on this in later lectures.
+    </div>
+  </div>
+
+  <!-- ── 5. LLC Deep Dive ── -->
+  <div class="section">
+    <div class="section-label">5 — LLC in Detail</div>
+    <p>The LLC layer transmits <strong>Protocol Data Units (PDUs)</strong> between two stations on a shared LAN, without needing intermediate switching nodes. Its payload is whatever the Network Layer handed down (IP datagram + all headers above).</p>
+
+    <p><strong>Two defining characteristics of LLC:</strong></p>
+    <div class="tag-row">
+      <span class="tag tag-good">Must support multi-access, shared-medium nature of the link</span>
+      <span class="tag tag-good">Offloads medium-access details to the MAC sub-layer</span>
+    </div>
+
+    <h3>LLC Service Types</h3>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Unacknowledged Connectionless</div>
+        <div class="concept-desc">Datagram-style. No flow or error control. No delivery guarantee. Best-effort — analogous to IP at the network layer.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Connection Mode</div>
+        <div class="concept-desc">Logical connection established before data transfer. Flow and error control maintained. Connection-oriented — analogous to TCP.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Acknowledged Connectionless</div>
+        <div class="concept-desc">Hybrid. No prior connection setup, but each datagram is individually acknowledged. Provides reliability without connection overhead.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. MAC Deep Dive ── -->
+  <div class="section">
+    <div class="section-label">6 — MAC in Detail</div>
+
+    <h3>MAC Functions</h3>
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">At Sender</div>
+        <div class="interface-desc">Assembles data into <strong>frames</strong> with destination MAC address, source MAC address, and error-detection fields (e.g., CRC). Governs when to transmit on the shared medium.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">At Receiver</div>
+        <div class="interface-desc">Disassembles frames. Performs <strong>address recognition</strong> (is this frame for me?). Performs <strong>error detection</strong>. Requests retransmission if errors found.</div>
+      </div>
+    </div>
+
+    <h3>MAC Control: Where and How</h3>
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Where — Centralized</div>
+        <div class="compare-body">
+          <div class="compare-row">A single controller has authority to grant network access. Determines order of transmission for all stations.</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Where — Distributed</div>
+        <div class="compare-body">
+          <div class="compare-row">Stations collectively and dynamically determine the transmission order via a consensus protocol (e.g., CSMA/CD backoff).</div>
+        </div>
+      </div>
+    </div>
+    <p class="callout"><strong>How</strong> access is controlled is constrained by the network topology and involves trade-offs between cost, performance, and complexity.</p>
+
+    <div class="callout green">
+      The NIC (Network Interface Card / LAN card) in your laptop is what physically implements the MAC sub-layer and interfaces with the Physical Layer — whether wired Ethernet, Wi-Fi, Bluetooth, etc.
+    </div>
+  </div>
+
+  <!-- ── 7. Encapsulation / Frame Structure ── -->
+  <div class="section">
+    <div class="section-label">7 — Encapsulation at Layer 2</div>
+    <p>Each layer wraps the payload from the layer above with its own header (and sometimes a trailer). At the Data Link Layer, this produces a <strong>MAC Frame</strong>:</p>
+
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">Application Data</div>
+        <div class="impl-impl">payload</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">TCP Header + App Data</div>
+        <div class="impl-impl">TCP segment</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">IP Header + TCP segment</div>
+        <div class="impl-impl">IP datagram</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">LLC Header + IP datagram</div>
+        <div class="impl-impl">LLC PDU</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-phys">MAC Header + LLC PDU + MAC Trailer</div>
+        <div class="impl-impl">MAC Frame (L2 frame)</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      The MAC trailer typically contains a <strong>CRC (Cyclic Redundancy Check)</strong> for error detection — not covered in depth here, but critical. The MAC header contains source and destination MAC addresses for the current hop only. These change at every hop; the IP header (with end-to-end source/destination) remains unchanged throughout.
+    </div>
+  </div>
+
+  <!-- ── 8. Summary ── -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <div class="callout green">
+      <strong>What DLL actually does:</strong> Hop-to-hop delivery. Encapsulates IP datagrams into MAC frames, resolves next-hop MAC address, governs shared medium access, detects (and requests retransmission for) transmission errors. Every single hop along a packet's path involves a full DLL operation.
+    </div>
+
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Sub-layer</div>
+        <div class="proto-names">LLC</div>
+        <p style="font-size:13px; color: var(--muted); margin-top:6px;">Connects to Network Layer above. Provides SAPs. Handles end-to-end link services (flow, error control). Stable regardless of physical medium.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Sub-layer</div>
+        <div class="proto-names">MAC</div>
+        <p style="font-size:13px; color: var(--muted); margin-top:6px;">Connects to Physical Layer below. Frames data, adds MAC addresses, detects errors, governs channel access. Changes with physical medium.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Dominant Standard</div>
+        <div class="proto-names">IEEE 802.3 (Ethernet)</div>
+        <p style="font-size:13px; color: var(--muted); margin-top:6px;">CSMA/CD. Covers MAC + Physical. Speeds from 10 Mbps to multi-Gbps. 802.11 is its wireless counterpart.</p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Cross-layer Protocol</div>
+        <div class="proto-names">ARP</div>
+        <p style="font-size:13px; color: var(--muted); margin-top:6px;">Lives between L2 and L3. Resolves IP address → MAC address so the data link layer knows the next-hop hardware address.</p>
+      </div>
+    </div>
+
+    <h4>What's coming up in the DLL lecture series</h4>
+    <div class="tag-row">
+      <span class="tag tag-good">CSMA/CD mechanics</span>
+      <span class="tag tag-good">Ethernet frame format</span>
+      <span class="tag tag-good">MAC addressing</span>
+      <span class="tag tag-good">ARP in depth</span>
+      <span class="tag tag-good">Switches &amp; bridging</span>
+      <span class="tag tag-good">CSMA/CA (802.11)</span>
+      <span class="tag tag-good">Error detection (CRC, checksum)</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

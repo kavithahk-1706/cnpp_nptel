@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 50 — Flow & Error Control | CNPP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec49.html" class="nav-lec">← prev</a>
+        <a href="lec51.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- Header -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 50</span>
+      <span class="med-badge">medium priority</span>
+      <h1>Data Link Layer — Flow &amp; Error Control</h1>
+      <p>Covers the three primary ARQ mechanisms deployed at Layer 2: Stop-and-Wait, Go-Back-N, and Selective Repeat. Conceptually mirrors transport-layer flow/error control, but operates hop-to-hop rather than end-to-end.</p>
+    </div>
+
+    <!-- Context -->
+    <div class="section">
+      <div class="section-label">Context &amp; Motivation</div>
+      <p>The data link layer must handle two fundamental problems in frame delivery over a single hop (e.g., host to a nearby switch):</p>
+      <div class="domain-grid">
+        <div class="domain-card">
+          <div class="domain-title">Flow Control</div>
+          <div class="domain-desc">Regulates how much data the sender can transmit before waiting for an ACK. The receiver has a finite processing speed and a finite buffer — it must be able to signal the sender to slow down or stop before it is overwhelmed.</div>
+        </div>
+        <div class="domain-card">
+          <div class="domain-title">Error Control</div>
+          <div class="domain-desc">Detects and recovers from lost, damaged, or out-of-order frames. Built on <strong>ARQ (Automatic Repeat reQuest)</strong>: whenever an error is detected, the affected frames are retransmitted.</div>
+        </div>
+      </div>
+      <div class="callout yellow">
+        <strong>Hop-to-hop vs end-to-end:</strong> Transport layer (TCP) provides flow/error control end-to-end (process-to-process). The data link layer provides the same guarantees hop-to-hop (node-to-node). Both problems exist at both layers, but the scope differs.
+      </div>
+    </div>
+
+    <!-- Stop and Wait -->
+    <div class="section">
+      <div class="section-label">Mechanism 1</div>
+      <h3>Stop-and-Wait ARQ</h3>
+      <p>The simplest protocol. The sender transmits exactly one frame, then halts and waits for an acknowledgement before sending the next.</p>
+
+      <h4>Normal Operation</h4>
+      <p>Both frames and ACKs are numbered alternately <strong>0</strong> and <strong>1</strong>. The sender holds control variable <strong>S</strong> (last sent frame number); the receiver holds <strong>R</strong> (next expected frame number). ACK number = number of the <em>next expected</em> frame, not the one just received.</p>
+
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci">S=0</span><span class="arrow">→</span><span class="port">Frame 0 sent</span></div>
+        <div class="vci-row"><span class="vci">R=0</span><span class="arrow">→</span><span class="port">Receiver accepts, sends ACK 1</span></div>
+        <div class="vci-row"><span class="vci">S=1</span><span class="arrow">→</span><span class="port">Frame 1 sent</span></div>
+        <div class="vci-row"><span class="vci">R=1</span><span class="arrow">→</span><span class="port">Receiver accepts, sends ACK 0</span></div>
+        <div class="vci-row"><span class="vci">...</span><span class="arrow">→</span><span class="port">Alternates: 0 1 0 1 …</span></div>
+      </div>
+
+      <h4>Lost / Damaged Frame</h4>
+      <p>If the receiver gets a <strong>damaged</strong> frame, it discards it and holds R unchanged. The sender's timer expires and it retransmits the same frame.</p>
+
+      <h4>Lost ACK</h4>
+      <p>If the ACK is lost or damaged, the sender's timer expires and it retransmits the frame. The receiver — having already accepted that frame — is now expecting the next one. It therefore discards the duplicate using the sequence number and sends no new ACK. The sender eventually receives the retransmitted copy's ACK and advances. Error detection in the ACK uses the frame's <strong>FCS / CRC-32</strong> field.</p>
+
+      <h4>Delayed ACK</h4>
+      <p>If an ACK arrives after the timer has expired, the sender has already retransmitted. The receiver discards the duplicate frame (R mismatch). The sender receives two ACKs; it discards the second one.</p>
+
+      <h4>Piggybacking</h4>
+      <p>When both stations have data to send simultaneously, the ACK for received data is embedded inside the outgoing data frame rather than sent as a separate control frame. This saves bandwidth by eliminating dedicated ACK transmissions.</p>
+
+      <div class="callout pink">
+        <strong>Key limitation:</strong> At any instant, only one unacknowledged frame is in flight. The transmission medium sits idle while waiting for the ACK — a significant waste of available bandwidth.
+      </div>
+    </div>
+
+    <!-- Go-Back-N -->
+    <div class="section">
+      <div class="section-label">Mechanism 2</div>
+      <h3>Go-Back-N ARQ</h3>
+      <p>Addresses Stop-and-Wait's inefficiency by allowing the sender to transmit up to <strong>W</strong> frames before needing any ACK. A window of outstanding (unacknowledged) frames is maintained by the sender.</p>
+
+      <h4>Sequence Numbers</h4>
+      <p>Frames are numbered sequentially. If the header allocates <strong>m bits</strong> for sequence numbers, the range is <strong>0 to 2<sup>m</sup> − 1</strong>. The sequence then wraps: 0, 1, 2, …, 7, 0, 1, 2, … (for m = 3).</p>
+
+      <h4>Sender Sliding Window</h4>
+      <p>The sender maintains three variables: <strong>S<sub>F</sub></strong> (first outstanding frame), <strong>S<sub>L</sub></strong> (last frame sent), and <strong>S</strong> (next frame to send). Maximum window size = <strong>2<sup>m</sup> − 1</strong>. When a correct ACK arrives, the window slides forward to admit new unsent frames.</p>
+
+      <h4>Receiver Window</h4>
+      <p>Receiver window size is always <strong>1</strong>. The receiver maintains a single variable <strong>R</strong>. It only accepts a frame whose sequence number exactly equals R. Any frame arriving out of order is silently discarded — no buffering.</p>
+
+      <h4>Acknowledgement Behaviour</h4>
+      <div class="callout green">
+        <strong>Cumulative ACKs:</strong> ACKs are cumulative. ACK N means "all frames up to and including N−1 received correctly; send me N next." A single ACK can implicitly acknowledge multiple frames. If ACK 1, ACK 2, ACK 3 are all lost but ACK 4 arrives before any timer expires, no retransmission is needed.
+      </div>
+
+      <h4>Error Scenario — Lost Frame</h4>
+      <p>Suppose frames 0–5 are in flight and frame 2 is lost. The receiver receives frame 3, but R = 2, so it discards frame 3 (and all subsequent frames). The timer for frame 2 expires at the sender. The sender <em>goes back to 2</em> and retransmits frames 2, 3, 4, 5 — hence the name <strong>Go-Back-N</strong>.</p>
+
+      <h4>Window Size Constraint — Why 2<sup>m</sup> − 1?</h4>
+      <p>If window size equals 2<sup>m</sup> (the full sequence range), a complete cycle of frames can be sent and all ACKs can be lost. The retransmitted frame 0 would be indistinguishable from a brand-new frame 0, causing the receiver to accept it erroneously. Capping the window at 2<sup>m</sup> − 1 ensures the first frame of the new cycle can never appear inside the current window.</p>
+    </div>
+
+    <!-- Selective Repeat -->
+    <div class="section">
+      <div class="section-label">Mechanism 3</div>
+      <h3>Selective Repeat ARQ</h3>
+      <p>A refinement of Go-Back-N that avoids retransmitting frames that were already received correctly.</p>
+
+      <h4>Key Differences from Go-Back-N</h4>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Go-Back-N</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">On error</span><span>Retransmit from error frame onwards (all subsequent frames)</span></div>
+            <div class="compare-row"><span class="label">Receiver buf.</span><span>No buffering needed; out-of-order frames discarded</span></div>
+            <div class="compare-row"><span class="label">Receiver var.</span><span>Single variable R</span></div>
+            <div class="compare-row"><span class="label">ACK type</span><span>Positive ACK only (cumulative)</span></div>
+            <div class="compare-row"><span class="label">Complexity</span><span>Simple receiver</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Selective Repeat</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">On error</span><span>Retransmit only the damaged/lost frame</span></div>
+            <div class="compare-row"><span class="label">Receiver buf.</span><span>Must buffer out-of-order frames</span></div>
+            <div class="compare-row"><span class="label">Receiver var.</span><span>Window with R<sub>F</sub> and R<sub>L</sub></span></div>
+            <div class="compare-row"><span class="label">ACK type</span><span>Positive ACK + <strong>NAK</strong> (Negative ACK)</span></div>
+            <div class="compare-row"><span class="label">Complexity</span><span>More complex receiver</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h4>NAK (Negative Acknowledgement)</h4>
+      <p>When the receiver detects a damaged or missing frame, it sends a <strong>NAK N</strong> identifying the specific frame number N that needs to be retransmitted. The sender retransmits only that frame — not everything after it. This makes Selective Repeat more bandwidth-efficient on noisy links.</p>
+
+      <h4>Error Scenario — Lost Frame</h4>
+      <p>Frames 0, 1, 3 are received correctly; frame 2 is lost. Frames 0, 1, 3 are buffered at the receiver (they are within the receiver window). The receiver sends NAK 2. The sender retransmits only frame 2. Once received, the receiver delivers the complete sequence 0, 1, 2, 3 in order.</p>
+
+      <h4>Window Size Constraint — Why 2<sup>m</sup> / 2?</h4>
+      <p>Both sender and receiver windows must be at most <strong>2<sup>m</sup> / 2</strong> (half the sequence space). Because the receiver now buffers out-of-order frames, a larger window creates ambiguity: a retransmitted frame 0 could be mistaken for a new frame 0 from the next cycle and accepted erroneously. Halving the window ensures no overlap between current and next cycle.</p>
+
+      <div class="callout">
+        <strong>Example (m = 2):</strong> Sequence range 0–3 (4 values). Max window size = 4 / 2 = <strong>2</strong>. If window size is 3 (too large) and all ACKs are lost, the duplicate frame 0 falls within the receiver window and is accepted as a new frame — an error.
+      </div>
+    </div>
+
+    <!-- Summary Comparison Table -->
+    <div class="section">
+      <div class="section-label">Comparison Summary</div>
+      <h3>All Three Mechanisms at a Glance</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Property</th>
+            <th>Stop-and-Wait</th>
+            <th>Go-Back-N</th>
+            <th>Selective Repeat</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Sender window size</td>
+            <td class="port-num">1</td>
+            <td class="port-num">≤ 2<sup>m</sup> − 1</td>
+            <td class="port-num">≤ 2<sup>m</sup> / 2</td>
+          </tr>
+          <tr>
+            <td>Receiver window size</td>
+            <td class="port-num">1</td>
+            <td class="port-num">1</td>
+            <td class="port-num">≤ 2<sup>m</sup> / 2</td>
+          </tr>
+          <tr>
+            <td>Frames in flight</td>
+            <td>1 at a time</td>
+            <td>Up to W</td>
+            <td>Up to W</td>
+          </tr>
+          <tr>
+            <td>On frame loss</td>
+            <td>Retransmit 1 frame</td>
+            <td>Retransmit from lost frame onwards</td>
+            <td>Retransmit only lost frame</td>
+          </tr>
+          <tr>
+            <td>Receiver buffering</td>
+            <td class="proto-name">None</td>
+            <td class="proto-name">None (out-of-order discarded)</td>
+            <td class="proto-name">Required</td>
+          </tr>
+          <tr>
+            <td>ACK type</td>
+            <td>Positive only</td>
+            <td>Positive / cumulative</td>
+            <td>Positive + NAK</td>
+          </tr>
+          <tr>
+            <td>Bandwidth efficiency</td>
+            <td class="udp-badge transport">Low</td>
+            <td class="tcp-badge transport">Medium</td>
+            <td class="both-badge transport">High</td>
+          </tr>
+          <tr>
+            <td>Complexity</td>
+            <td>Lowest</td>
+            <td>Medium</td>
+            <td>Highest</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Key Formulae -->
+    <div class="section">
+      <div class="section-label">Key Formulae</div>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Sequence Range</div>
+          <div class="concept-desc">With <strong>m</strong> bits in the header: <br>Range = <strong>0 to 2<sup>m</sup> − 1</strong><br>e.g., m = 3 → 0 to 7</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Go-Back-N Window</div>
+          <div class="concept-desc">Max sender window = <strong>2<sup>m</sup> − 1</strong><br>Receiver window = <strong>1</strong> (always)</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Selective Repeat Window</div>
+          <div class="concept-desc">Max sender &amp; receiver window = <strong>2<sup>m</sup> / 2</strong><br>e.g., m = 2 → max window = 2</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Concept Summary -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+      <div class="callout green">
+        <strong>Flow Control</strong> — manages the rate of transmission so a fast sender does not overwhelm a slow receiver's buffer. The receiver signals the sender to pause or reduce speed before limits are breached.
+      </div>
+      <div class="callout">
+        <strong>Error Control</strong> — detects lost or damaged frames using FCS/CRC and triggers retransmission via ARQ. Three strategies exist: (1) Stop-and-Wait: simple but wastes bandwidth; (2) Go-Back-N: sends a window of frames, retransmits everything from the error point — simple receiver but can waste bandwidth on noisy links; (3) Selective Repeat: sends a window, retransmits only the bad frame — most efficient but requires the receiver to buffer and reorder frames.
+      </div>
+      <div class="callout pink">
+        <strong>Window size matters:</strong> Setting the window too large causes sequence number ambiguity — the receiver cannot distinguish a retransmitted old frame from a new frame with the same number, leading to silent data corruption. The constraints 2<sup>m</sup> − 1 (Go-Back-N) and 2<sup>m</sup>/2 (Selective Repeat) are not arbitrary; they are exact thresholds below which ambiguity is impossible.
+      </div>
+      <div class="callout yellow">
+        <strong>Piggybacking</strong> — an optimisation where a node embeds its ACK inside a data frame travelling in the opposite direction. Eliminates standalone ACK transmissions and saves bandwidth in full-duplex scenarios.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 42 — IP Routers Demo | CNPP</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec41.html" class="nav-lec">← prev</a>
+      <a href="lec43.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div>
+      <span class="lec-tag">Lecture 42</span>
+      <span class="med-badge">medium priority</span>
+    </div>
+    <h1>IP Routers — Internals &amp; Demo</h1>
+    <p>TCAM architecture, router hardware walkthrough, and Linux IP/route commands for inspecting and configuring routing on a live machine.</p>
+    <a href="https://nptel.ac.in/courses/106105183" class="video-link" target="_blank">▶ Watch Lecture</a>
+  </div>
+
+  <!-- ── SECTION 1: Router Architecture Recap ── -->
+  <div class="section">
+    <div class="section-label">Router Architecture — Recap</div>
+    <p>A router is functionally split into two planes. Understanding this split is essential before examining the hardware.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Control Plane</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">runs on</span><span>Route Processor (CPU + Memory)</span></div>
+          <div class="compare-row"><span class="label">job</span><span>Executes routing protocols (Distance Vector, Link State, BGP) to build the routing table</span></div>
+          <div class="compare-row"><span class="label">software</span><span>Router OS (e.g., Cisco IOS) — runs as standard software</span></div>
+          <div class="compare-row"><span class="label">output</span><span>Populated routing table</span></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Data Plane (Datapath)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">runs on</span><span>TCAM hardware (dedicated silicon)</span></div>
+          <div class="compare-row"><span class="label">job</span><span>Per-packet processing — match destination IP → look up FIB → forward to outgoing interface</span></div>
+          <div class="compare-row"><span class="label">speed</span><span>Must handle millions of packets/second; must be hardware-accelerated</span></div>
+          <div class="compare-row"><span class="label">input</span><span>FIB — Forwarding Information Base (snapshot of routing table loaded into TCAM)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>FIB vs Routing Table:</strong> The routing table lives in software (control plane). A snapshot of it is pushed into the TCAM hardware as the <strong>Forwarding Information Base (FIB)</strong>. The datapath only reads the FIB — it never touches the routing table directly.
+    </div>
+
+    <p>The basic hardware components are: <strong>Route Processor</strong> (CPU + memory) at the top, connected via an <strong>internal interconnection network bus</strong> to multiple <strong>interface cards</strong> which serve as the physical input/output ports of the router.</p>
+  </div>
+
+  <!-- ── SECTION 2: TCAM ── -->
+  <div class="section">
+    <div class="section-label">Ternary Content Addressable Memory (TCAM)</div>
+
+    <h3>What is TCAM?</h3>
+    <p>TCAM is a specialised high-speed hardware memory that <strong>searches its entire contents in a single clock cycle</strong>. It is the hardware substrate on which the FIB is implemented in a router's datapath.</p>
+
+    <p>The name "ternary" comes from the fact that each bit cell stores one of <strong>three values</strong>:</p>
+
+    <div class="tag-row">
+      <span class="tag tag-good">0 — matches 0</span>
+      <span class="tag tag-good">1 — matches 1</span>
+      <span class="tag tag-bad">X — don't care / wildcard (matches either)</span>
+    </div>
+
+    <p>Searching is based on <strong>pattern matching</strong>, not address lookup. For example, the pattern <code>110X</code> matches both <code>1100</code> and <code>1101</code>, because the fourth bit is a don't-care.</p>
+
+    <h3>CAM vs RAM — Inverse Access Principle</h3>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>RAM</th>
+          <th>CAM / TCAM</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Access method</td>
+          <td class="proto-name">Provide address → get content</td>
+          <td class="proto-name">Provide content → get address</td>
+        </tr>
+        <tr>
+          <td>Direction</td>
+          <td>Address-in, Data-out</td>
+          <td>Data-in, Address-out</td>
+        </tr>
+        <tr>
+          <td>Search speed</td>
+          <td>Sequential / random-access, slower for lookup</td>
+          <td>Entire memory searched in one clock cycle</td>
+        </tr>
+        <tr>
+          <td>Router use</td>
+          <td>General-purpose storage</td>
+          <td>FIB lookups in datapath</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>TCAM for IP Prefix Matching</h3>
+    <p>Routing table entries are stored as <strong>prefix + mask</strong> pairs. In TCAM, the host bits (masked-out bits) are stored as <strong>X (don't care)</strong>. Only the network prefix bits are matched precisely.</p>
+
+    <div class="callout yellow">
+      <strong>Key insight:</strong> At intermediate routers, only the <em>network address part</em> of a destination IP is matched. The host address part is only needed at the <strong>last-hop router</strong> (the one directly connected to the destination's LAN) for final delivery.
+    </div>
+
+    <p>Example with a simplified 4-bit IP address space:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Prefix/Mask</th>
+          <th>TCAM Format</th>
+          <th>Meaning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">101 / 3</td>
+          <td><code>101X</code></td>
+          <td>Match anything starting with 101</td>
+        </tr>
+        <tr>
+          <td class="port-num">111 / 3</td>
+          <td><code>111X</code></td>
+          <td>Match anything starting with 111</td>
+        </tr>
+        <tr>
+          <td class="port-num">10 / 2</td>
+          <td><code>10XX</code></td>
+          <td>Match anything starting with 10</td>
+        </tr>
+        <tr>
+          <td class="port-num">0 / 0</td>
+          <td><code>XXXX</code></td>
+          <td>Default route — matches everything</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Longest Prefix Match in TCAM</h3>
+    <p>When multiple TCAM entries match a given destination IP, the router applies the <strong>longest prefix match</strong> rule: the entry with the most specific (longest) prefix wins. An <strong>encoder circuit</strong> within the TCAM hardware compares all simultaneous matches and returns the address of the longest-matching entry.</p>
+
+    <div class="callout green">
+      <strong>Example:</strong> Search word <code>1011</code> matches <code>XXXX</code>, <code>10XX</code>, and <code>101X</code>. Longest match = <code>101X</code> (3 bits matched, 1 don't-care) → this entry's output (next-hop + interface) is used.
+    </div>
+
+    <div class="callout">
+      <strong>💻 Visual Demo:</strong> The basic TCAM architecture and the search word / match line mechanism is demonstrated visually on a diagram at <a class="ts" href="#">00:31 – 14:01</a>. Highly recommended to watch for a clear picture of how parallel matching and the encoder circuit work together.
+    </div>
+  </div>
+
+  <!-- ── SECTION 3: Physical Router ── -->
+  <div class="section">
+    <div class="section-label">Physical Router — Hardware Walkthrough</div>
+
+    <p>A router board consists of multiple <strong>chassis</strong>, each with several <strong>interfaces</strong> (ports). The demo uses a 16-port prototype router — two such boards connected to a Layer 2 TP-Link switch.</p>
+
+    <div class="impl-stack">
+      <div class="impl-row">
+        <div class="impl-layer impl-app">Route Processor</div>
+        <div class="impl-impl">Runs router OS / routing protocols</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-net">TCAM Hardware</div>
+        <div class="impl-impl">Stores FIB; performs fast lookups</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-trans">Interface Processor</div>
+        <div class="impl-impl">Per-interface packet I/O logic</div>
+      </div>
+      <div class="impl-row">
+        <div class="impl-layer impl-dl">Interface Cards (RJ-45 ports)</div>
+        <div class="impl-impl">Physical I/O — connect via Ethernet cables</div>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      <strong>Software Defined Networking (SDN) preview:</strong> The demo routers are SDN-capable. In SDN, the control plane is <em>decoupled</em> from the hardware — an external controller machine runs routing protocols and pushes forwarding rules into the router's TCAM remotely. This will be covered in detail in subsequent lectures.
+    </div>
+
+    <div class="callout">
+      <strong>💻 Physical Demo:</strong> The actual router board with chassis, interfaces, and cabling is shown at <a class="ts" href="#">14:31</a>. Worth watching to visualise what a real (prototype-scale) router looks like before exam.
+    </div>
+  </div>
+
+  <!-- ── SECTION 4: Linux IP & Route Commands ── -->
+  <div class="section">
+    <div class="section-label">Linux IP &amp; Route Commands</div>
+    <p>All commands demonstrated on a Linux machine with three interfaces: <code>lo</code> (loopback), <code>eth0</code> (Ethernet, currently down), <code>wlan0</code> (wireless, up).</p>
+
+    <h3><code>ip address show</code> <a class="ts" href="#">19:11</a></h3>
+    <p>Shows all network interfaces with their full IP configuration.</p>
+    <table class="port-table">
+      <thead>
+        <tr><th>Field</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="port-num">inet</td><td>IPv4 address with prefix length (CIDR notation)</td></tr>
+        <tr><td class="port-num">inet6</td><td>IPv6 address</td></tr>
+        <tr><td class="port-num">link/ether</td><td>MAC (hardware) address</td></tr>
+        <tr><td class="port-num">brd</td><td>Broadcast address</td></tr>
+        <tr><td class="port-num">mtu</td><td>Maximum Transmission Unit — largest packet size in bytes the interface will accept</td></tr>
+      </tbody>
+    </table>
+
+    <div class="vci-box">
+      <div class="vci-row"><span class="port">lo</span><span class="arrow">→</span><span class="vci">127.0.0.1/8</span><span style="color:var(--muted);font-size:13px">Loopback — same-machine comms; MTU 65536; used to test if your protocol stack is live</span></div>
+      <div class="vci-row"><span class="port">eth0</span><span class="arrow">→</span><span class="vci">10.0.0.11/24</span><span style="color:var(--muted);font-size:13px">Wired Ethernet — currently DOWN (no cable); MTU 1500</span></div>
+      <div class="vci-row"><span class="port">wlan0</span><span class="arrow">→</span><span class="vci">10.146.58.130/17</span><span style="color:var(--muted);font-size:13px">Wireless — currently UP; MTU 1500; has both IPv4 and IPv6</span></div>
+    </div>
+
+    <div class="callout">
+      <strong>MTU 1500 bytes</strong> is the standard maximum for both Ethernet and Wi-Fi frames. The loopback interface has an unusually large MTU (65536) because it never leaves the machine — no physical medium limitations apply.
+    </div>
+
+    <h3><code>ip link show</code> <a class="ts" href="#">23:52</a></h3>
+    <p>Shows <strong>link-layer</strong> properties only (no IP addresses). Key fields:</p>
+    <table class="port-table">
+      <thead>
+        <tr><th>Field</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="port-num">qdisc</td><td>Queuing discipline — the queueing algorithm used on this interface</td></tr>
+        <tr><td class="port-num">qlen</td><td>Queue length — max packets that can be buffered before dropping</td></tr>
+        <tr><td class="port-num">state</td><td>UP / DOWN / UNKNOWN — current link state</td></tr>
+        <tr><td class="port-num">pfifo</td><td>Priority FIFO queue — used on Ethernet; qlen 1000 packets</td></tr>
+        <tr><td class="port-num">mq</td><td>Multi-queue — used on WLAN (IEEE 802.11); supports 4 QoS classes</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout yellow">
+      The loopback has <strong>qlen 1</strong> and no queue — packets are delivered immediately within the same machine. Ethernet and WLAN both have <strong>qlen 1000</strong> with different queuing mechanisms suited to their medium.
+    </div>
+
+    <h3><code>ip -s address show</code> <a class="ts" href="#">26:48</a></h3>
+    <p>Adds per-interface <strong>traffic statistics</strong> to the output. Reports for both RX (receive) and TX (transmit):</p>
+    <div class="tag-row">
+      <span class="tag tag-good">bytes</span>
+      <span class="tag tag-good">packets</span>
+      <span class="tag tag-bad">errors</span>
+      <span class="tag tag-bad">dropped</span>
+      <span class="tag tag-bad">overrun</span>
+      <span class="tag tag-good">multicast</span>
+      <span class="tag tag-bad">carrier (TX only)</span>
+      <span class="tag tag-bad">collisions (TX only)</span>
+    </div>
+    <p>Useful for diagnosing interface health — a high error or drop count indicates link-layer problems.</p>
+
+    <h3><code>route -n</code> / <code>ip route list</code> <a class="ts" href="#">28:40</a></h3>
+    <p>Displays the kernel IP routing table. Each entry contains:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Column</th><th>Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="port-num">Destination</td><td>Target network IP</td></tr>
+        <tr><td class="port-num">Gateway</td><td>Next-hop IP address (0.0.0.0 = directly connected)</td></tr>
+        <tr><td class="port-num">Genmask</td><td>Subnet mask for this route</td></tr>
+        <tr><td class="port-num">Flags</td><td>U = Up, G = Gateway, H = Host route</td></tr>
+        <tr><td class="port-num">Metric</td><td>Route cost (lower = preferred)</td></tr>
+        <tr><td class="port-num">Iface</td><td>Outgoing interface to use</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>💻 Live Demo:</strong> The routing table output and the effect of adding/deleting routes is shown at <a class="ts" href="#">28:40 – 38:28</a>. Watching this is the fastest way to understand how routing table entries translate to actual forwarding behaviour.
+    </div>
+
+    <h3><code>ip route add &lt;dst&gt; dev &lt;iface&gt; via &lt;gateway&gt;</code></h3>
+    <p>Adds a <strong>static route</strong> entry to the routing table. Requires root/sudo. If no netmask is provided, defaults to <code>/32</code> (host route — exact match only). Example:</p>
+    <div class="callout green">
+      <code>sudo ip route add 172.16.2.30/24 dev wlan0 via 10.146.0.2</code><br/>
+      Adds a route to the <code>172.16.2.0/24</code> network via gateway <code>10.146.0.2</code> on the <code>wlan0</code> interface.
+    </div>
+    <p>These manually entered routes are called <strong>static routes</strong>. They persist until deleted with <code>sudo ip route del &lt;dst&gt;</code>.</p>
+
+    <h3><code>traceroute &lt;destination&gt;</code> <a class="ts" href="#">34:18</a></h3>
+    <p>Traces the path (hop by hop) that packets take to reach a destination. Shows each intermediate router's IP and the round-trip time to that hop.</p>
+    <div class="callout yellow">
+      If a hop is unreachable or the gateway is incorrect, all subsequent hops show <code>* * *</code> (no response). This confirms that the routing table entry — specifically the gateway — directly controls packet forwarding path.
+    </div>
+
+    <div class="callout">
+      <strong>💻 Traceroute Demo:</strong> Two traceroutes are shown at <a class="ts" href="#">34:18 – 38:28</a> — one to a reachable host (shows 3 intermediate hops with RTTs) and one to an unreachable host with a wrong gateway (all stars). Clear demonstration of gateway misconfiguration impact.
+    </div>
+  </div>
+
+  <!-- ── SUMMARY ── -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <h3>TCAM</h3>
+    <p>Specialised hardware memory that searches all entries simultaneously in one clock cycle using ternary (0/1/X) pattern matching. Used in router datapaths to implement the FIB. Longer prefix matches take priority via an encoder circuit — this is the hardware implementation of longest prefix match.</p>
+
+    <h3>Control Plane vs Data Plane</h3>
+    <p>The control plane runs routing protocols in software to build the routing table. The data plane uses TCAM hardware to perform per-packet FIB lookups at line rate (millions of packets/second). The FIB is a hardware-optimised snapshot of the routing table.</p>
+
+    <h3>Key Linux Commands</h3>
+    <table class="port-table">
+      <thead>
+        <tr><th>Command</th><th>What it shows</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="port-num">ip address show</td><td>All interfaces with IP addresses, MAC addresses, MTU</td></tr>
+        <tr><td class="port-num">ip link show</td><td>Link-layer properties — qdisc, queue length, state</td></tr>
+        <tr><td class="port-num">ip -s address show</td><td>Interface statistics — bytes, packets, errors, drops</td></tr>
+        <tr><td class="port-num">route -n</td><td>Kernel routing table — destination, gateway, mask, interface</td></tr>
+        <tr><td class="port-num">ip route add</td><td>Add a static route entry</td></tr>
+        <tr><td class="port-num">ip route del</td><td>Remove a route entry</td></tr>
+        <tr><td class="port-num">traceroute</td><td>Trace hop-by-hop path to destination with RTT per hop</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Static vs Dynamic Routing</h3>
+    <p>Commands like <code>ip route add</code> create <strong>static routes</strong> — manually configured entries that don't change unless explicitly modified. Dynamic routing (Distance Vector, Link State, BGP — covered in subsequent lectures) automatically populates and updates the routing table based on network topology.</p>
+  </div>
+
+</div>
+</body>
+</html>

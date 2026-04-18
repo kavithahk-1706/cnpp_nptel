@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 38 — IP Routing II: Distance Vector & Link State</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec37.html" class="nav-lec">← prev</a>
+      <a href="lec39.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 38</span>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>IP Routing II — Intra-Domain: Distance Vector &amp; Link State</h1>
+    <p>Prof. Soumya Kanti Ghosh · Department of CSE, IIT Kharagpur</p>
+    <a href="https://nptel.ac.in/courses/106105183" class="video-link" target="_blank">▶ Watch Lecture</a>
+  </div>
+
+
+  <!-- SECTION 1: ROUTING PROTOCOL TAXONOMY -->
+  <div class="section">
+    <div class="section-label">Routing Protocol Taxonomy</div>
+    <p>Every router maintains a <strong>routing table</strong> (also called a forwarding table) — a mapping from destination to outgoing interface. The goal of routing protocols is to keep this table accurate and optimal as network topology changes.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Static Routing</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Routes are manually/pre-programmed by administrators. No automatic discovery. No adaptation to failures or topology changes.</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Dynamic Routing</div>
+        <div class="compare-body">
+          <div class="compare-row"><div>Routers automatically discover, calculate, and maintain paths. Adapts to topology changes. Protocols differ in <em>how</em> they discover and recompute routes.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Four Categories of Dynamic Routing Protocols</h3>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Intra-domain</div>
+        <div class="proto-names">Distance Vector</div>
+        <p style="margin-top:6px; font-size:14px;">Each router shares costs to neighbors. Localized view. Example: <strong>RIP</strong></p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Intra-domain</div>
+        <div class="proto-names">Link State</div>
+        <p style="margin-top:6px; font-size:14px;">Each router advertises all link states. Global topology view. Example: <strong>OSPF</strong></p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Inter-domain</div>
+        <div class="proto-names">Path Vector</div>
+        <p style="margin-top:6px; font-size:14px;">Advertises destination + full AS path. Used between ASes. Example: <strong>BGP</strong></p>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Proprietary</div>
+        <div class="proto-names">Hybrid</div>
+        <p style="margin-top:6px; font-size:14px;">Combines DV + LS attributes. Faster convergence, higher resource cost. Used in controlled/proprietary environments.</p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SECTION 2: AUTONOMOUS SYSTEMS -->
+  <div class="section">
+    <div class="section-label">Autonomous Systems (AS)</div>
+    <p>The internet is partitioned into <strong>Autonomous Systems (AS)</strong> — groups of networks, hosts, and routers under a single administrative/organizational control (e.g., IIT Kharagpur's campus network = one AS). Each AS has a globally unique AS number.</p>
+
+    <div class="callout green">
+      <strong>Intra-domain routing</strong> = routing within a single AS. Uses Distance Vector or Link State protocols.<br>
+      <strong>Inter-domain routing</strong> = routing between different ASes. Uses Path Vector (BGP).
+    </div>
+
+    <p>Managing a small AS is far simpler than managing the whole internet. Dynamic routing is necessary because: (1) the internet topology changes constantly — links and routers appear and disappear; (2) there is no single administrative control over the whole internet, so each router must update its own table independently.</p>
+  </div>
+
+
+  <!-- SECTION 3: DISTANCE VECTOR ROUTING -->
+  <div class="section">
+    <div class="section-label">Distance Vector Routing</div>
+    <p>Each router maintains a <strong>distance vector table</strong> storing the cost (distance/metric) to every known destination, along with the next hop to reach it. The router only directly measures costs to its <em>immediate neighbors</em>; everything else is learned indirectly.</p>
+
+    <div class="callout">
+      <strong>Core principle:</strong> "I share my knowledge of the whole network with my immediate neighbors — periodically and on any change." The process resembles a whisper-chain propagating through the AS until all routers converge to a consistent view.
+    </div>
+
+    <h3>How Distance Vector Updates Work</h3>
+    <p>Each router sends its full routing table to its neighbors either (a) periodically (e.g., every 30 seconds in RIP) or (b) triggered by a topology change. On receiving a neighbor's table, a router applies the Bellman-Ford update rule:</p>
+
+    <div class="callout green">
+      <strong>Update rule:</strong> New cost to destination D via neighbor N = cost(self → N) + cost(N → D as advertised by N).<br>
+      If this is less than the current best cost, update the entry and set next-hop to N.
+    </div>
+
+    <h3>Table Initialization Example <a class="ts" href="#" title="Refer Slide Time: 15:51">15:51</a></h3>
+    <p>Network: nodes A, B, C, D, E with link costs A–B=5, A–C=2, A–D=3, C–B=4, C–E=4, B–E=3, D–E=4 (see slide diagram).</p>
+    <p>At t=0, each router only knows costs to directly connected neighbors. Non-adjacent costs are initialised to <strong>∞</strong>.</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Router</th>
+          <th>A (cost)</th>
+          <th>B (cost)</th>
+          <th>C (cost)</th>
+          <th>D (cost)</th>
+          <th>E (cost)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">A</td><td class="port-num">0</td><td>5</td><td>2</td><td>3</td><td>∞</td></tr>
+        <tr><td class="proto-name">B</td><td>5</td><td class="port-num">0</td><td>4</td><td>∞</td><td>3</td></tr>
+        <tr><td class="proto-name">C</td><td>2</td><td>4</td><td class="port-num">0</td><td>∞</td><td>4</td></tr>
+        <tr><td class="proto-name">D</td><td>3</td><td>∞</td><td>∞</td><td class="port-num">0</td><td>∞</td></tr>
+        <tr><td class="proto-name">E</td><td>∞</td><td>3</td><td>4</td><td>∞</td><td class="port-num">0</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Update Example: A receives C's table <a class="ts" href="#" title="Refer Slide Time: 16:53">16:53</a></h3>
+    <p>C advertises: C→A=2, C→B=4, C→C=0, C→D=∞, C→E=4. A computes potential new costs via C (A→C=2, so add 2 to all of C's entries):</p>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Destination</th><th>A's old cost</th><th>Cost via C (2 + C's cost)</th><th>A's new cost</th><th>Next hop</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>A</td><td>0</td><td>2+2=4</td><td class="port-num">0</td><td>—</td></tr>
+        <tr><td>B</td><td>5</td><td>2+4=6</td><td class="port-num">5</td><td>B (direct better)</td></tr>
+        <tr><td>C</td><td>2</td><td>2+0=2</td><td class="port-num">2</td><td>C</td></tr>
+        <tr><td>D</td><td>3</td><td>2+∞=∞</td><td class="port-num">3</td><td>D (A keeps its own)</td></tr>
+        <tr><td>E</td><td>∞</td><td>2+4=6</td><td class="port-num">6</td><td>C (new path discovered!)</td></tr>
+      </tbody>
+    </table>
+
+    <p>A then processes B's advertisement similarly. Eventually all tables converge. <strong>Encourage yourself to manually derive B's and E's updated tables</strong> — it's straightforward and solidifies the algorithm.</p>
+  </div>
+
+
+  <!-- SECTION 4: DV INSTABILITY PROBLEMS -->
+  <div class="section">
+    <div class="section-label">Distance Vector: Instability Problems</div>
+    <p>Distance Vector routing suffers from instability when a link fails, because stale routing information can circulate and create routing loops with slowly growing costs — the <strong>count-to-infinity</strong> problem.</p>
+
+    <h3>Two-Node Instability <a class="ts" href="#" title="Refer Slide Time: 20:15">20:15</a></h3>
+    <p>Setup: X — A — B. A is directly connected to X (cost 2); B reaches X via A (cost 6). After the A–X link fails:</p>
+
+    <div class="callout pink">
+      <strong>Step 1:</strong> A sets cost to X = ∞ (link down).<br>
+      <strong>Step 2:</strong> Before A's update reaches B, A receives B's stale advertisement (B→X = 6). A thinks: "I can reach X via B: 4 + 6 = 10." A updates X = 10, next-hop = B.<br>
+      <strong>Step 3:</strong> B receives A's updated advertisement (A→X = 10). B thinks: "Via A: 4 + 10 = 14." Updates to 14.<br>
+      <strong>Outcome:</strong> Costs keep incrementing (10 → 14 → 18 → …) until they hit the max metric (∞ = unreachable). This is count-to-infinity.
+    </div>
+
+    <h3>Three-Node Instability <a class="ts" href="#" title="Refer Slide Time: 22:45">22:45</a></h3>
+    <p>Setup: X — A — B — C (A directly connected to X, cost 2). After A–X fails, A sends ∞ updates to B and C — but the packet to C is lost in transit.</p>
+
+    <div class="callout pink">
+      <strong>B</strong> correctly updates X = ∞ (received A's update).<br>
+      <strong>C</strong> still holds stale entry X=5 via A (packet was lost).<br>
+      Next round: B hears C's advertisement (C→X=5) and updates to 5+3=8.<br>
+      A then hears B (B→X=8) and updates to 8+4=12. Count-to-infinity resumes.<br>
+      Packet loss during convergence amplifies the instability to a three-node cycle.
+    </div>
+
+    <div class="callout yellow">
+      <strong>Why this matters:</strong> In a large AS with hundreds of routers, stale advertisements arriving out of order can cause cascading instability across many nodes, not just 2 or 3. Solutions (split horizon, poison reverse, hold-down timers) exist but are not covered in this lecture.
+    </div>
+  </div>
+
+
+  <!-- SECTION 5: LINK STATE ROUTING -->
+  <div class="section">
+    <div class="section-label">Link State Routing</div>
+    <p>Each router has a complete view of the entire AS topology — not just neighbor costs. This is achieved by flooding <strong>Link State Advertisements (LSAs)</strong> to every other router in the domain.</p>
+
+    <div class="callout green">
+      A <strong>link state</strong> is a description of a router's interface: IP address, subnet mask, network type, cost, and which neighboring routers it connects to. The collection of all link states across the network forms a <strong>Link State Database (LSDB)</strong>. Ideally, every router's LSDB is identical.
+    </div>
+
+    <h3>Link State Approach — 4 Steps <a class="ts" href="#" title="Refer Slide Time: 24:25">24:25</a></h3>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Step 1 &amp; 2 — Discover &amp; Advertise</div>
+        <div class="concept-desc">Each router identifies all routing devices on directly connected networks and generates an LSA listing all directly connected links and their costs. LSAs are flooded to every other router in the network.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Step 3 &amp; 4 — Build Topology &amp; Compute</div>
+        <div class="concept-desc">Using received LSAs, each router builds an identical topology database (network graph). It then runs Dijkstra's shortest path algorithm on this graph to compute optimal routes and updates its routing table accordingly.</div>
+      </div>
+    </div>
+
+    <h3>Comparison: Distance Vector vs Link State</h3>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Distance Vector</div>
+        <div class="compare-body">
+          <div class="compare-row"><div class="label">Knowledge</div><div>Localized — only neighbor costs</div></div>
+          <div class="compare-row"><div class="label">Shares with</div><div>Immediate neighbors only</div></div>
+          <div class="compare-row"><div class="label">What's shared</div><div>Full routing table (costs to all destinations)</div></div>
+          <div class="compare-row"><div class="label">Algorithm</div><div>Bellman-Ford (distributed)</div></div>
+          <div class="compare-row"><div class="label">Protocol</div><div>RIP</div></div>
+          <div class="compare-row"><div class="label">Instability</div><div>Count-to-infinity problem</div></div>
+          <div class="compare-row"><div class="label">Convergence</div><div>Slower</div></div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Link State</div>
+        <div class="compare-body">
+          <div class="compare-row"><div class="label">Knowledge</div><div>Global — full AS topology</div></div>
+          <div class="compare-row"><div class="label">Shares with</div><div>Every router in the AS (flooding)</div></div>
+          <div class="compare-row"><div class="label">What's shared</div><div>Only neighbor link costs (LSA)</div></div>
+          <div class="compare-row"><div class="label">Algorithm</div><div>Dijkstra (centralized per router)</div></div>
+          <div class="compare-row"><div class="label">Protocol</div><div>OSPF</div></div>
+          <div class="compare-row"><div class="label">Instability</div><div>No count-to-infinity; consistent topology</div></div>
+          <div class="compare-row"><div class="label">Convergence</div><div>Faster (global view)</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SECTION 6: DIJKSTRA'S ALGORITHM -->
+  <div class="section">
+    <div class="section-label">Dijkstra's Shortest Path Algorithm (Link State)</div>
+    <p>Once the LSDB is complete, each router runs Dijkstra's algorithm from itself as the root to compute shortest paths to all other nodes. <a class="ts" href="#" title="Refer Slide Time: 28:51">28:51</a></p>
+
+    <div class="callout">
+      <strong>Two lists maintained:</strong><br>
+      <strong>Tentative list:</strong> Nodes discovered but not yet finalised. Stores best-known cost so far.<br>
+      <strong>Permanent list:</strong> Nodes with confirmed shortest paths (cost is final, won't change).
+    </div>
+
+    <h3>Algorithm Steps</h3>
+
+    <div class="vci-box">
+      <div class="vci-row"><span class="vci">1</span><span class="arrow">→</span><span>Set root to the local node. Add it to the tentative list with cost 0.</span></div>
+      <div class="vci-row"><span class="vci">2</span><span class="arrow">→</span><span>If tentative list is empty → <strong>STOP</strong>.</span></div>
+      <div class="vci-row"><span class="vci">3</span><span class="arrow">→</span><span>From the tentative list, select the node with the <strong>smallest cumulative cost</strong>. Move it to the permanent list.</span></div>
+      <div class="vci-row"><span class="vci">4</span><span class="arrow">→</span><span>For each unprocessed neighbor of that node: add it to the tentative list if not already present. If it is already in the tentative list but with a <strong>larger cost</strong>, replace with the new lower cost.</span></div>
+      <div class="vci-row"><span class="vci">5</span><span class="arrow">→</span><span>Go to step 2.</span></div>
+    </div>
+
+    <h3>Shortest Path Tree Example <a class="ts" href="#" title="Refer Slide Time: 29:55">29:55</a></h3>
+    <p>Network: A–B=5, A–C=2, C–B=4, C–D=3, C–E=4, B–E=3, D–E=4. Running Dijkstra from root A:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Step</th><th>Node Moved to Permanent</th><th>Tentative List (node: cost)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td class="port-num">A (cost 0)</td><td>B:5, C:2, D:3</td></tr>
+        <tr><td>2</td><td class="port-num">C (cost 2) — min in tentative</td><td>B:min(5, 2+4=6)=5, D:min(3, 2+3=5)=3, E:2+4=6</td></tr>
+        <tr><td>3</td><td class="port-num">D (cost 3) — min in tentative</td><td>B:5, E:min(6, 3+4=7)=6</td></tr>
+        <tr><td>4</td><td class="port-num">B (cost 5) — min in tentative</td><td>E:min(6, 5+3=8)=6</td></tr>
+        <tr><td>5</td><td class="port-num">E (cost 6)</td><td>empty</td></tr>
+        <tr><td>6</td><td colspan="2">Tentative list empty → STOP</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Resulting Routing Table for Node A <a class="ts" href="#" title="Refer Slide Time: 30:51">30:51</a></h3>
+
+    <table class="port-table">
+      <thead>
+        <tr><th>Destination</th><th>Cost</th><th>Next Router</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="proto-name">A</td><td class="port-num">0</td><td>—</td></tr>
+        <tr><td class="proto-name">B</td><td class="port-num">5</td><td>— (direct)</td></tr>
+        <tr><td class="proto-name">C</td><td class="port-num">2</td><td>— (direct)</td></tr>
+        <tr><td class="proto-name">D</td><td class="port-num">3</td><td>— (direct)</td></tr>
+        <tr><td class="proto-name">E</td><td class="port-num">6</td><td>C</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout yellow">
+      <strong>Practical note:</strong> The slide at 29:55 shows a visual step-by-step construction of the shortest path tree. Highly recommended to watch this segment and trace through it manually — Dijkstra on a graph is a common exam question and muscle memory helps.
+    </div>
+  </div>
+
+
+  <!-- SECTION 7: OSPF -->
+  <div class="section">
+    <div class="section-label">OSPF — Open Shortest Path First</div>
+    <p><strong>OSPF</strong> is the predominant intra-domain link state routing protocol. It uses LSAs flooded within an AS (or within areas of an AS) and runs Dijkstra on the collected LSDB to populate routing tables. Details of OSPF message types, area hierarchy, and DR/BDR election are covered in subsequent lectures.</p>
+
+    <div class="callout green">
+      Link State Summary: (1) Share knowledge about your neighborhood — (2) with every other router — (3) only when there is a change (or periodically). OSPF implements exactly this using LSA flooding.
+    </div>
+  </div>
+
+
+  <!-- SECTION 8: PATH VECTOR (brief) -->
+  <div class="section">
+    <div class="section-label">Path Vector Routing (Brief — BGP)</div>
+    <p>Used for <strong>inter-domain</strong> (between ASes) routing. Similar to distance vector but instead of advertising just the cost, each entry includes the <strong>full ordered sequence of ASes</strong> on the path to the destination. This allows loop detection and policy-based routing. <strong>BGP</strong> (Border Gateway Protocol) is the standard inter-domain path vector protocol. Covered in detail in later lectures.</p>
+  </div>
+
+
+  <!-- SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Distance Vector</div>
+        <div class="concept-desc">Each router knows only neighbor costs. Shares full routing table with neighbors. Bellman-Ford update. Prone to count-to-infinity. Slow convergence. RIP is the example protocol.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Link State</div>
+        <div class="concept-desc">Each router floods its link costs (LSAs) to everyone. All routers build an identical topology DB. Dijkstra computes shortest paths. No count-to-infinity. Fast convergence. OSPF is the example protocol.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Path Vector</div>
+        <div class="concept-desc">Inter-domain. Advertises destination + full AS path sequence. Enables loop detection via path inspection. Policy-based routing possible. BGP is the standard protocol.</div>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      <strong>Key exam traps:</strong><br>
+      • DV shares its <em>full routing table</em> with neighbors; LS shares only its <em>direct link costs</em> (LSA) with everyone — don't confuse what's shared and with whom.<br>
+      • Count-to-infinity is a DV problem, not LS.<br>
+      • Dijkstra requires a complete topology view — this is only possible in LS, not DV.<br>
+      • RIP = Distance Vector. OSPF = Link State. BGP = Path Vector. Memorise this cold.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

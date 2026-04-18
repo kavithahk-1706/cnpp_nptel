@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 48 — Data Link Layer: Ethernet</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec47.html" class="nav-lec">← prev</a>
+        <a href="lec49.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 48</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>Data Link Layer — Ethernet</h1>
+      <p>Shared access networks, MAC protocols (Aloha → CSMA/CD), Ethernet frame structure, collision detection, and exponential backoff. Core exam material — understand every mechanism here.</p>
+    </div>
+
+    <!-- SECTION 1: SHARED ACCESS NETWORKS -->
+    <div class="section">
+      <div class="section-label">Shared Access Networks</div>
+      <p>Multiple nodes share a single physical link (bus, ring, wireless). Any transmission by one node is received by <strong>all other nodes</strong> — no intermediate switches. This means all devices are in the same broadcast domain by default.</p>
+      <p>Because the medium is shared, simultaneous transmissions cause <strong>collisions</strong>. MAC (Medium Access Control) protocols govern how nodes take turns, with two primary goals:</p>
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Fairness</div>
+          <div class="concept-desc">Every node gets equitable access to the channel — no node is starved of bandwidth.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Performance</div>
+          <div class="concept-desc">Maximize channel utilization. Protocols must be lightweight enough to run on resource-constrained devices.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: MULTIPLE ACCESS METHODS -->
+    <div class="section">
+      <div class="section-label">Multiple Access Methods — Taxonomy</div>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Fixed Assignment</div>
+          <div class="concept-desc">Channel is partitioned — each node gets a fixed slice of bandwidth (TDMA, FDMA, CDMA). Essentially circuit switching. Inefficient: idle nodes waste their allocated slot. Used in wireless/cellular environments.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Contention-Based</div>
+          <div class="concept-desc">Nodes compete equally for bandwidth and handle collisions when they occur. No pre-allocation. Examples: <strong>Aloha, Ethernet (CSMA/CD)</strong>. This is what we focus on.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Token / Reservation</div>
+          <div class="concept-desc">Nodes take turns; only the node holding the token may transmit. Orderly but requires coordination overhead. Example: <strong>Token Ring</strong>.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: ALOHA -->
+    <div class="section">
+      <div class="section-label">Aloha Protocol Family</div>
+      <p>Developed by Norm Abramson at the University of Hawaii (1970) for packet radio networks. The first random-access MAC protocol. Foundation for everything Ethernet is built on.</p>
+
+      <h3>Pure (Unslotted) Aloha</h3>
+      <p>Simplest approach: <strong>when ready, transmit immediately.</strong> No synchronization, no coordination. If no ACK is received within a timeout period, assume collision → wait a random delay → retransmit.</p>
+      <div class="callout pink">
+        <strong>Problem:</strong> A frame sent at time t₀ can collide with any frame sent in the window [t₀ − 1, t₀ + 1] — double the vulnerable period. Maximum channel utilization: <strong>~18%</strong>. Terrible.
+      </div>
+      <p>Delay tradeoff: too short → many collisions. Too long → channel underutilized.</p>
+
+      <h3>Slotted Aloha</h3>
+      <p>Time is divided into equal-sized slots (each = one packet transmission time). Nodes may only begin transmitting at the <strong>start of a slot</strong>. On collision, retransmit in a future slot with probability <em>p</em> until successful.</p>
+      <div class="callout green">
+        Slotting halves the vulnerable period → maximum utilization improves to <strong>~36%</strong>. Still low, but a meaningful improvement over pure Aloha.
+      </div>
+      <p>Neither version checks whether the channel is busy before transmitting — that's the key limitation Ethernet's carrier sense solves.</p>
+    </div>
+
+    <!-- SECTION 4: ETHERNET HISTORY -->
+    <div class="section">
+      <div class="section-label">Ethernet — Background</div>
+      <p>Developed by Bob Metcalfe and colleagues at Xerox PARC in the mid-1970s. Roots directly in the Aloha packet radio network. Standardized jointly by Xerox, DEC, and Intel in 1978. The first practical Local Area Network (LAN).</p>
+      <p>IEEE 802.3 defines both MAC and physical layer details. Ethernet has scaled through generations:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Standard</th>
+            <th>Speed</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">IEEE 802.3</td>
+            <td class="proto-name">2 → 10 Mbps</td>
+            <td>Original CSMA/CD Ethernet</td>
+          </tr>
+          <tr>
+            <td class="port-num">IEEE 802.3u</td>
+            <td class="proto-name">100 Mbps</td>
+            <td>Fast Ethernet</td>
+          </tr>
+          <tr>
+            <td class="port-num">IEEE 802.3z</td>
+            <td class="proto-name">1000 Mbps (1 Gbps)</td>
+            <td>Gigabit Ethernet</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>Ethernet is the dominant LAN technology worldwide — cheap, fast, and standards-based.</p>
+    </div>
+
+    <!-- SECTION 5: ETHERNET TECHNOLOGIES -->
+    <div class="section">
+      <div class="section-label">Ethernet Technologies — Physical Variants</div>
+      <p>The naming convention for Ethernet standards follows: <strong>[speed][signaling][cabling]</strong>.</p>
+
+      <div class="two-col">
+        <div class="proto-card">
+          <div class="proto-layer">10Base2</div>
+          <div class="proto-names">Thin Coax Bus</div>
+          <div class="proto-card-desc" style="font-size:13px; color: var(--muted); margin-top: 6px;">10 Mbps, ≤185 m cable length. Bus topology — all nodes tap into a single coaxial backbone. Repeaters used to connect multiple segments (Layer 1 device: amplifies signal, boosts SNR). Packets travel in both directions.</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">10BaseT / 100BaseT</div>
+          <div class="proto-names">Twisted Pair + Hub</div>
+          <div class="proto-card-desc" style="font-size:13px; color: var(--muted); margin-top: 6px;"><strong>T = Twisted Pair.</strong> Enables star topology via hubs. Max run ≈ 89–100 m. Hub = multiport repeater (Layer 1). All ports share the same collision and broadcast domain — effective bandwidth degrades with more ports.</div>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        <strong>Hub vs Switch:</strong> A hub is just a multiport repeater — Layer 1. All connected nodes share one collision domain and one broadcast domain. Effective bandwidth = total bandwidth ÷ number of ports (worst case). A switch (Layer 2) solves the collision problem by giving each port its own collision domain.
+      </div>
+
+      <h4>Physical Layer Config Format (802.3)</h4>
+      <p>802.3 physical specs are defined along three axes:</p>
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Data Rate</div>
+          <div class="proto-names">10 / 100 / 1000 Mbps</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Signaling Method</div>
+          <div class="proto-names">Baseband (digital) / Broadband (analog)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Cabling Codes</div>
+          <div class="proto-names">2 = thin coax · 5 = thick coax · T = twisted pair · F = optical fiber · S = short-wave laser (multimode) · L = long-wave laser (single mode)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 6: CARRIER SENSE -->
+    <div class="section">
+      <div class="section-label">Carrier Sense — What Aloha Was Missing</div>
+      <p>Ethernet's key improvement over Aloha: <strong>listen before you transmit.</strong> Before sending, a node checks whether the medium is currently in use (carrier sensed). If busy, wait. If idle, transmit.</p>
+      <p>Aloha didn't do this because it was a wireless protocol — in wireless, the contention problem exists at the <strong>receiver</strong>, not the sender. Two issues unique to wireless make carrier sense difficult: <strong>hidden terminal</strong> (node C can't hear node A, so C doesn't know A is transmitting to B) and <strong>exposed terminal</strong> (node B hears A's ongoing transmission and incorrectly withholds its own unrelated transmission). Ethernet runs on wired media where these don't apply.</p>
+    </div>
+
+    <!-- SECTION 7: CSMA/CD -->
+    <div class="section">
+      <div class="section-label">CSMA/CD — Ethernet's MAC Protocol</div>
+      <p><strong>Carrier Sense Multiple Access / Collision Detection</strong> — the algorithm Ethernet actually uses.</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">CS — Carrier Sense</div>
+          <div class="proto-names">Send only if medium is idle</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">MA — Multiple Access</div>
+          <div class="proto-names">Many nodes share the channel</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">CD — Collision Detection</div>
+          <div class="proto-names">Detect via voltage difference; stop immediately</div>
+        </div>
+      </div>
+
+      <h3>MAC Algorithm — Step by Step</h3>
+      <div class="callout">
+        <strong>If line is idle:</strong> Send packet immediately. Max frame size = 1500 bytes. Must wait 9.6 µs between back-to-back frames.
+      </div>
+      <div class="callout yellow">
+        <strong>If line is busy (carrier sensed):</strong> Wait until idle, then transmit immediately. This strategy is called <strong>1-persistent sending</strong> — as soon as it's free, fire.
+      </div>
+      <div class="callout pink">
+        <strong>If collision detected:</strong> Stop sending immediately. Broadcast a 48-bit <strong>jam signal</strong> so all nodes on the network know a collision occurred. Then apply exponential backoff and retry.
+      </div>
+
+      <h3>CSMA/CD State Diagram</h3>
+      <p>The full decision loop (refer slide time 26:38 for the diagram):</p>
+      <div class="vci-box">
+        <div class="vci-row"><span class="vci">Packet arrives</span><span class="arrow">→</span><span class="port">Sense Carrier</span></div>
+        <div class="vci-row"><span class="vci">Carrier free</span><span class="arrow">→</span><span class="port">Send packet</span></div>
+        <div class="vci-row"><span class="vci">No collision detected</span><span class="arrow">→</span><span class="port">Transmission complete ✓</span></div>
+        <div class="vci-row"><span class="vci">Collision detected</span><span class="arrow">→</span><span class="port">Jam channel → CalcBackoff() → wait(b) → attempts++</span></div>
+        <div class="vci-row"><span class="vci">attempts &lt; 16</span><span class="arrow">→</span><span class="port">Retry: sense carrier again</span></div>
+        <div class="vci-row"><span class="vci">attempts == 16</span><span class="arrow">→</span><span class="port">Discard packet → report error to host</span></div>
+      </div>
+      <p>Collision is detected by monitoring voltage on the wire — simultaneous transmissions produce an abnormal combined voltage that the adapter recognises as a collision.</p>
+    </div>
+
+    <!-- SECTION 8: COLLISION DETECTION MATH -->
+    <div class="section">
+      <div class="section-label">Collision Detection — The 2T Constraint</div>
+      <p>Consider nodes A and B at opposite ends of the wire. A starts transmitting at time 0. A's signal reaches B at time T. B, seeing the line idle, also starts transmitting — collision occurs at B. B's collision signal propagates back and reaches A at time <strong>2T</strong>. A must still be transmitting at time 2T to detect the collision — this sets the minimum frame size.</p>
+
+      <div class="callout green">
+        <strong>IEEE 802.3 specifies max 2T = 51.2 µs.</strong> This corresponds to a max host separation of ~2500 m (effectively ~1500 m accounting for cable propagation). At 10 Mbps, 1 bit takes 0.1 µs to send, so 512 bits = 64 bytes takes 51.2 µs → <strong>minimum Ethernet frame size = 64 bytes.</strong>
+      </div>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Frame Field</th><th>Size</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="proto-name">Preamble</td><td class="port-num">7 bytes (56 bits of 10101010)</td><td>Clock synchronization before data arrives</td></tr>
+          <tr><td class="proto-name">Destination Address</td><td class="port-num">6 bytes (48 bits)</td><td>Target MAC address</td></tr>
+          <tr><td class="proto-name">Source Address</td><td class="port-num">6 bytes (48 bits)</td><td>Sender MAC address</td></tr>
+          <tr><td class="proto-name">Type</td><td class="port-num">2 bytes (16 bits)</td><td>Demultiplexing key — identifies which higher-layer protocol to deliver to (e.g. IP = 0x0800)</td></tr>
+          <tr><td class="proto-name">Body (Payload)</td><td class="port-num">46–1500 bytes</td><td>Actual data. If &lt;46 bytes, <strong>padding</strong> is added to meet minimum frame size.</td></tr>
+          <tr><td class="proto-name">CRC</td><td class="port-num">4 bytes (32 bits)</td><td>Error detection checksum</td></tr>
+        </tbody>
+      </table>
+
+      <h4>MAC Address Structure</h4>
+      <p>Format: <code>XX:XX:XX:XX:XX:XX</code> — 6 bytes = 48 bits. Each manufacturer is assigned a unique address range; every NIC worldwide has a globally unique MAC (barring cloning). Special cases:</p>
+      <div class="tag-row">
+        <span class="tag tag-good">Unicast → first bit = 0 (specific destination)</span>
+        <span class="tag tag-bad">Broadcast → FF:FF:FF:FF:FF:FF (all 1s)</span>
+        <span class="tag" style="background:#7c6aff22; color:#a99dff; border:1px solid #7c6aff44;">Multicast → first bit = 1</span>
+      </div>
+    </div>
+
+    <!-- SECTION 9: EXPONENTIAL BACKOFF -->
+    <div class="section">
+      <div class="section-label">Exponential Backoff</div>
+      <p>After a collision, nodes don't retry immediately — that would just cause another collision. Instead they use <strong>binary exponential backoff</strong> to spread retransmission times apart.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr><th>Attempt</th><th>Choose K from</th><th>Delay</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="port-num">1st</td><td class="proto-name">{0, 1}</td><td>K × 51.2 µs</td></tr>
+          <tr><td class="port-num">2nd</td><td class="proto-name">{0, 1, 2, 3}</td><td>K × 51.2 µs</td></tr>
+          <tr><td class="port-num">nth</td><td class="proto-name">{0, 1, ..., 2ⁿ − 1}</td><td>K × 51.2 µs</td></tr>
+          <tr><td class="port-num">Max K</td><td class="proto-name">1023</td><td>cap on backoff growth</td></tr>
+          <tr><td class="port-num">16th attempt</td><td class="proto-name">—</td><td>Give up; report error to host</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout yellow">
+        <strong>Why random?</strong> If delay were fixed/deterministic, colliding nodes would retransmit simultaneously again — lockstep failure. Randomness breaks the symmetry.
+      </div>
+      <div class="callout">
+        <strong>Why not just use a small fixed K?</strong> Works fine for few hosts. With many nodes, many simultaneous collisions need a wide spread of K values to avoid piling up again. The exponentially growing range accommodates network load growth.
+      </div>
+    </div>
+
+    <!-- SECTION 10: SWITCHED ETHERNET -->
+    <div class="section">
+      <div class="section-label">Switched Ethernet</div>
+      <p>Replacing hubs with <strong>Layer 2 switches</strong> fundamentally improves Ethernet performance. Switches forward and filter frames based on MAC addresses, maintaining a forwarding table.</p>
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Hub (Repeater)</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Layer</span><span>L1 — physical only</span></div>
+            <div class="compare-row"><span class="label">Collision</span><span>Single shared domain — all ports collide</span></div>
+            <div class="compare-row"><span class="label">Broadcast</span><span>Single shared domain</span></div>
+            <div class="compare-row"><span class="label">Bandwidth</span><span>Divided by number of ports</span></div>
+            <div class="compare-row"><span class="label">Duplex</span><span>Half duplex only</span></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Switch (L2)</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Layer</span><span>L2 — reads MAC addresses</span></div>
+            <div class="compare-row"><span class="label">Collision</span><span>Each port = separate collision domain</span></div>
+            <div class="compare-row"><span class="label">Broadcast</span><span>Single shared broadcast domain</span></div>
+            <div class="compare-row"><span class="label">Bandwidth</span><span>Much higher aggregate — segments send simultaneously</span></div>
+            <div class="compare-row"><span class="label">Duplex</span><span>Full duplex — send and receive simultaneously</span></div>
+          </div>
+        </div>
+      </div>
+      <p>Switches only copy frames to the port where the destination MAC is located — unlike repeaters which blindly blast signal everywhere. This is the critical difference: <strong>selective forwarding vs dumb amplification.</strong></p>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h3>Aloha → CSMA/CD Evolution</h3>
+      <div class="callout">
+        <strong>Pure Aloha (1970):</strong> Send whenever ready. No channel check. 18% max utilization.<br>
+        <strong>Slotted Aloha:</strong> Send only at slot boundaries. 36% max utilization.<br>
+        <strong>CSMA (Carrier Sense):</strong> Check if medium is idle before sending. Major improvement — avoids collisions with ongoing transmissions.<br>
+        <strong>CSMA/CD:</strong> CSMA + detect collisions mid-transmission and abort. Send jam signal. Use exponential backoff. This is Ethernet.
+      </div>
+
+      <h3>Key Numbers to Remember</h3>
+      <div class="vci-box">
+        <div class="vci-row"><span class="port">Min frame size</span><span class="arrow">→</span><span class="vci">64 bytes (to guarantee collision detection within 2T)</span></div>
+        <div class="vci-row"><span class="port">Max payload</span><span class="arrow">→</span><span class="vci">1500 bytes</span></div>
+        <div class="vci-row"><span class="port">2T (max)</span><span class="arrow">→</span><span class="vci">51.2 µs at 10 Mbps</span></div>
+        <div class="vci-row"><span class="port">IFG (inter-frame gap)</span><span class="arrow">→</span><span class="vci">9.6 µs between back-to-back frames</span></div>
+        <div class="vci-row"><span class="port">Max retries</span><span class="arrow">→</span><span class="vci">16 attempts before packet is discarded</span></div>
+        <div class="vci-row"><span class="port">Jam signal</span><span class="arrow">→</span><span class="vci">48 bits — broadcasts collision to all nodes</span></div>
+        <div class="vci-row"><span class="port">MAC address</span><span class="arrow">→</span><span class="vci">48 bits (6 bytes), globally unique per NIC</span></div>
+        <div class="vci-row"><span class="port">Preamble</span><span class="arrow">→</span><span class="vci">7 bytes of 10101010 — clock sync before data</span></div>
+        <div class="vci-row"><span class="port">Aloha util</span><span class="arrow">→</span><span class="vci">Pure ≈ 18%, Slotted ≈ 36%</span></div>
+      </div>
+
+      <h3>Type Field = Demultiplexer</h3>
+      <p>The 16-bit Type field in an Ethernet frame tells the receiving host which network-layer protocol should process the payload (e.g. 0x0800 = IPv4, 0x0806 = ARP). It's how Layer 2 hands off to Layer 3 correctly — the demultiplexing key.</p>
+    </div>
+
+  </div>
+</body>
+</html>

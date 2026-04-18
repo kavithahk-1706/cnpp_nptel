@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 32 — Internet QoS II: Basic QoS Architecture</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec31.html" class="nav-lec">← prev</a>
+      <a href="lec33.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <div>
+      <span class="lec-tag">Lecture 32</span>
+      <span class="med-badge">MED PRIORITY</span>
+    </div>
+    <h1>Internet QoS – II: Basic QoS Architecture</h1>
+    <p>Prof. Sandip Chakraborty &nbsp;·&nbsp; IIT Kharagpur</p>
+    <a href="https://nptel.ac.in/courses/106105183" class="video-link" target="_blank">▶ Watch Lecture</a>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 1 — APPLICATION CLASSES
+  ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Application Classes Based on QoS</div>
+    <p>
+      Different applications have fundamentally different QoS requirements. Four broad application classes are recognised based on their tolerance for delay, jitter, loss, and bandwidth variation.
+    </p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Strict Requirements</div>
+        <div class="compare-body">
+          <div class="compare-row">
+            <span class="label">CBR</span>
+            <span><strong>Constant Bit Rate</strong> — data must arrive at a fixed, steady rate. Receiver processes at that same rate. Examples: VoIP, telephone applications. Any rate mismatch causes degradation.</span>
+          </div>
+          <div class="compare-row">
+            <span class="label">RT-VBR</span>
+            <span><strong>Real-Time Variable Bit Rate</strong> — bit rate may fluctuate, but a hard deadline on maximum delay must be met. Missing the deadline counts as a transfer failure. Examples: video conferencing, live streaming.</span>
+          </div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Relaxed Requirements</div>
+        <div class="compare-body">
+          <div class="compare-row">
+            <span class="label">NRT-VBR</span>
+            <span><strong>Non-Real-Time Variable Bit Rate</strong> — no strict real-time deadline; buffering is supported. A loose bound on delay and packet loss still applies. Examples: on-demand video streaming, IPTV.</span>
+          </div>
+          <div class="compare-row">
+            <span class="label">ABR / BE</span>
+            <span><strong>Available Bit Rate / Best Effort</strong> — utilises whatever bandwidth the network currently has; no strict QoS guarantees required. Examples: file transfer, general data downloads.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 2 — BASIC QoS ARCHITECTURE OVERVIEW
+  ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Basic QoS Architecture — Pipeline Overview</div>
+    <p>
+      The end-to-end QoS architecture is a pipeline of five sequential processing stages applied to every packet as it traverses the network. All five stages are implemented inside Layer 3 devices (routers). Each stage inspects packet properties and applies corrective measures to uphold QoS guarantees.
+    </p>
+
+    <div class="callout yellow">
+      <strong>Visual reference:</strong> The Cisco Basic QoS Architecture diagram (Refer Slide Time: 04:06) is the canonical illustration of this pipeline. Cross-reference it for the full end-to-end flow.
+    </div>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">Stage 1</span>
+        <span class="arrow">→</span>
+        <span><strong>Admission Control</strong> — decide whether to admit a new flow.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Stage 2</span>
+        <span class="arrow">→</span>
+        <span><strong>Classification &amp; Marking</strong> — identify the traffic class; tag the packet.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Stage 3</span>
+        <span class="arrow">→</span>
+        <span><strong>Policing &amp; Markdown</strong> — monitor flows; drop or re-mark violating packets.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Stage 4</span>
+        <span class="arrow">→</span>
+        <span><strong>Scheduling (Queuing &amp; Dropping)</strong> — prioritise packets into output queues.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Stage 5</span>
+        <span class="arrow">→</span>
+        <span><strong>Traffic Shaping</strong> — regulate output rate; smooth jitter.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Stage 6</span>
+        <span class="arrow">→</span>
+        <span><strong>Link-Specific Mechanisms</strong> — apply technology-specific QoS (e.g., Wi-Fi channel access prioritisation).</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 3 — STAGE-BY-STAGE DETAIL
+  ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Stage-by-Stage Detail</div>
+
+    <!-- Admission Control -->
+    <h3>Stage 1 — Admission Control</h3>
+    <p>
+      Admission control is the gatekeeper of the network. A new flow is admitted only if the network can satisfy the QoS requirements of <strong>all existing flows plus the new flow simultaneously</strong>. If the network cannot guarantee this, the new flow is blocked.
+    </p>
+    <div class="callout green">
+      <strong>Real-world analogy:</strong> The "all lines are busy, please dial after sometime" message on a cellular network is admission control in action — the provider has exhausted resources available to meet minimum call quality, so new calls are rejected rather than admitted and degraded.
+    </div>
+
+    <!-- Classification & Marking -->
+    <h3>Stage 2 — Classification &amp; Marking</h3>
+    <p>
+      Each incoming packet is examined and assigned to one of the defined QoS traffic classes. The assignment is then written into the packet header so all downstream nodes can act on it without re-inspecting payload content.
+    </p>
+
+    <h4>IP Type of Service (ToS) Field <a class="ts" href="#" title="Refer Slide Time: 18:13">18:13</a></h4>
+    <p>
+      Classification is encoded using the <strong>8-bit Type of Service (ToS) field</strong> in the IPv4 header. The field is structured as follows:
+    </p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Bits</th>
+          <th>Field</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="port-num">3 bits</td>
+          <td class="proto-name">IP Precedence</td>
+          <td>Identifies the broad traffic class (8 levels, 0–7)</td>
+        </tr>
+        <tr>
+          <td class="port-num">4 bits</td>
+          <td class="proto-name">Priority within class</td>
+          <td>Relative priority among packets of the same class (e.g., voice vs. video within the Critical class)</td>
+        </tr>
+        <tr>
+          <td class="port-num">1 bit</td>
+          <td class="proto-name">Reserved</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>IP Precedence Values</h4>
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Decimal</th>
+          <th>Binary</th>
+          <th>Name</th>
+          <th>Typical Use</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="port-num">0</td><td>000</td><td class="proto-name">Routine</td><td>Best-effort / background traffic</td></tr>
+        <tr><td class="port-num">1</td><td>001</td><td class="proto-name">Priority</td><td>Slightly elevated; general priority traffic</td></tr>
+        <tr><td class="port-num">2</td><td>010</td><td class="proto-name">Immediate</td><td>Near-real-time traffic</td></tr>
+        <tr><td class="port-num">3</td><td>011</td><td class="proto-name">Flash</td><td>High-priority traffic (e.g., voice signalling)</td></tr>
+        <tr><td class="port-num">4</td><td>100</td><td class="proto-name">Flash Override</td><td>Urgent override traffic</td></tr>
+        <tr><td class="port-num">5</td><td>101</td><td class="proto-name">Critical</td><td>Mission-critical traffic (e.g., VoIP media)</td></tr>
+        <tr><td class="port-num">6</td><td>110</td><td class="proto-name">Internetwork Control</td><td>Routing protocol traffic</td></tr>
+        <tr><td class="port-num">7</td><td>111</td><td class="proto-name">Network Control</td><td>Network management traffic</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Policing & Markdown -->
+    <h3>Stage 3 — Policing &amp; Markdown</h3>
+    <p>
+      Traffic policing monitors flows in transit and takes corrective action when packets are found to violate their QoS contract. The primary action is <strong>early packet drop</strong>: if an intermediate router can determine that a packet cannot be delivered within its deadline, it drops the packet immediately rather than forwarding it uselessly.
+    </p>
+
+    <div class="callout pink">
+      <strong>Example (Refer Slide Time: 08:56):</strong> End-to-end delay requirement = 10 ms. A packet arrives at an intermediate router having already accumulated 9 ms of delay. The router determines that delivering the packet to the destination within the remaining 1 ms is impossible. The packet is dropped immediately — forwarding it would consume bandwidth and processing resources at the destination with no benefit.
+    </div>
+
+    <h4>Service Level Agreements (SLAs)</h4>
+    <p>
+      A <strong>Service Level Agreement (SLA)</strong> is a formal contract between a customer and a network service provider that specifies the guaranteed QoS parameters for a given traffic type (e.g., maximum delay, available bandwidth, packet loss tolerance). SLAs are configured into edge/gateway routers and govern how packets are treated end-to-end.
+    </p>
+    <div class="callout">
+      <strong>Familiar example:</strong> Broadband subscription packages are SLAs. A "1 Mbps downlink / 256 Kbps uplink" plan is a service level agreement — the provider commits to those rates and the policing mechanisms enforce adherence.
+    </div>
+    <p>Traffic policing enforces the SLA by monitoring flows and marking violating packets for reduced priority or immediate drop.</p>
+
+    <!-- Scheduling -->
+    <h3>Stage 4 — Traffic Scheduling (Queuing &amp; Dropping)</h3>
+    <p>
+      Scheduling determines the order in which packets are transmitted on an outgoing link, based on the markings assigned during classification and the policies applied during policing. The scheduler maintains <strong>multiple queues</strong> at each interface, one per traffic class, and services them according to a scheduling policy.
+    </p>
+
+    <h4>Example: Priority Queuing <a class="ts" href="#" title="Refer Slide Time: 11:53">11:53</a></h4>
+    <p>
+      Packets are sorted into queues by class on arrival. The scheduler always services the highest-priority non-empty queue first, descending to lower-priority queues only when all higher queues are empty.
+    </p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">Red Queue — Priority 1 (Highest)</span>
+        <span class="arrow">→</span>
+        <span>Voice traffic (CBR). Served first unconditionally.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Blue Queue — Priority 2</span>
+        <span class="arrow">→</span>
+        <span>Video traffic (RT-VBR). Served only when red queue is empty.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Yellow Queue — Priority 3 (Lowest)</span>
+        <span class="arrow">→</span>
+        <span>Data / best-effort traffic. Served only when both red and blue queues are empty.</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      Priority queuing is one of several scheduling disciplines. Others include <strong>Custom Queuing</strong>, <strong>Weighted Fair Queuing (WFQ)</strong>, and <strong>Fair Weighted Fair Queuing</strong>. These are discussed in subsequent lectures.
+    </div>
+
+    <!-- Traffic Shaping -->
+    <h3>Stage 5 — Traffic Shaping</h3>
+    <p>
+      Traffic shaping regulates the outgoing traffic rate, decoupled from the incoming rate. A shaper absorbs bursty input traffic into a buffer and releases packets at a <strong>controlled, constant rate</strong>, thereby smoothing jitter on the outgoing link.
+    </p>
+
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Traffic Policing</div>
+        <div class="concept-desc">Drops packets that exceed the agreed rate or deadline. Acts reactively — violating packets are discarded immediately. Rate after policing can still be irregular, but peaks are clipped.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Traffic Shaping</div>
+        <div class="concept-desc">Buffers and re-times packets to produce a smooth, constant output rate. Does not drop by default — delays instead. Effective only when the mean input rate is at or below the target rate.</div>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Why both are needed:</strong> If the mean traffic rate already exceeds the SLA bound, shaping alone cannot enforce compliance — there is simply too much data. Policing must first drop the excess; then shaping can smooth the remainder into a well-regulated output stream.
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       SECTION 4 — SUMMARY
+  ═══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <h3>Key Takeaways</h3>
+
+    <p><strong>Four QoS application classes</strong> — CBR, RT-VBR, NRT-VBR, ABR/Best-Effort — differ in their strictness on delay, jitter, loss, and bandwidth. Understanding which class an application belongs to determines which QoS mechanisms must be applied.</p>
+
+    <p><strong>The Basic QoS Architecture</strong> is a six-stage pipeline implemented inside routers: Admission Control → Classification &amp; Marking → Policing &amp; Markdown → Scheduling → Traffic Shaping → Link-Specific Mechanisms. Every packet traverses this pipeline at each router hop.</p>
+
+    <p><strong>Admission Control</strong> is a hard gate: it blocks new flows if existing flows' QoS cannot be maintained. It does not degrade existing flows to accommodate new ones.</p>
+
+    <p><strong>The IP ToS field</strong> (8 bits) carries the classification in-band: 3 bits encode IP Precedence (traffic class, 8 levels) and 4 bits encode intra-class relative priority.</p>
+
+    <p><strong>SLAs</strong> are the contractual basis for policing. Traffic policing enforces SLAs by monitoring flows and dropping or re-marking packets that violate the agreed parameters.</p>
+
+    <p><strong>Policing vs. Shaping:</strong> Policing drops violating packets (hard enforcement); shaping delays and buffers them to produce a smooth output rate (soft regulation). Both are required together in real deployments.</p>
+
+    <p><strong>Coming next:</strong> Lectures 33 onward go deeper into traffic shaping algorithms, traffic policing mechanisms (token bucket, leaky bucket), and scheduling disciplines (WFQ, etc.).</p>
+  </div>
+
+</div>
+</body>
+</html>

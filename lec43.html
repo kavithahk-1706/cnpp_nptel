@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 43 — Software Defined Networking I</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec42.html" class="nav-lec">← prev</a>
+      <a href="lec44.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 43</span>
+    <span class="med-badge">medium priority</span>
+    <h1>Software Defined Networking — I <br>Basics</h1>
+    <p>Introduction to SDN: motivation, architecture, control/data plane separation, OpenFlow overview, and the shift from distributed to centralised control.</p>
+  </div>
+
+  <!-- 1. What is SDN -->
+  <div class="section">
+    <div class="section-label">Definition</div>
+    <h3>What is Software Defined Networking?</h3>
+    <div class="callout">
+      SDN is a network framework that <strong>separates a network's control functions from its data forwarding functions</strong>, centralises its intelligence, and abstracts the underlying hardware from applications and services.
+    </div>
+    <p>The two key separable components inside any router are:</p>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Control Plane</div>
+        <div class="concept-desc">The decision-making module. Runs routing algorithms, constructs and manages routing tables. Acts as the "brain" — an instructor that tells the data plane what to do.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Data Plane</div>
+        <div class="concept-desc">The execution module. Matches incoming packets against the Forwarding Information Base (FIB) and forwards them out the appropriate interface. Does only what it is told.</div>
+      </div>
+    </div>
+    <p>In a <strong>traditional router</strong> these two planes are implemented together in the same device. SDN pulls them apart.</p>
+  </div>
+
+  <!-- 2. Motivation -->
+  <div class="section">
+    <div class="section-label">Motivation</div>
+    <h3>Why Move Away from Traditional Distributed Control?</h3>
+    <p>Traditional distributed routing has several compounding problems at scale:</p>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-app">Scalability</span>
+      <div class="layer-content">
+        <div class="layer-name">Routing Protocol Limitations</div>
+        <div class="layer-detail">Distance Vector routing suffers from the <em>count-to-infinity</em> problem. Link State routing requires maintaining very large LSP databases across the entire network. Both are bounded to use within a single subnet/AS; BGP handles inter-AS but is policy-driven and complex to update.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-trans">Consistency</span>
+      <div class="layer-content">
+        <div class="layer-name">Distributed Inconsistency</div>
+        <div class="layer-detail">When a policy changes, every individual router's control plane must be updated. In a distributed architecture this takes time, and during that window routers can hold conflicting routing tables — particularly damaging in large networks with 1000+ routers.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-net">Vendor Lock-in</span>
+      <div class="layer-content">
+        <div class="layer-name">Proprietary Hardware + Software</div>
+        <div class="layer-detail">Vendors (Cisco, Arista, Juniper, Huawei) bundle hardware (data plane) and software (control plane) together. There is no standardisation across vendors. Cisco IOS alone is a ~5000 page manual. Mixing vendors in one network creates severe interoperability and management complexity.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-dl">Manageability</span>
+      <div class="layer-content">
+        <div class="layer-name">Incremental Deployment Drift</div>
+        <div class="layer-detail">Networks are built incrementally over time. Routers added later may come from different vendors or different models. Reconciling configuration across these heterogeneous devices is extremely difficult.</div>
+      </div>
+    </div>
+
+    <div class="callout yellow">
+      <strong>Core SDN idea:</strong> extract all control planes from individual routers and consolidate them into a single, centralised <strong>SDN Controller</strong>. The routers become "dumb" forwarding hardware — vendors deliver only the data plane (TCAM + forwarding engine), and network managers write the control logic themselves.
+    </div>
+  </div>
+
+  <!-- 3. Advantages of separation -->
+  <div class="section">
+    <div class="section-label">Advantages</div>
+    <h3>Benefits of Separating Control from Data</h3>
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Vendor Independence</div>
+        <div class="concept-desc">Features are no longer limited to what a vendor ships. Any protocol or policy can be written as a software application on the controller.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Community Development</div>
+        <div class="concept-desc">Open-source community can design and deploy new network protocols without waiting for vendor hardware cycles or proprietary firmware updates.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Longer Product Lifetime</div>
+        <div class="concept-desc">The same physical hardware can be repurposed for new use-cases by updating only the controller software. No need to replace switches for new features.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. How SDN Works -->
+  <div class="section">
+    <div class="section-label">Architecture</div>
+    <h3>How SDN Works — Devices</h3>
+    <p>An SDN network contains two categories of devices:</p>
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">SDN Controller</div>
+        <div class="interface-desc">A general-purpose computer running controller software. Acts as the brain of the entire network. Holds all routing logic and policies. Dynamically installs forwarding rules into switches. Example open-source controllers: <strong>Ryu, POX, NOX, OpenDaylight</strong>.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">SDN Switches (Dumb Switches)</div>
+        <div class="interface-desc">Contain only TCAM hardware + forwarding engine + a microcontroller for communication. No built-in routing logic. Must be instructed by the controller before they know how to handle any packet. Example: <em>Zodiac FX</em> (4-port SDN switch).</div>
+      </div>
+    </div>
+    <div class="callout green">
+      The controller runs on a standard computer — no specialised hardware required, because the route processor is just a general-purpose CPU. The entire brain of a large network can literally run on a laptop during development.
+    </div>
+  </div>
+
+  <!-- 5. Packet Flow walkthrough -->
+  <div class="section">
+    <div class="section-label">Packet Flow</div>
+    <h3>Step-by-Step: Forwarding in an SDN Environment</h3>
+    <p>Scenario: host <strong>h1</strong> wants to send a packet to host <strong>h3</strong> via switch <strong>s1</strong>.</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="vci">Step 1</span>
+        <span class="arrow">→</span>
+        <span>h1 sends packet to switch s1.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 2</span>
+        <span class="arrow">→</span>
+        <span><strong>Table MISS</strong> — s1 has no rule for this packet. It <strong>buffers</strong> the packet and sends a <strong>Packet-IN</strong> event to the controller c0, including the packet metadata.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 3</span>
+        <span class="arrow">→</span>
+        <span>Controller c0 runs its routing logic (software program) and decides what to do with the packet.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 4</span>
+        <span class="arrow">→</span>
+        <span>Controller sends a <strong>Packet-OUT</strong> event back to s1 along with a <strong>flow rule</strong> to install in its TCAM.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 5</span>
+        <span class="arrow">→</span>
+        <span>Rule is installed in the TCAM of s1. The buffered packet is forwarded to h3.</span>
+      </div>
+      <div class="vci-row">
+        <span class="vci">Step 6</span>
+        <span class="arrow">→</span>
+        <span><strong>TCAM Hit</strong> for all subsequent packets from h1→h3. No controller involvement — switch forwards directly using the cached rule.</span>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      Controller communication is only needed on the <strong>first packet of a new flow</strong> (a "table miss"). All subsequent packets of the same flow hit the TCAM cache and bypass the controller entirely — keeping per-packet latency low.
+    </div>
+  </div>
+
+  <!-- 6. Flow Rules -->
+  <div class="section">
+    <div class="section-label">Flow Rules</div>
+    <h3>Match-Action Pairs — The Core SDN Primitive</h3>
+    <p>Every rule installed in a switch TCAM is a simple <strong>match → action</strong> pair. The match field can target any header field; the action says what to do with a matching packet.</p>
+
+    <div class="vci-box">
+      <div class="vci-row">
+        <span class="port">Match</span>
+        <span class="arrow">:</span>
+        <span class="vci">DIP = 10.2.0.0/16</span>
+        <span class="arrow">→</span>
+        <span><strong>Action:</strong> Forward to interface eth0</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Match</span>
+        <span class="arrow">:</span>
+        <span class="vci">DIP = 172.16.20.0/24</span>
+        <span class="arrow">→</span>
+        <span><strong>Action:</strong> Drop (firewall rule)</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Match</span>
+        <span class="arrow">:</span>
+        <span class="vci">Transport Port = 80</span>
+        <span class="arrow">→</span>
+        <span><strong>Action:</strong> Drop (block HTTP)</span>
+      </div>
+      <div class="vci-row">
+        <span class="port">Match</span>
+        <span class="arrow">:</span>
+        <span class="vci">IP = 172.16.20.0/24, Port = 80</span>
+        <span class="arrow">→</span>
+        <span><strong>Action:</strong> Drop (combined rule)</span>
+      </div>
+    </div>
+
+    <p>Because match fields can span all layers (L2 MAC, L3 IP, L4 transport port, VLAN tags), the same rule mechanism can implement a wide variety of network functions:</p>
+
+    <div class="tag-row">
+      <span class="tag tag-good">Packet Forwarding</span>
+      <span class="tag tag-good">Firewall</span>
+      <span class="tag tag-good">NAT</span>
+      <span class="tag tag-good">Forwarding Gateway</span>
+      <span class="tag tag-good">Packet Gateway</span>
+      <span class="tag tag-good">VLAN Management</span>
+      <span class="tag tag-good">Transport-Layer Filtering</span>
+      <span class="tag tag-good">Load Balancing</span>
+    </div>
+  </div>
+
+  <!-- 7. SDN Architecture Layers -->
+  <div class="section">
+    <div class="section-label">Architecture</div>
+    <h3>The Three-Layer SDN Architecture</h3>
+
+    <div class="stack">
+      <div class="stack-layer layer-app">
+        <span class="layer-name">Application Layer</span>
+        <span class="layer-desc">Firewall / NAT / Custom Forwarding Apps</span>
+      </div>
+      <div class="stack-layer layer-trans">
+        <span class="layer-name">↕ Northbound API</span>
+        <span class="layer-desc">App ↔ Controller interface</span>
+      </div>
+      <div class="stack-layer layer-net">
+        <span class="layer-name">Control Layer</span>
+        <span class="layer-desc">Network Controller (Ryu / NOX / OpenDaylight)</span>
+      </div>
+      <div class="stack-layer layer-dl">
+        <span class="layer-name">↕ Southbound API (OpenFlow)</span>
+        <span class="layer-desc">Controller ↔ Switch interface</span>
+      </div>
+      <div class="stack-layer layer-phys">
+        <span class="layer-name">Infrastructure Layer</span>
+        <span class="layer-desc">Programmable (Dumb) Switches — TCAM only</span>
+      </div>
+    </div>
+
+    <p>The <strong>Southbound API</strong> (OpenFlow) standardises how the controller communicates with switches — this is covered in detail in Lecture 44. The <strong>Northbound API</strong> is how network applications talk to the controller to install or query policies.</p>
+  </div>
+
+  <!-- 8. Traditional vs SDN -->
+  <div class="section">
+    <div class="section-label">Comparison</div>
+    <h3>Traditional Networking vs SDN</h3>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Traditional Network</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Control</span>Distributed — each router has its own control plane</div>
+          <div class="compare-row"><span class="label">Logic</span>Routing logic embedded in proprietary vendor hardware</div>
+          <div class="compare-row"><span class="label">Update</span>Policy changes require updating every individual router</div>
+          <div class="compare-row"><span class="label">Conflict</span>App-level conflicts hard to resolve across distributed nodes</div>
+          <div class="compare-row"><span class="label">Vendor</span>Hardware + software from same vendor, proprietary, locked</div>
+          <div class="compare-row"><span class="label">Scale</span>DV and LS protocols limited by count-to-infinity and LSP size</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">SDN Architecture</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Control</span>Centralised — single controller manages all switches</div>
+          <div class="compare-row"><span class="label">Logic</span>Control logic runs as software on a general-purpose computer</div>
+          <div class="compare-row"><span class="label">Update</span>Policy changes applied once at the controller, propagated automatically</div>
+          <div class="compare-row"><span class="label">Conflict</span>Compiler/interpreter in controller can detect conflicting rules before deployment</div>
+          <div class="compare-row"><span class="label">Vendor</span>Vendor delivers only dumb hardware; operator writes control software</div>
+          <div class="compare-row"><span class="label">Scale</span>No distributed routing overhead; centrally managed FIBs</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. OpenFlow Mention -->
+  <div class="section">
+    <div class="section-label">Protocol</div>
+    <h3>OpenFlow — Brief Overview</h3>
+    <p><strong>OpenFlow</strong> is the open-source standard protocol that defines the message format for controller-to-switch communication. It specifies how rules are expressed, installed, and removed from a switch's TCAM. Because of OpenFlow, switches from any vendor can be controlled by any standards-compliant controller.</p>
+    <div class="callout">
+      In SDN terminology, the device is not called a "router" — it is called an <strong>SDN switch</strong> or <strong>OpenFlow switch</strong>, because routing logic no longer lives inside it.
+    </div>
+    <p>OpenFlow protocol internals and rule structure are covered in depth in <strong>Lecture 44</strong>.</p>
+  </div>
+
+  <!-- Summary -->
+  <div class="section">
+    <div class="section-label">Summary</div>
+    <h3>Concept Summary</h3>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">SDN in One Line</div>
+        <div class="concept-desc">Pull the routing brain out of every switch and put it in one place. Switches become dumb hardware; a single controller software makes all decisions.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Flow = Match + Action</div>
+        <div class="concept-desc">All network behaviour — forwarding, blocking, NAT, filtering — reduces to match-action rules installed in switch TCAMs by the controller. This is the universal primitive of SDN.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">First Packet vs Subsequent</div>
+        <div class="concept-desc">First packet of a new flow triggers Packet-IN → controller decision → Packet-OUT → rule installation. Every subsequent packet in the same flow is handled locally via TCAM hit with no controller involvement.</div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <strong>Key insight:</strong> SDN doesn't change <em>what</em> a network does — it changes <em>where</em> the decision-making lives. By centralising it, you gain programmability, consistency, vendor independence, and the ability to enforce global policy from a single point.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

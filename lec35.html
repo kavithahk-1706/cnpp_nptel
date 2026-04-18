@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lecture 35 — IntServ & DiffServ Architectures</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec34.html" class="nav-lec">← prev</a>
+        <a href="lec36.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <div>
+        <span class="lec-tag">Lecture 35</span>
+        <span class="med-badge">MEDIUM PRIORITY</span>
+      </div>
+      <h1>Internet QoS — V: IntServ &amp; DiffServ Architectures</h1>
+      <p>Prof. Sandip Chakraborty &nbsp;·&nbsp; IIT Kharagpur &nbsp;·&nbsp; CNPP Week 7</p>
+      <a class="video-link" href="https://nptel.ac.in/courses/106105183" target="_blank">▶ Watch Lecture</a>
+    </div>
+
+    <!-- ── OVERVIEW ── -->
+    <div class="section">
+      <div class="section-label">Overview</div>
+      <p>This lecture concludes the Internet QoS series by examining the two architectural approaches for providing QoS over the internet: <strong>Integrated Service (IntServ)</strong>, which offers hard guarantees on a per-flow basis, and <strong>Differentiated Service (DiffServ)</strong>, which offers class-based best-effort guarantees. The lecture covers the Internet Service Architecture (ISA), the Resource Reservation Protocol (RSVP), the DiffServ domain model, bandwidth brokers, traffic conditioning, and per-hop behaviours (PHBs).</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">IntServ (Guaranteed)</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Model</span>Per-flow resource reservation</div>
+            <div class="compare-row"><span class="label">Protocol</span>RSVP</div>
+            <div class="compare-row"><span class="label">Guarantee</span>Hard — 100% SLA enforcement</div>
+            <div class="compare-row"><span class="label">Scalability</span>Poor — per-flow state at every router</div>
+            <div class="compare-row"><span class="label">Classifier</span>User-specific (filterspec)</div>
+            <div class="compare-row"><span class="label">Scope</span>Enterprise / controlled networks</div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">DiffServ (Best-Effort)</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Model</span>Class-based traffic management</div>
+            <div class="compare-row"><span class="label">Protocol</span>DSCP field in IP header</div>
+            <div class="compare-row"><span class="label">Guarantee</span>Soft — best effort per class</div>
+            <div class="compare-row"><span class="label">Scalability</span>Good — domain-level coordination only</div>
+            <div class="compare-row"><span class="label">Classifier</span>Fixed network-wide classes</div>
+            <div class="compare-row"><span class="label">Scope</span>Internet scale</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INTSERV ── -->
+    <div class="section">
+      <div class="section-label">Part 1 — Integrated Service Architecture (IntServ / ISA)</div>
+
+      <h3>Internet Service Architecture (ISA)</h3>
+      <p>The Internet Service Architecture (ISA) is the framework for delivering IntServ QoS. It operates on four principal mechanisms within each router.</p>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Admission Control</div>
+          <div class="concept-desc">Determines whether the network can support a new flow's QoS requirements before allowing it entry. New flows are admitted only if resources can be reserved end-to-end via RSVP. If not, the flow is rejected — analogous to a telephone exchange playing "all lines are busy."</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">QoS-Aware Routing</div>
+          <div class="concept-desc">Routing decisions factor in the current load on each router. Overloaded routers are avoided in favour of alternate paths. This is an extension of standard routing algorithms to incorporate QoS parameters.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Queuing</div>
+          <div class="concept-desc">Different queuing strategies (priority queuing, WFQ, custom queuing) are applied per outgoing interface to honour diverse flow requirements. Queues are interface-specific — each outgoing interface maintains its own set of queues.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Discard Policy</div>
+          <div class="concept-desc">Congestion avoidance mechanisms such as Random Early Detection (RED) are applied to proactively drop packets before queues fill, maintaining the required QoS levels.</div>
+        </div>
+      </div>
+
+      <h3>ISA Inside a Router</h3>
+      <p>The ISA implementation in a router integrates routing and QoS into a unified forwarding pipeline.</p>
+      <div class="callout">
+        <strong>Control Plane:</strong> Routing protocols populate the Routing Database. The Reservation Protocol (RSVP) and Admission Control Protocol interact to populate the Traffic Control Database. The Management Agent oversees traffic shaping and policing policies.
+      </div>
+      <div class="callout green">
+        <strong>Data Plane (Forwarding):</strong> An incoming packet first passes through the <strong>Classifier and Route Selection</strong> module, which assigns the packet to a traffic class and selects an outgoing interface. The <strong>Packet Scheduler</strong> then places the packet into the appropriate queue — either a QoS queue or the best-effort queue — and transmits it according to the active scheduling policy.
+      </div>
+
+      <h3>Resource Reservation Protocol (RSVP) <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=642">10:42</a></h3>
+      <p>RSVP is a <strong>network control protocol</strong>, not a routing protocol, though it operates in conjunction with IP routing. It enables a data receiver to request end-to-end QoS for a flow across all routers along the path.</p>
+
+      <div class="callout yellow">
+        <strong>Key distinction:</strong> RSVP is receiver-initiated. The destination host sends the reservation request, which propagates upstream toward the source, reserving resources at each hop along the way.
+      </div>
+
+      <p>An <strong>RSVP daemon</strong> runs at the source host, the destination host, and every intermediate router in the end-to-end path. These daemons coordinate with each other to reserve bandwidth and buffer space at each node. This inter-daemon coordination is precisely what makes IntServ difficult to scale to the open internet.</p>
+
+      <h4>RSVP Reservation Procedure</h4>
+      <p>When a reservation request arrives at a router, it is evaluated by two decision modules in parallel.</p>
+
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Admission Control Module</div>
+          <div class="interface-desc">Checks whether the router has sufficient free resources (bandwidth, buffer) to satisfy the requested QoS. If resources are available, the flow is admitted; otherwise it is dropped.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Policy Control Module</div>
+          <div class="interface-desc">Checks whether the requesting user has administrative permission (i.e., a valid Service Level Agreement with the ISP) to receive elevated QoS. Without an SLA, packets are treated as best-effort regardless of the request.</div>
+        </div>
+      </div>
+
+      <p>If both checks succeed, the reservation parameters are written into the packet classifier and link layer interface. If either check fails, RSVP returns an error notification to the requesting application process.</p>
+
+      <h4>RSVP Reservation Model — Flow Descriptor</h4>
+      <p>Each RSVP reservation request consists of a <strong>flow descriptor</strong> comprising two components.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Configures</th>
+            <th>Purpose</th>
+            <th>Contains</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">flowspec</td>
+            <td>Packet Scheduler</td>
+            <td>Specifies desired QoS level</td>
+            <td>Rspec (desired QoS) + Tspec (data flow description)</td>
+          </tr>
+          <tr>
+            <td class="proto-name">filterspec</td>
+            <td>Packet Classifier</td>
+            <td>Defines which packets belong to the flow</td>
+            <td>Classifier rules + queuing policy selection</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>flowspec Structure</h4>
+      <p>The flowspec is a C struct containing the following numeric parameters, all of type <code>ULONG</code>.</p>
+      <div class="callout">
+        <strong>Rspec fields</strong> (scheduler parameters): <code>TokenRate</code>, <code>TokenBucketSize</code><br>
+        <strong>Tspec fields</strong> (flow profile): <code>PeakBandwidth</code>, <code>Latency</code>, <code>DelayVariation</code>, <code>ServiceType</code>, <code>MaxSduSize</code>, <code>MinimumPolicedSize</code>
+      </div>
+      <p>These numeric values together encode the SLA, and are used to configure intermediate router queues end-to-end.</p>
+
+      <h4>Problems with RSVP / IntServ <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=1275">21:15</a></h4>
+      <div class="callout pink">
+        <strong>Scalability failure:</strong> The RSVP daemon must maintain <strong>per-flow state</strong> at every intermediate router. On the global internet — millions of routers, billions of short-lived flows — this per-flow state and per-flow processing overhead is computationally infeasible. This fundamental limitation motivates the DiffServ architecture.
+      </div>
+    </div>
+
+    <!-- ── DIFFSERV ── -->
+    <div class="section">
+      <div class="section-label">Part 2 — Differentiated Service Architecture (DiffServ)</div>
+
+      <h3>DiffServ Overview <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=1306">21:46</a></h3>
+      <p>DiffServ is a <strong>coarse-grained, class-based</strong> mechanism for traffic management. Instead of per-flow reservations, it classifies traffic into a small, fixed set of network-wide service classes and applies different forwarding treatments per class.</p>
+
+      <div class="callout green">
+        <strong>Key design shift:</strong> In IntServ, classifier behaviour is user-specific and configured via filterspec. In DiffServ, traffic classes are standardised and fixed; classification is performed by reading a 6-bit <strong>DSCP (Differentiated Services Code Point)</strong> field embedded in the 8-bit DS field of the IP header. No filterspec is needed.
+      </div>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">Per-Hop Behaviour (PHB)</div>
+          <div class="concept-desc">DiffServ-aware routers implement per-hop behaviours — standardised forwarding rules associated with each DSCP class. Each router independently applies the PHB for whatever class a packet belongs to, requiring no global coordination.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">DiffServ (DS) Domain</div>
+          <div class="concept-desc">A group of routers that implement a common, administratively defined set of DiffServ policies. The internet is partitioned into DS domains (e.g., local ISPs, tier-1 ISPs), each enforcing DiffServ within its boundary.</div>
+        </div>
+      </div>
+
+      <h3>DiffServ Architecture — Multi-Domain Model <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=1461">24:21</a></h3>
+      <p>A packet traversing the internet crosses multiple DS domains (e.g., DS-1 local ISP → DS-2 tier-1 ISP → DS-3 local ISP). At each domain boundary, the edge router evaluates how much of the end-to-end SLA has already been consumed and treats the packet accordingly.</p>
+      <div class="callout yellow">
+        <strong>Example:</strong> SLA specifies end-to-end delay ≤ 30 ms. A packet arrives at DS-2 having already incurred 20 ms of delay. DS-2 now knows it must deliver the packet within 10 ms and raises its priority relative to packets with looser remaining budgets.
+      </div>
+
+      <h3>Bandwidth Broker <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=1614">26:54</a></h3>
+      <p>Inter-domain QoS coordination in DiffServ is handled not by per-router RSVP daemons but by <strong>Bandwidth Brokers</strong> — one per DS domain.</p>
+      <div class="callout">
+        A Bandwidth Broker (RFC 2638) is an agent with knowledge of an organisation's QoS priorities and policies. It allocates QoS resources within its domain and communicates with adjacent Bandwidth Brokers to negotiate end-to-end resource allocation across domain boundaries via purely <strong>bilateral agreements</strong>.
+      </div>
+      <p>This is the key scalability advantage of DiffServ: instead of all-router coordination (IntServ), only domain-level brokers coordinate, massively reducing signalling overhead.</p>
+
+      <h3>SLA and TCA <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=1723">28:43</a></h3>
+      <div class="two-col">
+        <div class="interface-card">
+          <div class="interface-title">Service Level Agreement (SLA)</div>
+          <div class="interface-desc">A set of parameters defining the service offered to a traffic stream by a DS domain. Specifies the QoS the customer will receive (e.g., delay bounds, loss bounds) for a given traffic class.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Traffic Conditioning Agreement (TCA)</div>
+          <div class="interface-desc">A set of parameters specifying classifier rules and a traffic profile. Defines which of the fixed service classes a customer's packets will be assigned to, and what that customer must pay. Higher class = higher cost = higher priority.</div>
+        </div>
+      </div>
+
+      <h3>Traffic Classification and Conditioning <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=1794">29:54</a></h3>
+      <p>At each DS domain boundary, <strong>boundary nodes (edge routers)</strong> perform traffic classification and conditioning. They map incoming packets to forwarding classes and verify that the traffic conforms to the customer's SLA.</p>
+
+      <p>Traffic conditioning is implemented via four functional components applied to classified packet streams.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Function</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Meter</td>
+            <td>Measures the traffic stream against its traffic profile; estimates how much QoS has already been consumed and how much remains to be satisfied in subsequent domains.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Marker</td>
+            <td>Dynamically assigns or re-assigns the DSCP priority value based on the meter's output. Packets behind on their delay budget are promoted; packets with slack are demoted.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Shaper</td>
+            <td>Delays packets that exceed the traffic profile to smooth the traffic rate and bring it into compliance with the TCA.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Dropper</td>
+            <td>Discards excess packets that cannot be shaped and that exceed the agreed profile. Excess packets may alternatively be re-marked as low priority rather than dropped outright.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout pink">
+        <strong>Why DiffServ is "best effort" not "guaranteed":</strong> Excess packets are marked as low priority or dropped. The network makes no absolute commitment that every packet will meet its SLA target. If a domain is overloaded, QoS degrades gracefully rather than being enforced unconditionally.
+      </div>
+
+      <h3>Per-Hop Behaviours (PHBs) <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=1973">32:53</a></h3>
+      <p>DiffServ defines four standardised PHBs, each associated with a queuing mechanism.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>PHB</th>
+            <th>Full Name</th>
+            <th>Purpose</th>
+            <th>Typical Queue</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">Default</td>
+            <td class="proto-name">Default PHB</td>
+            <td>Best-effort service for all traffic not classified otherwise</td>
+            <td><span class="transport tcp-badge">Priority Queue</span></td>
+          </tr>
+          <tr>
+            <td class="port-num">EF</td>
+            <td class="proto-name">Expedited Forwarding</td>
+            <td>Low-loss, low-latency forwarding for real-time traffic (e.g., VoIP)</td>
+            <td><span class="transport tcp-badge">Priority Queue</span></td>
+          </tr>
+          <tr>
+            <td class="port-num">AF</td>
+            <td class="proto-name">Assured Forwarding</td>
+            <td>Assured delivery under prescribed bandwidth conditions</td>
+            <td><span class="transport udp-badge">Custom Queue</span></td>
+          </tr>
+          <tr>
+            <td class="port-num">CS</td>
+            <td class="proto-name">Class Selector</td>
+            <td>Backward-compatible with legacy IP Precedence field; ensures fairness</td>
+            <td><span class="transport both-badge">WFQ</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Working Steps of a DS Domain <a class="ts" href="https://www.youtube.com/watch?v=placeholder&t=2033">33:53</a></h3>
+      <div class="callout">
+        <ol style="padding-left: 1.4em; line-height: 2;">
+          <li>The source negotiates an SLA with its ISP.</li>
+          <li>The source sends a request to its first-hop router.</li>
+          <li>The first-hop router forwards the request to the local Bandwidth Broker.</li>
+          <li>The Bandwidth Broker accepts or rejects the request based on available resources and the SLA.</li>
+          <li>On acceptance, the source or first-hop router marks the DSCP field and begins transmitting packets.</li>
+          <li>At each DS domain boundary, the edge router verifies SLA compliance and performs policing; excess packets are discarded or re-marked as low priority.</li>
+          <li>Core (interior) routers simply read the DSCP field and apply the corresponding PHB — no admission logic required.</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- ── SUMMARY ── -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h3>IntServ vs DiffServ — The Core Trade-off</h3>
+      <p>IntServ provides mathematically hard QoS guarantees by reserving resources per-flow on every router along the path. This is theoretically ideal but operationally unscalable for the global internet due to the per-flow state that every router must maintain. DiffServ sacrifices the granularity of per-flow guarantees in exchange for scalability: routers only need to know a packet's class (encoded in the 6-bit DSCP field), not the identity of its flow. Domain-level Bandwidth Brokers handle inter-ISP coordination rather than per-router RSVP daemons.</p>
+
+      <h3>RSVP in Three Sentences</h3>
+      <p>RSVP is a receiver-initiated, network control protocol that runs as a daemon on every host and router in the end-to-end path. A reservation request carries a <strong>flow descriptor</strong> (flowspec + filterspec); the flowspec configures the packet scheduler (via Rspec and Tspec parameters) while the filterspec configures the packet classifier. Admission is contingent on both resource availability (admission control) and user authorisation (policy control); failure in either results in an error notification to the application.</p>
+
+      <h3>DiffServ in Three Sentences</h3>
+      <p>DiffServ classifies all traffic into a small, standardised set of classes identified by the DSCP field in the IP header; routers apply per-hop behaviours to each class without maintaining any per-flow state. Domain boundaries host traffic conditioners (meter → marker → shaper/dropper) that enforce SLA compliance and re-mark packet priorities based on remaining delay budget. Bandwidth Brokers coordinate QoS allocation between adjacent DS domains via bilateral agreements, replacing the global router-level coordination of IntServ.</p>
+
+      <div class="callout yellow">
+        <strong>Exam-relevant terms:</strong> ISA, RSVP, flowspec, filterspec, Rspec, Tspec, flow descriptor, admission control, policy control, DSCP, DS field, PHB, EF PHB, AF PHB, Class Selector PHB, DiffServ domain, Bandwidth Broker, SLA, TCA, traffic conditioning, meter/marker/shaper/dropper, per-hop behaviour.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

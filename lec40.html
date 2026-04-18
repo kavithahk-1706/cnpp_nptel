@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 40 — Border Gateway Protocol (BGP)</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec39.html" class="nav-lec">← prev</a>
+        <a href="lec41.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <!-- Header -->
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 40</span>
+      <span class="high-badge">HIGH PRIORITY</span>
+      <h1>IP Routing IV — Border Gateway Protocol (BGP)</h1>
+      <p>Exterior gateway routing across autonomous systems: BGP architecture, packet types, path selection, aggregation, and confederations.</p>
+    </div>
+
+    <!-- Section 1: Context -->
+    <div class="section">
+      <div class="section-label">Context &amp; Motivation</div>
+      <p>The internet is a <strong>network of networks</strong> — a collection of <strong>Autonomous Systems (ASes)</strong>, each under a single administrative authority (e.g., IIT Kharagpur's campus network). Packets must be routed both within and across these ASes. Two protocol categories handle this:</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Interior Gateway Protocols (IGP)</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Scope</span> Within a single AS</div>
+            <div class="compare-row"><span class="label">Examples</span> OSPF, RIP</div>
+            <div class="compare-row"><span class="label">Algorithm</span> Link-state / Distance-vector</div>
+            <div class="compare-row"><span class="label">Admin</span> Single organisation</div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Exterior Gateway Protocols (EGP)</div>
+          <div class="compare-body">
+            <div class="compare-row"><span class="label">Scope</span> Across autonomous systems</div>
+            <div class="compare-row"><span class="label">Example</span> BGP (Border Gateway Protocol)</div>
+            <div class="compare-row"><span class="label">Algorithm</span> Path vector</div>
+            <div class="compare-row"><span class="label">Admin</span> Multiple organisations</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: BGP Overview -->
+    <div class="section">
+      <div class="section-label">BGP Overview</div>
+      <p><strong>Border Gateway Protocol (BGP)</strong> is the standard exterior gateway protocol of the internet. Key facts:</p>
+
+      <div class="callout green">
+        BGP version 4 (BGP-4) is the current standard, defined in <strong>RFC 4271</strong>. All BGP-enabled devices (BGP routers / BGP speakers) must conform to this standard.
+      </div>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Original Goal</div>
+          <div class="proto-names">Loop-free inter-AS routing</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Evolved to support</div>
+          <div class="proto-names">Route aggregation &amp; summarisation (CIDR)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Transport</div>
+          <div class="proto-names">Runs over TCP (reliable delivery)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Standard</div>
+          <div class="proto-names">IETF RFC 4271 — BGP Version 4</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: BGP Components -->
+    <div class="section">
+      <div class="section-label">BGP Components &amp; Terminology</div>
+
+      <h3>Core Terms</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Term</th>
+            <th>Definition</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">BGP Speaker</td>
+            <td>A router configured to run BGP. The active participant in BGP routing.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">BGP Neighbor / Peer</td>
+            <td>A pair of BGP speakers that exchange routing information with each other.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">IBGP</td>
+            <td>Internal BGP — session between two BGP peers <em>within the same AS</em>. Peers need not be directly connected; IGP routes are used to reach them.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">EBGP</td>
+            <td>External BGP — session between two BGP peers <em>in different ASes</em>. Peers typically share a directly connected network.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">BGP Session</td>
+            <td>A TCP connection between two BGP neighbors used to exchange routing info. Session liveness monitored via Keepalive messages.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">AS Number (ASN)</td>
+            <td>A <strong>16-bit</strong> number uniquely identifying an autonomous system. Up to 2<sup>16</sup> ASes possible.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">AS Path</td>
+            <td>An ordered list of AS numbers describing the route to a destination. Used for path selection and loop prevention.</td>
+          </tr>
+          <tr>
+            <td class="proto-name">NLRI</td>
+            <td>Network Layer Reachability Information — advertises reachable networks as <code>&lt;length, prefix&gt;</code> tuples (e.g., the CIDR route 202.124.116.0/14).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>AS Path example:</strong> To reach network N1 in AS1 from AS4, a possible path is <code>AS4 → AS3 → AS2 → AS1</code>. This list of AS numbers is the AS path stored and advertised by BGP.
+      </div>
+    </div>
+
+    <!-- Section 4: Traffic Types & AS Types -->
+    <div class="section">
+      <div class="section-label">Traffic Types &amp; AS Classifications</div>
+
+      <h3>BGP Traffic Types</h3>
+      <div class="domain-grid">
+        <div class="domain-card">
+          <div class="domain-title">Local Traffic</div>
+          <div class="domain-desc">Traffic whose source or destination resides within the AS. Either originates or terminates inside the AS.</div>
+        </div>
+        <div class="domain-card">
+          <div class="domain-title">Transit Traffic</div>
+          <div class="domain-desc">Traffic that neither originates nor terminates in the AS — it merely passes through. BGP aims to minimise transit traffic as it constitutes an unnecessary load.</div>
+        </div>
+      </div>
+
+      <h3>AS Types</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>AS Type</th>
+            <th>Connections</th>
+            <th>Traffic Carried</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Stub AS</td>
+            <td>Single connection to one other AS</td>
+            <td>Local only</td>
+            <td>No transit traffic possible — no alternate path out</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Multihomed AS</td>
+            <td>Two or more ASes</td>
+            <td>Local only (by policy)</td>
+            <td>Configured to block transit traffic; does not forward packets through itself</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Transit AS</td>
+            <td>Two or more ASes</td>
+            <td>Local <em>and</em> transit</td>
+            <td>Carries traffic for other ASes; can impose policy restrictions on what is forwarded</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout yellow">
+        Stub is a special case. In practice, most ASes are either multihomed or transit. An AS can also be simultaneously multihomed or transit depending on configuration.
+      </div>
+    </div>
+
+    <!-- Section 5: Routing Policy & NLRI -->
+    <div class="section">
+      <div class="section-label">Routing Policy, NLRI &amp; Routes</div>
+
+      <p>Routing policies are <strong>not defined in the BGP protocol itself</strong> — they are configured on individual BGP devices and shape how the device advertises and receives routes. Examples:</p>
+
+      <div class="tag-row">
+        <span class="tag tag-good">Multihomed AS refusing to act as transit</span>
+        <span class="tag tag-good">Restricting transit to selected partner ASes</span>
+        <span class="tag tag-good">Steering specific traffic classes (e.g. video) through preferred paths</span>
+      </div>
+
+      <p>This is achieved by <strong>tailoring route advertisements</strong> sent to EBGP peers — advertising only those prefixes that comply with the policy.</p>
+
+      <h3>Routes and Paths</h3>
+      <p>A <strong>route</strong> associates a destination (expressed in NLRI format as <code>&lt;length, prefix&gt;</code>) with a collection of <strong>path attributes</strong> describing how to reach it. Route information is distributed via <strong>UPDATE messages</strong>.</p>
+    </div>
+
+    <!-- Section 6: EBGP-IBGP Communication -->
+    <div class="section">
+      <div class="section-label">EBGP–IBGP Communication</div>
+
+      <p>BGP does <strong>not replace IGP</strong> within an AS — it co-operates with IGP (OSPF/RIP) to forward packets correctly. The relationship works as follows:</p>
+
+      <div class="two-col">
+        <div class="concept-card">
+          <div class="concept-title">EBGP Peers</div>
+          <div class="concept-desc">Typically share a directly connected network. Routing info exchange between EBGP peers is straightforward — no intermediate hops needed to reach the peer.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">IBGP Peers</div>
+          <div class="concept-desc">Can be anywhere within the AS — do not need to be directly connected. BGP relies on the IGP (OSPF/RIP) to locate and route to IBGP peers. Packet forwarding between IBGP peers uses IGP-learned routes.</div>
+        </div>
+      </div>
+
+      <h3>Full Mesh IBGP Requirement</h3>
+      <p>All BGP speakers within an AS must maintain a <strong>fully meshed set of IBGP sessions</strong> — every speaker is connected to every other speaker. Because of this full mesh assumption, when a speaker receives a route update from an IBGP peer, it <strong>does not re-advertise</strong> that update to other IBGP peers (they are assumed to have received it already). Instead, it propagates the update to <strong>EBGP peers</strong> in other ASes.</p>
+
+      <div class="callout pink">
+        <strong>Scalability problem:</strong> Full mesh IBGP becomes unmanageable as the number of speakers grows. This is addressed by <strong>BGP Confederations</strong> (see below).
+      </div>
+    </div>
+
+    <!-- Section 7: BGP Packet Types -->
+    <div class="section">
+      <div class="section-label">BGP Packet Types</div>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Packet Type</th>
+            <th>Purpose</th>
+            <th>Direction</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name port-num">OPEN</td>
+            <td>Establishes a BGP session between two peer nodes. Sent by each router after a TCP session is set up.</td>
+            <td>Bidirectional</td>
+          </tr>
+          <tr>
+            <td class="proto-name port-num">UPDATE</td>
+            <td>Transfers routing information between BGP peers. Used to <em>advertise feasible routes</em> or <em>withdraw infeasible routes</em>. Also carries reachability information (NLRI) and path attributes.</td>
+            <td>Bidirectional</td>
+          </tr>
+          <tr>
+            <td class="proto-name port-num">NOTIFICATION</td>
+            <td>Sent when an error condition is detected. After sending, the BGP transport connection is closed, resources deallocated, affected routing table entries marked invalid, and other peers notified.</td>
+            <td>Unidirectional</td>
+          </tr>
+          <tr>
+            <td class="proto-name port-num">KEEPALIVE</td>
+            <td>Periodically exchanged to confirm peers are reachable. BGP does not use TCP's own keepalive mechanism. If no message is received within the <em>hold timer</em> period, an error is assumed.</td>
+            <td>Bidirectional</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Section 8: BGP Functions -->
+    <div class="section">
+      <div class="section-label">BGP Functions</div>
+
+      <div class="three-col">
+        <div class="interface-card">
+          <div class="interface-title">Opening &amp; Confirming Connection</div>
+          <div class="interface-desc">After a TCP session is established, each router sends an OPEN message. The BGP session is considered active once confirmed.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Maintaining Connection</div>
+          <div class="interface-desc">BGP messages are exchanged periodically. If none are received within the hold timer window, the router assumes an error, sends a NOTIFICATION, closes the connection, and releases resources.</div>
+        </div>
+        <div class="interface-card">
+          <div class="interface-title">Sending Reachability Info</div>
+          <div class="interface-desc">UPDATE messages advertise feasible routes or withdraw infeasible ones. When an error closes a peer connection, all routes learned from that peer are marked invalid and peers are notified.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 9: BGP Selection & Path Attributes -->
+    <div class="section">
+      <div class="section-label">BGP Selection &amp; Path Attributes</div>
+
+      <p>BGP is a <strong>path vector protocol</strong> — the path to a destination is expressed as a sequence of AS numbers. The best path is selected by comparing the number of AS hops across feasible routes, refined by <strong>path attributes</strong>. There is no single universal metric; each AS has its own evaluation criteria.</p>
+
+      <div class="callout">
+        When a BGP router advertises a route to a peer, it may <strong>add or modify path attributes</strong> before forwarding, allowing policy-based path shaping.
+      </div>
+
+      <h3>Four Path Attribute Categories</h3>
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Must Recognise?</th>
+            <th>Must Send in Every Update?</th>
+            <th>Behaviour if Unrecognised</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Well-Known Mandatory</td>
+            <td>Yes — all implementations</td>
+            <td>Yes</td>
+            <td>N/A — must be recognised</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Well-Known Discretionary</td>
+            <td>Yes — all implementations</td>
+            <td>No</td>
+            <td>N/A — must be recognised</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Optional Transitive</td>
+            <td>No</td>
+            <td>No</td>
+            <td>Accepted and forwarded to peers as-is without analysis</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Optional Non-Transitive</td>
+            <td>No</td>
+            <td>No</td>
+            <td>Can be silently ignored and <em>not</em> forwarded to peers</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Loop Prevention</h3>
+      <p>Before inserting a received route into its database, a BGP router checks the AS path. If the router's own AS number already appears in the path, the route is discarded — the packet would loop back through the current AS.</p>
+
+      <h3>Policy Routing</h3>
+      <p>If a path contains an AS that violates the current AS's policy, the UPDATE message is discarded and that path is not considered.</p>
+    </div>
+
+    <!-- Section 10: BGP Aggregation -->
+    <div class="section">
+      <div class="section-label">BGP Aggregation</div>
+
+      <p>Introduced in <strong>BGP Version 4</strong> alongside CIDR support. Aggregation allows BGP peers to <strong>consolidate multiple contiguous routing entries into a single advertisement</strong>. For example, routes 192.16.0.0/24 through 192.16.124.0/24 can be aggregated and advertised as a single prefix 192.16.0.0/16.</p>
+
+      <div class="tag-row">
+        <span class="tag tag-good">Reduces routing table size</span>
+        <span class="tag tag-good">Reduces UPDATE message frequency</span>
+        <span class="tag tag-good">Significantly improves scalability in large internetworks</span>
+      </div>
+    </div>
+
+    <!-- Section 11: BGP Confederations -->
+    <div class="section">
+      <div class="section-label">BGP Confederations</div>
+
+      <p>The full mesh IBGP requirement becomes a <strong>scalability bottleneck</strong> in ASes with a large number of BGP speakers — the number of sessions grows as O(n²). BGP Confederations address this:</p>
+
+      <div class="callout green">
+        A <strong>BGP confederation</strong> partitions a single large AS into a group of smaller <em>sub-ASes</em>. To peers outside the confederation, the entire group appears as one AS. Within the confederation, full mesh is only required within each sub-AS, not across all speakers globally.
+      </div>
+
+      <div class="tag-row">
+        <span class="tag tag-good">Eliminates full mesh requirement across entire AS</span>
+        <span class="tag tag-good">Reduces management complexity</span>
+        <span class="tag tag-good">Maintains correct inter-AS routing behaviour externally</span>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <div class="callout">
+        <strong>BGP in one sentence:</strong> BGP is the exterior gateway protocol that connects autonomous systems across the internet using a path vector mechanism, TCP-based sessions, policy-driven route advertisements, and path attributes to determine the best inter-AS paths.
+      </div>
+
+      <h3>Key Takeaways</h3>
+
+      <div class="layer-row">
+        <span class="layer-badge impl-app">BGP vs IGP</span>
+        <div class="layer-content">
+          <div class="layer-name">Complementary, Not Competing</div>
+          <div class="layer-detail">BGP does not replace OSPF or RIP. IGP handles intra-AS forwarding; BGP uses IGP-learned routes to locate IBGP peers and coordinates with them for inter-AS reachability.</div>
+        </div>
+      </div>
+
+      <div class="layer-row">
+        <span class="layer-badge impl-trans">EBGP vs IBGP</span>
+        <div class="layer-content">
+          <div class="layer-name">Two Flavours of BGP</div>
+          <div class="layer-detail">EBGP connects routers across different ASes (typically directly connected). IBGP connects routers within the same AS (can be anywhere; uses IGP to reach peers). IBGP requires full mesh sessions.</div>
+        </div>
+      </div>
+
+      <div class="layer-row">
+        <span class="layer-badge impl-net">Path Vector</span>
+        <div class="layer-content">
+          <div class="layer-name">Routing by AS Sequences</div>
+          <div class="layer-detail">Unlike link-state (OSPF) or distance-vector (RIP), BGP advertises the full AS path to each destination. This enables loop detection (own AS in path → discard) and policy control (unwanted AS in path → discard).</div>
+        </div>
+      </div>
+
+      <div class="layer-row">
+        <span class="layer-badge impl-dl">Scalability</span>
+        <div class="layer-content">
+          <div class="layer-name">Aggregation + Confederations</div>
+          <div class="layer-detail">Route aggregation (CIDR-based, BGP-4) reduces table size. Confederations reduce full-mesh IBGP overhead by sub-dividing large ASes into manageable sub-ASes.</div>
+        </div>
+      </div>
+
+      <div class="layer-row">
+        <span class="layer-badge impl-phys">Session Management</span>
+        <div class="layer-content">
+          <div class="layer-name">Four Packet Types</div>
+          <div class="layer-detail">OPEN (establish session) → KEEPALIVE (maintain session, check reachability) → UPDATE (exchange routing info, advertise/withdraw routes) → NOTIFICATION (signal error, close connection, release resources).</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

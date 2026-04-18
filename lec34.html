@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 34 — Internet QoS IV: Traffic Scheduling</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec33.html" class="nav-lec">← prev</a>
+        <a href="lec35.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 34</span>
+      <span class="med-badge">Medium Priority</span>
+      <h1>Internet QoS – IV: Traffic Scheduling</h1>
+      <p>Queuing disciplines for multi-class scheduling at intermediate routers, and congestion avoidance via Random Early Detection (RED).</p>
+    </div>
+
+    <!-- SECTION 1: QoS Architecture Recap -->
+    <div class="section">
+      <div class="section-label">QoS Architecture — Quick Recap</div>
+      <p>The full QoS pipeline at a router involves four stages in sequence:</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Stage 1</div>
+          <div class="proto-names">Admission Control</div>
+          <p style="font-size:13px; color: var(--muted); margin-top:6px;">Decides whether to let a new flow enter the network based on available capacity and SLA commitments.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Stage 2</div>
+          <div class="proto-names">Classification & Marking</div>
+          <p style="font-size:13px; color: var(--muted); margin-top:6px;">Tags each packet with a QoS class (e.g. red = VoIP, green = VoD, blue = FTP) based on the SLA of the originating flow.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Stage 3</div>
+          <div class="proto-names">Traffic Policing & Shaping</div>
+          <p style="font-size:13px; color: var(--muted); margin-top:6px;">Enforces rate limits and smooths out bursts at intermediate routers using token bucket / leaky bucket mechanisms.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Stage 4</div>
+          <div class="proto-names">Traffic Scheduling ← today</div>
+          <p style="font-size:13px; color: var(--muted); margin-top:6px;">Determines the order in which marked packets are forwarded out of the router. This is the mechanism that actually enforces differentiated QoS.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Traffic Classes -->
+    <div class="section">
+      <div class="section-label">Multi-Class Scheduling</div>
+      <p>Packets are classified into traffic classes, each requiring different treatment. The scheduler must serve these classes from separate queues rather than a single shared buffer.</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Class</th>
+            <th>Priority</th>
+            <th>Traffic Type</th>
+            <th>Examples</th>
+            <th>Key Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Class 1</td>
+            <td><span class="transport tcp-badge">High</span></td>
+            <td>Delay-sensitive</td>
+            <td>VoIP</td>
+            <td class="port-num">Minimum queuing delay</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Class 2</td>
+            <td><span class="transport udp-badge">Medium</span></td>
+            <td>Bandwidth-hungry</td>
+            <td>VoD, IPTV</td>
+            <td class="port-num">Guaranteed bandwidth</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Class 3</td>
+            <td><span class="transport both-badge">Low</span></td>
+            <td>Best-effort</td>
+            <td>HTTP, FTP</td>
+            <td class="port-num">No specific guarantee</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <strong>SLA (Service Level Agreement):</strong> A contract between the user and the network provider specifying the QoS to be guaranteed for a particular flow or application. Think of it as the fine print behind every data plan — "I pay for VoIP priority, treat my packets accordingly."
+      </div>
+    </div>
+
+    <!-- SECTION 3: Priority Queuing -->
+    <div class="section">
+      <div class="section-label">Scheduling Strategy 1 — Priority Queuing</div>
+      <p>Incoming traffic is classified and placed into separate priority queues (High / Medium / Low). The scheduler always drains the highest non-empty queue before serving lower ones.</p>
+
+      <h3>Non-Preemptive Priority Scheduling</h3>
+      <p>The scheduler cycles through queues in round-robin order. Once it starts serving a queue, it drains it completely before checking a lower-priority queue. It does not interrupt ongoing service even if higher-priority packets arrive mid-cycle.</p>
+
+      <div class="callout green">
+        <strong>Order of service:</strong> Drain all of High → drain all of Medium → drain all of Low → repeat from High.
+      </div>
+
+      <h3>Preemptive Priority Scheduling</h3>
+      <p>The scheduler can be interrupted mid-service. If it is draining the Medium queue and a packet arrives in the High queue, it immediately abandons Medium and jumps to High. It returns to Medium only once High is empty again.</p>
+
+      <div class="callout pink">
+        <strong>Starvation risk:</strong> Under heavy high-priority load, the Low queue may never get served — packets there wait indefinitely. The advantage is near-zero delay and jitter for high-priority traffic, which makes it ideal for VoIP and network control packets.
+      </div>
+
+      <div class="callout yellow">
+        <strong>Airport analogy:</strong> Think of the High queue as the VIP gate — passengers are waved through immediately, even pulling agents away from other counters if needed. At off-peak hours it doesn't matter since everyone gets served anyway. The problem (and the value of scheduling) only shows up under heavy load.
+      </div>
+
+      <p><strong>Network control packets</strong> — OSPF hellos, BGP keepalives, routing updates — are canonical examples of traffic that must go into the high-priority queue. Delaying them can destabilise the entire network.</p>
+    </div>
+
+    <!-- SECTION 4: Custom Queuing -->
+    <div class="section">
+      <div class="section-label">Scheduling Strategy 2 — Custom Queuing</div>
+      <p>Different queues are assigned different sizes (proportional to the bandwidth share desired). The scheduler applies simple round-robin across all queues regardless of their fill level.</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Queue 1</div>
+          <div class="proto-names">Size: 0.3 (30%)</div>
+          <p style="font-size:13px; color:var(--muted); margin-top:6px;">30% of link capacity guaranteed to this class during peak load.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Queue 2</div>
+          <div class="proto-names">Size: 0.2 (20%)</div>
+          <p style="font-size:13px; color:var(--muted); margin-top:6px;">20% of link capacity guaranteed.</p>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Queue 3</div>
+          <div class="proto-names">Size: 0.5 (50%)</div>
+          <p style="font-size:13px; color:var(--muted); margin-top:6px;">50% of link capacity guaranteed. Larger queue = more space = more packets served per round.</p>
+        </div>
+      </div>
+
+      <div class="callout green">
+        <strong>Why this works:</strong> During peak load all queues are perpetually full. Since the scheduler visits each queue once per round and each queue can hold a proportional number of packets, larger queues contribute more traffic per round. Queue size directly maps to bandwidth share — this is what "guaranteed bandwidth" means here.
+      </div>
+
+      <p>Custom queuing works like a <strong>transmission window</strong> — each class is allocated a slice of the output capacity. Contrast with priority queuing where one class can starve others; here every class is guaranteed its share regardless of what others are doing.</p>
+
+      <p><strong>Use case:</strong> Video streaming (VoD, IPTV) — applications that need a consistent guaranteed chunk of bandwidth rather than the lowest possible latency.</p>
+    </div>
+
+    <!-- SECTION 5: Weighted Fair Queuing -->
+    <div class="section">
+      <div class="section-label">Scheduling Strategy 3 — Weighted Fair Queuing (WFQ)</div>
+      <p>WFQ accounts for variable packet sizes and aims to allocate equal (or weighted) bandwidth to each class regardless of how large individual packets are.</p>
+
+      <h3>Fairness Mechanism</h3>
+      <p>Instead of sending one packet per queue per round (which would bias towards classes with smaller packets), WFQ normalises by data volume. Consider three flows with packet sizes 1, 4, and 2 units:</p>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Flow (colour)</th>
+            <th>Packet Size</th>
+            <th>Packets Sent</th>
+            <th>Total Data Served</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="proto-name">Blue</td>
+            <td class="port-num">1 unit</td>
+            <td>4 packets</td>
+            <td class="port-num">4 units ✓</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Red</td>
+            <td class="port-num">4 units</td>
+            <td>1 packet</td>
+            <td class="port-num">4 units ✓</td>
+          </tr>
+          <tr>
+            <td class="proto-name">Green</td>
+            <td class="port-num">2 units</td>
+            <td>2 packets</td>
+            <td class="port-num">4 units ✓</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        All three flows receive equal total bandwidth across a scheduling round — this is fairness. Queues can also be assigned <strong>weights</strong> so that bandwidth is allocated proportionally (e.g. 2:1:1) rather than equally.
+      </div>
+    </div>
+
+    <!-- SECTION 6: Multilevel Queue Scheduling -->
+    <div class="section">
+      <div class="section-label">Combining Strategies — Multilevel Queue Scheduling</div>
+      <p>In practice, a single scheduling strategy is rarely sufficient. A two-level approach is commonly used:</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Level 1 — Priority Queuing</div>
+          <div class="compare-body">
+            <div class="compare-row"><div>Classifier separates traffic into priority classes (P1, P2, P3). High-priority classes are always served before lower ones. Ensures delay-sensitive traffic (VoIP) is not blocked by bulk traffic.</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Level 2 — WFQ within each class</div>
+          <div class="compare-body">
+            <div class="compare-row"><div>Within each priority class, packets of different sizes are served using WFQ. Ensures that within P1 (say), a flow with large packets doesn't starve flows with small packets. Enforces fairness at the intra-class level.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout green">
+        The two levels are orthogonal: Level 1 handles <strong>inter-class priority</strong>, Level 2 handles <strong>intra-class fairness</strong>. Together they give you both.
+      </div>
+    </div>
+
+    <!-- SECTION 7: Congestion Avoidance -->
+    <div class="section">
+      <div class="section-label">Congestion Avoidance vs Congestion Control</div>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">TCP Congestion Control</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">When</div><div>Reacts <em>after</em> congestion is detected (packet loss / 3 dup ACKs)</div></div>
+            <div class="compare-row"><div class="label">Mechanism</div><div>AIMD — reduce sending rate on detection, increase slowly when clear</div></div>
+            <div class="compare-row"><div class="label">Layer</div><div>Transport layer (end-to-end)</div></div>
+            <div class="compare-row"><div class="label">Scope</div><div>Per-flow, all TCP flows equally</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Network Congestion Avoidance (RED)</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">When</div><div>Acts <em>before</em> congestion occurs by detecting early warning signs</div></div>
+            <div class="compare-row"><div class="label">Mechanism</div><div>Monitor average queue length; randomly drop packets from lower-priority flows as queue grows</div></div>
+            <div class="compare-row"><div class="label">Layer</div><div>Network layer (at routers)</div></div>
+            <div class="compare-row"><div class="label">Scope</div><div>Class-based — protects high-priority flows, lets congestion fall on low-priority ones</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout yellow">
+        <strong>Both are necessary.</strong> Congestion avoidance shields high-priority (inelastic) traffic from entering congestion. But if low-priority (elastic/TCP) traffic does hit congestion, TCP's own congestion control must kick in to recover. Neither replaces the other.
+      </div>
+    </div>
+
+    <!-- SECTION 8: Elastic vs Inelastic -->
+    <div class="section">
+      <div class="section-label">Elastic vs Inelastic Traffic</div>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Elastic Traffic</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Protocol</div><div>TCP-based</div></div>
+            <div class="compare-row"><div class="label">Behaviour</div><div>Adapts sending rate via AIMD — expands when clear, shrinks on congestion</div></div>
+            <div class="compare-row"><div class="label">Effect</div><div>Introduces variable delay and jitter as rate fluctuates</div></div>
+            <div class="compare-row"><div class="label">Examples</div><div>FTP, HTTP file downloads</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Inelastic Traffic</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">Protocol</div><div>UDP-based</div></div>
+            <div class="compare-row"><div class="label">Behaviour</div><div>Constant bit rate (CBR) — does not adapt to congestion signals</div></div>
+            <div class="compare-row"><div class="label">Effect</div><div>Low jitter, predictable; but suffers packet loss if elastic traffic consumes available bandwidth</div></div>
+            <div class="compare-row"><div class="label">Examples</div><div>VoIP, RTP streams, live video conferencing</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout pink">
+        <strong>The dominance problem:</strong> Elastic traffic will aggressively increase its rate until the network is congested. Inelastic traffic has no mechanism to back off. Result: elastic flows crowd out inelastic flows, causing packet drops in the traffic that can least tolerate them. Congestion avoidance exists specifically to prevent this.
+      </div>
+
+      <div class="callout">
+        <strong>Note:</strong> YouTube (pre-buffered video) is <em>not</em> real-time. It uses adaptive bitrate streaming and TCP — it is elastic. YouTube Live, VoIP, and video calls are real-time inelastic traffic.
+      </div>
+    </div>
+
+    <!-- SECTION 9: RED Algorithm -->
+    <div class="section">
+      <div class="section-label">Random Early Detection (RED)</div>
+      <p>RED is the standard congestion avoidance algorithm used at routers. It detects impending congestion early by watching the average queue length, and preemptively drops packets before the queue fills completely.</p>
+
+      <h3>Core Idea</h3>
+      <p>The only way to prevent congestion is to drop packets from flows that are sending too aggressively before the queue overflows. RED does this probabilistically and early — hence "Random" and "Early Detection."</p>
+
+      <h3>Decision Logic (per incoming packet)</h3>
+
+      <table class="port-table">
+        <thead>
+          <tr>
+            <th>Average Queue Length (k)</th>
+            <th>Zone</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="port-num">k &lt; MinThresh</td>
+            <td><span class="transport tcp-badge">Safe</span></td>
+            <td>Enqueue the packet — no risk of congestion</td>
+          </tr>
+          <tr>
+            <td class="port-num">MinThresh ≤ k ≤ MaxThresh</td>
+            <td><span class="transport udp-badge">Warning</span></td>
+            <td>Calculate drop probability d(k). Drop randomly if d(k) is high; else enqueue</td>
+          </tr>
+          <tr>
+            <td class="port-num">k &gt; MaxThresh</td>
+            <td><span class="transport both-badge">Danger</span></td>
+            <td>Drop the packet — congestion imminent, must discard to prevent overflow</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Drop Probability Formula</h3>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="vci" style="font-size:15px;">d(k) = Max_p × ( k − MinThresh ) / ( MaxThresh − MinThresh )</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">k</span>
+          <span class="arrow">→</span>
+          <span style="color:var(--text); font-size:13px;">current average queue length</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">Max_p</span>
+          <span class="arrow">→</span>
+          <span style="color:var(--text); font-size:13px;">maximum allowed drop probability (configured parameter)</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">MinThresh</span>
+          <span class="arrow">→</span>
+          <span style="color:var(--text); font-size:13px;">lower queue length threshold — RED begins operating above this</span>
+        </div>
+        <div class="vci-row">
+          <span class="port">MaxThresh</span>
+          <span class="arrow">→</span>
+          <span style="color:var(--text); font-size:13px;">upper threshold — above this, drop probability = 1 (drop everything)</span>
+        </div>
+      </div>
+
+      <h3>Drop Probability Graph</h3>
+      <p>The graph of d(k) vs average queue size (k) looks like this:</p>
+
+      <div class="vci-box">
+        <div class="vci-row"><span class="port">k &lt; MinThresh</span><span class="arrow">→</span><span class="vci">d(k) = 0 (safe zone, flat line at 0)</span></div>
+        <div class="vci-row"><span class="port">MinThresh ≤ k ≤ MaxThresh</span><span class="arrow">→</span><span class="vci">d(k) rises linearly from 0 to Max_p</span></div>
+        <div class="vci-row"><span class="port">k &gt; MaxThresh</span><span class="arrow">→</span><span class="vci">d(k) = 1 (drop all — virtual drop tail)</span></div>
+      </div>
+
+      <div class="callout green">
+        The linear ramp between thresholds is key: RED does not suddenly drop everything when congestion appears. It applies increasing pressure gradually, giving elastic flows (TCP) the chance to detect isolated drops and reduce their rate on their own — without waiting for a full queue overflow.
+      </div>
+
+      <h3>Why Random Drops?</h3>
+      <p>TCP's congestion control triggers on <strong>3 duplicate ACKs</strong> or a timeout. A single isolated random drop produces only 1 duplicate ACK — not enough to trigger fast retransmit. So early in the warning zone, RED's random drops are "soft signals" to individual flows. As the queue fills further and more packets are dropped, TCP eventually detects congestion and reduces its rate. This is intentional — it gives flows a chance to self-correct before drastic action is taken.</p>
+
+      <div class="callout">
+        <strong>Summary of RED's two-word name:</strong> <em>Early</em> = acts before the queue overflows by monitoring average queue length as a proxy for congestion. <em>Random</em> = drops are probabilistic (not deterministic), distributing the burden across flows and avoiding synchronisation of TCP backoffs.
+      </div>
+    </div>
+
+    <!-- SECTION 10: Summary -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h3>Scheduling Strategies</h3>
+      <div class="three-col">
+        <div class="concept-card">
+          <div class="concept-title">Priority Queuing</div>
+          <div class="concept-desc">Multiple queues ordered by priority. Higher queues are drained first. Non-preemptive = full drain then move; preemptive = jump back immediately on new high-priority arrival. Risk: low-priority starvation.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Custom Queuing</div>
+          <div class="concept-desc">Queues of different sizes, round-robin scheduling. Larger queue = higher bandwidth share. Guarantees minimum bandwidth per class. No starvation. Suitable for video/bandwidth-hungry applications.</div>
+        </div>
+        <div class="concept-card">
+          <div class="concept-title">Weighted Fair Queuing</div>
+          <div class="concept-desc">Normalises service by data volume rather than packet count. Ensures equal (or weighted) bandwidth across flows with variable packet sizes. Can be combined with priority queuing at a second scheduling level.</div>
+        </div>
+      </div>
+
+      <h3>Congestion Avoidance (RED)</h3>
+      <p>RED monitors average queue length at the router and probabilistically drops packets once the queue enters a warning zone. Drop probability increases linearly from 0 at MinThresh to Max_p at MaxThresh, then to 1 above MaxThresh. It is class-aware: higher-priority flows can be given a lower drop probability, pushing congestion onto lower-priority (elastic) flows that are better equipped to handle it via TCP's own congestion control.</p>
+
+      <div class="callout yellow">
+        <strong>The big picture:</strong> Scheduling controls <em>which</em> packets go out first (order). RED controls <em>whether</em> a packet enters the queue at all (admission under load). Together with TCP congestion control, the three form the complete QoS response mechanism at the network layer.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

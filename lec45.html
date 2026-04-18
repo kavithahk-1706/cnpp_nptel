@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 45 — SDN III: Demo (Wireshark + Mininet)</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+  <div class="container">
+
+    <nav>
+      <a href="index.html" class="back-link">← all lectures</a>
+      <div class="nav-right">
+        <a href="lec44.html" class="nav-lec">← prev</a>
+        <a href="lec46.html" class="nav-lec">next →</a>
+      </div>
+    </nav>
+
+    <div class="lec-header">
+      <span class="lec-tag">Lecture 45</span>
+      <span class="skip-badge">low priority</span>
+      <h1>Software Defined Networking — III (Demo)</h1>
+      <p>A fully practical lecture. No new theory is introduced — this is a live walkthrough of Wireshark packet capture and Mininet + Ryu SDN emulation on a single Linux machine. If you skipped the SDN theory lectures (43–44), this will not make much sense. If you didn't, treat this as a visual supplement, not exam material.</p>
+      <div class="callout yellow">
+        <strong>⚠ Demo Lecture:</strong> This lecture is almost entirely a screen recording of live tool usage. The notes below describe what is being demonstrated. Watching the video is strongly recommended to actually understand the workflow — text alone doesn't capture it well. Timestamps are provided for each key section.
+      </div>
+    </div>
+
+    <!-- PART 1: WIRESHARK -->
+    <div class="section">
+      <div class="section-label">Part 1 — Wireshark: Packet Capture & Analysis</div>
+
+      <p><a class="ts" href="#" title="Jump to 01:15">01:15</a> <strong>What is Wireshark?</strong> A traffic analysis tool that captures packets on a live network interface and lets you inspect them layer by layer. The interface lists all available network adapters — the demo machine is connected to a campus Wi-Fi (WLAN0 interface).</p>
+
+      <h3>Capturing Packets</h3>
+      <p>Capture is started on the WLAN0 interface. <a class="ts" href="#" title="Jump to 02:48">02:48</a> After opening Gmail, capture is stopped and the packet list is inspected. Most packets show protocol <strong>GVSP</strong> (GIGE Vision Streaming Protocol) — an artefact of the TeamViewer recording session running in the background. TCP packets are also present.</p>
+
+      <h3>Inspecting a TCP Packet <a class="ts" href="#" title="Jump to 04:11">04:11</a></h3>
+      <p>Selecting one packet opens a three-pane view: packet list (top), packet details by layer (middle), raw bytes (bottom). This middle pane is the important one — it shows the full TCP/IP stack top-down, which is exactly how the course has been structured.</p>
+
+      <div class="callout green">
+        Wireshark's detail pane is a live demonstration of the encapsulation model. Each expandable section corresponds to one layer of the protocol stack.
+      </div>
+
+      <div class="section">
+        <div class="section-label">Layer-by-layer breakdown of the captured packet</div>
+        <div class="layer-row">
+          <span class="layer-badge layer-app">L7 App</span>
+          <div class="layer-content">
+            <div class="layer-name">TLS / SSL (Application Data)</div>
+            <div class="layer-detail">Google sends data encrypted using TLS 1.2 over TCP. The payload is split into three TLS record blocks. The actual HTTP content is inside the encrypted data — Wireshark can see the TLS envelope but not the plaintext. The HTTP CONNECT header is visible because it is proxy tunnel metadata, not encrypted content.</div>
+            <div class="layer-protocols">Protocol: HTTP over TLS 1.2 | Encrypted application data</div>
+          </div>
+        </div>
+        <div class="layer-row">
+          <span class="layer-badge layer-trans">L4 TCP</span>
+          <div class="layer-content">
+            <div class="layer-name">Transmission Control Protocol</div>
+            <div class="layer-detail">Visible fields: source port (8080 — campus HTTP proxy), destination port (54768), stream index, TCP segment length, sequence number, next sequence number, acknowledgement number, header length, flag bits, receiver advertised window size (rwnd), calculated window size, checksum, urgent pointer, TCP options.</div>
+            <div class="layer-unit">Source port 8080 = IIT KGP campus HTTP proxy</div>
+          </div>
+        </div>
+        <div class="layer-row">
+          <span class="layer-badge layer-net">L3 IP</span>
+          <div class="layer-content">
+            <div class="layer-name">Internet Protocol v4</div>
+            <div class="layer-detail">Visible fields: version (4), header length, differentiated services field, total length, identification, flag bits (Don't Fragment set), fragment offset, TTL (Time to Live), protocol field (TCP = 6), header checksum, source IP, destination IP.</div>
+            <div class="layer-unit">Src: 172.16.2.30 (campus HTTP proxy) → Dst: 10.146.58.130 (this machine's WLAN IP)</div>
+          </div>
+        </div>
+        <div class="layer-row">
+          <span class="layer-badge layer-dl">L2 Data Link</span>
+          <div class="layer-content">
+            <div class="layer-name">Ethernet / LLC + MAC</div>
+            <div class="layer-detail">The data link layer has two sublayers visible in Wireshark. The Frame section (from MAC) contains: packet arrival time, epoch time, frame number, frame length, capture length, frame markers. The Ethernet section (from LLC) contains: source and destination MAC addresses, and the EtherType field identifying the upper-layer protocol (IPv4).</div>
+            <div class="layer-unit">Encapsulation type: Ethernet (1)</div>
+          </div>
+        </div>
+      </div>
+
+      <h3>TCP Three-Way Handshake Observable in Capture <a class="ts" href="#" title="Jump to 09:24">09:24</a></h3>
+      <p>Filtering for SYN packets reveals the handshake sequence: a SYN with sequence number 0 is sent, followed by a SYN-ACK from the server, followed by the client's ACK. The SYN flag bit is visibly set in the TCP header flags field of the first packet.</p>
+    </div>
+
+    <!-- PART 2: MININET THEORY -->
+    <div class="section">
+      <div class="section-label">Part 2 — Mininet: Network Emulation Theory</div>
+
+      <h3>Why Emulation? <a class="ts" href="#" title="Jump to 10:29">10:29</a></h3>
+      <p>The ideal way to learn networking is to run experiments on a real network. In practice this is unavailable (campus networks are restricted, private setups are expensive). The two available alternatives are simulation and emulation — and they are not the same thing.</p>
+
+      <div class="compare">
+        <div class="compare-col circuit-col">
+          <div class="compare-col-header">Simulation</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">What it does</div><div>Models network behaviour in a hypothetical/virtual environment</div></div>
+            <div class="compare-row"><div class="label">Protocol stack</div><div>Synthetic — not the real kernel implementation</div></div>
+            <div class="compare-row"><div class="label">Accuracy</div><div>Lower — results may not reflect real-world performance</div></div>
+            <div class="compare-row"><div class="label">Examples</div><div>ns-3, OMNET++</div></div>
+          </div>
+        </div>
+        <div class="compare-col packet-col">
+          <div class="compare-col-header">Emulation (Mininet)</div>
+          <div class="compare-body">
+            <div class="compare-row"><div class="label">What it does</div><div>Runs actual kernel TCP/IP stack in virtualized instances</div></div>
+            <div class="compare-row"><div class="label">Protocol stack</div><div>Real — same implementation that runs on physical hardware</div></div>
+            <div class="compare-row"><div class="label">Accuracy</div><div>Higher — results are meaningful for real deployments</div></div>
+            <div class="compare-row"><div class="label">Examples</div><div>Mininet (uses Linux kernel namespaces + Open vSwitch)</div></div>
+          </div>
+        </div>
+      </div>
+
+      <h3>How Mininet Maps Physical Components to Virtual Ones <a class="ts" href="#" title="Jump to 12:53">12:53</a></h3>
+      <p>Each physical component of a real network has a virtual counterpart inside Mininet:</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Physical</div>
+          <div class="proto-names">Router / Switch</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Mininet Equivalent</div>
+          <div class="proto-names">Virtual namespace (legacy) / Open vSwitch (SDN)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Physical</div>
+          <div class="proto-names">Host / Server</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Mininet Equivalent</div>
+          <div class="proto-names">Virtual namespace (isolated protocol stack instance)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Physical</div>
+          <div class="proto-names">Network link (cable)</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Mininet Equivalent</div>
+          <div class="proto-names">Virtual link (veth pair)</div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Namespace = virtual protocol stack instance.</strong> Creating a virtual host in Mininet means taking the full 5-layer TCP/IP stack implementation from the Linux kernel and spawning a virtualized instance of it. That instance behaves as an independent machine. This is analogous to how VirtualBox lets you run multiple OSes on one physical machine — Mininet lets you run multiple network stacks on one physical machine.
+      </div>
+
+      <p><strong>Open vSwitch (OVS)</strong> is the open-source tool that implements switching (L2) or routing (L3) functionality on top of the kernel's protocol stack. It is what enables SDN-capable virtual switches inside Mininet.</p>
+
+      <h3>Mininet Topology Commands <a class="ts" href="#" title="Jump to 17:16">17:16</a></h3>
+      <p>Mininet is invoked from the terminal as <code>mn</code> (must be run as root via sudo). Topology is specified with the <code>--topo</code> flag:</p>
+
+      <div class="vci-box">
+        <div class="vci-row">
+          <span class="vci" style="min-width:260px">mn --topo single,2</span>
+          <span class="port">1 switch, 2 hosts (star)</span>
+        </div>
+        <div class="vci-row">
+          <span class="vci" style="min-width:260px">mn --topo single,3</span>
+          <span class="port">1 switch, 3 hosts (star)</span>
+        </div>
+        <div class="vci-row">
+          <span class="vci" style="min-width:260px">mn --topo linear,3</span>
+          <span class="port">3 switches in a line, 1 host per switch</span>
+        </div>
+        <div class="vci-row">
+          <span class="vci" style="min-width:260px">mn --topo linear,2,3 --controller=remote --switch ovsk</span>
+          <span class="port">SDN topology: 2 switches, 3 hosts each, remote Ryu controller, OVS switches</span>
+        </div>
+      </div>
+
+      <p>The <code>--controller=remote</code> flag tells Mininet the SDN controller is running as a separate process (locally or remotely). The controller listens on port <strong>6653</strong> or <strong>6633</strong> (OpenFlow standard ports). If no controller is running when Mininet starts, it reports a connection failure but still creates the topology — packets just won't be forwarded until the controller connects.</p>
+    </div>
+
+    <!-- PART 3: LIVE DEMO -->
+    <div class="section">
+      <div class="section-label">Part 3 — Live SDN Demo: Ryu Controller + Mininet</div>
+
+      <div class="callout yellow">
+        <strong>🎬 Highly visual section.</strong> This portion is a live terminal demo. Watch from <a class="ts" href="#" title="Jump to 20:04">20:04</a> to follow along. The notes below summarise the sequence of commands and observations.
+      </div>
+
+      <h3>Step 1 — Start Mininet Topology <a class="ts" href="#" title="Jump to 20:09">20:09</a></h3>
+      <p>Command run: <code>sudo mn --topo single,3 --mac --controller remote --switch ovsk</code></p>
+      <p>This creates: 3 hosts (h1, h2, h3) connected to 1 OVS switch (s1) in a star topology. Mininet reports it cannot contact the remote controller at 127.0.0.1:6653 because no controller has been started yet. The topology is created anyway.</p>
+      <p>At the <code>mininet&gt;</code> prompt, running <code>h1 ping h2</code> returns <strong>"Destination Host Unreachable"</strong> — because without a controller, the SDN switch has no flow rules and does not know how to forward packets.</p>
+
+      <h3>Step 2 — Configure OVS Switch for OpenFlow 1.3 <a class="ts" href="#" title="Jump to 23:46">23:46</a></h3>
+      <p>In a separate terminal, the switch is configured to use OpenFlow 1.3:</p>
+      <div class="callout">
+        <code>sudo ovs-vsctl set bridge s1 protocols=OpenFlow13</code>
+      </div>
+      <p>This tells OVS switch s1 to speak OpenFlow version 1.3 with whatever controller connects to it.</p>
+
+      <h3>Step 3 — Start Ryu Controller with simple_switch_13.py <a class="ts" href="#" title="Jump to 23:46">23:46</a></h3>
+      <div class="callout">
+        <code>./bin/ryu-manager --verbose ryu/app/simple_switch_13.py</code>
+      </div>
+      <p>Ryu connects to the OVS switch. The verbose log shows the controller consuming various OpenFlow events: <code>EventOFPSwitchFeatures</code>, <code>EventOFPPacketIn</code>, etc. Once connected, <code>h1 ping h2</code> now succeeds.</p>
+
+      <h3>Key Observation: First-Packet Latency <a class="ts" href="#" title="Jump to 27:23">27:23</a></h3>
+      <p>In the ping output, the <strong>first packet has significantly higher latency</strong> (~4.84 ms) compared to subsequent packets (~0.03–0.16 ms). This directly demonstrates the SDN packet-in → controller → flow rule installation cycle:</p>
+
+      <div class="callout green">
+        <strong>First packet path:</strong> h1 → switch (no matching rule) → OpenFlow PacketIn event generated → event sent to Ryu controller → controller computes forwarding rule → installs rule in switch via FlowMod → packet forwarded (was buffered at switch during this). All subsequent packets hit the installed rule directly — no controller involvement, hence much lower latency.
+      </div>
+
+      <p>Every new host pair that hasn't communicated before triggers this first-packet overhead. The demo confirms this by running <code>h2 ping h3</code> — again the first packet is slow, subsequent ones are fast.</p>
+
+      <h3>Step 4 — The Ryu Application: simple_switch_13.py <a class="ts" href="#" title="Jump to 30:06">30:06</a></h3>
+      <p>This Python script is Ryu's default L2 learning switch application. It is what runs as the "network application" on the controller. Its structure:</p>
+
+      <div class="proto-grid">
+        <div class="proto-card">
+          <div class="proto-layer">Function / Handler</div>
+          <div class="proto-names">switch_features_handler</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Purpose</div>
+          <div class="proto-names">Installs a default table-miss flow entry when switch connects. Sends unmatched packets to controller.</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Function / Handler</div>
+          <div class="proto-names">add_flow</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Purpose</div>
+          <div class="proto-names">Installs a new forwarding rule (FlowMod message) in the switch's flow table for a given match condition and action.</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Function / Handler</div>
+          <div class="proto-names">_packet_in_handler</div>
+        </div>
+        <div class="proto-card">
+          <div class="proto-layer">Purpose</div>
+          <div class="proto-names">Handles PacketIn events. Extracts src/dst MAC from ethernet header, learns src MAC → port mapping, determines output port (flood if unknown, specific port if known), calls add_flow to install rule, sends PacketOut to forward the buffered packet.</div>
+        </div>
+      </div>
+
+      <div class="callout pink">
+        <strong>MAC learning logic:</strong> The controller maintains a table <code>mac_to_port[dpid][src_mac] = in_port</code>. When a packet arrives, it records which port the source MAC was seen on. If the destination MAC is in the table, it sends to that port. If not, it floods (sends to all ports except the in-port). This is exactly how a traditional L2 switch learns — the difference is the logic runs in the controller, not in the switch hardware.
+      </div>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="section">
+      <div class="section-label">Concept Summary</div>
+
+      <h3>Wireshark</h3>
+      <p>A live packet capture tool that shows every field of every layer of the TCP/IP stack for any captured packet. Useful for verifying protocol behaviour, debugging connections, and observing headers you've only seen in diagrams. TLS-encrypted traffic shows the TLS envelope but not the plaintext payload. The TCP 3-way handshake (SYN → SYN-ACK → ACK) is directly observable in a capture.</p>
+
+      <h3>Mininet</h3>
+      <p>A network emulator that runs inside a single Linux machine using kernel namespaces (virtual hosts) and Open vSwitch (virtual switches). Unlike simulators, it uses the real Linux TCP/IP stack, so behaviour matches real networks. Topologies are created with simple CLI commands and can be as complex as needed.</p>
+
+      <h3>SDN in Mininet: The Flow</h3>
+      <p>Mininet creates the data plane (virtual switches and hosts). A separate SDN controller (Ryu, OpenDaylight, Floodlight, etc.) connects to the OVS switches via OpenFlow. On first packet arrival, the switch sends a PacketIn event to the controller; the controller runs its application logic and installs a FlowMod rule in the switch; the switch forwards the buffered packet. Subsequent packets matching that flow are forwarded locally at the switch without controller involvement. The first-packet penalty is the measurable cost of the reactive control plane.</p>
+    </div>
+
+  </div>
+</body>
+</html>

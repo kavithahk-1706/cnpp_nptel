@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lec 44 — Software Defined Networking II (OpenFlow)</title>
+  <link rel="stylesheet" href="notes.css" />
+</head>
+<body>
+<div class="container">
+
+  <nav>
+    <a href="index.html" class="back-link">← all lectures</a>
+    <div class="nav-right">
+      <a href="lec43.html" class="nav-lec">← prev</a>
+      <a href="lec45.html" class="nav-lec">next →</a>
+    </div>
+  </nav>
+
+  <div class="lec-header">
+    <span class="lec-tag">Lecture 44</span>
+    <span class="high-badge">HIGH PRIORITY</span>
+    <h1>Software Defined Networking — II (OpenFlow)</h1>
+    <p>OpenFlow protocol mechanics, flow tables, match-action rules, controller-switch messaging, and the shift from closed to open networking innovation.</p>
+  </div>
+
+  <!-- SECTION 1: CLOSED vs OPEN INNOVATION -->
+  <div class="section">
+    <div class="section-label">Closed vs Open Innovation</div>
+
+    <h3>Closed Innovation in Traditional Networking</h3>
+    <p>In traditional networking, every device (router, switch) is a <strong>single vendor-locked box</strong> containing three tightly coupled components:</p>
+
+    <div class="three-col">
+      <div class="concept-card">
+        <div class="concept-title">Packet Forwarding Hardware</div>
+        <div class="concept-desc">Implemented in TCAM (Ternary Content-Addressable Memory) or older CAM. Performs the actual data plane forwarding at hardware speeds.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Network Operating System</div>
+        <div class="concept-desc">Vendor-specific OS (e.g., Cisco IOS). Implements routing and control protocols. Tightly coupled to the vendor's hardware.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Applications</div>
+        <div class="concept-desc">Firewall, packet forwarding, QoS applications — all bundled inside the same device by the same vendor.</div>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      <strong>Problems with Closed Innovation:</strong> Poor interoperability (Cisco router vs Netgear router require separate manual configuration), difficult network manageability, and vendor lock-in. Network admins must read 1000-page vendor-specific manuals for each device type.
+    </div>
+
+    <h3>Open Innovation — The SDN Approach</h3>
+    <p>SDN breaks the vendor box apart. Vendors supply only <strong>dumb / blind / open switches</strong> — programmable packet forwarding hardware. A single <strong>central network-wide operating system</strong> (the SDN controller) programs all hardware across all vendors.</p>
+
+    <div class="compare">
+      <div class="compare-col circuit-col">
+        <div class="compare-col-header">Closed Innovation</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Hardware</span> Vendor-locked, proprietary TCAM/CAM</div>
+          <div class="compare-row"><span class="label">Software</span> Vendor OS (Cisco IOS, etc.), bundled inside device</div>
+          <div class="compare-row"><span class="label">Apps</span> Pre-installed, no external control</div>
+          <div class="compare-row"><span class="label">Config</span> Per-device, vendor-specific CLI/manual</div>
+          <div class="compare-row"><span class="label">Innovation</span> Slow — all changes need vendor involvement</div>
+        </div>
+      </div>
+      <div class="compare-col packet-col">
+        <div class="compare-col-header">Open Innovation (SDN)</div>
+        <div class="compare-body">
+          <div class="compare-row"><span class="label">Hardware</span> Programmable open switches, any vendor</div>
+          <div class="compare-row"><span class="label">Software</span> Open-source NOS (ONOS, Ryu, OpenDaylight)</div>
+          <div class="compare-row"><span class="label">Apps</span> Written in any language (Python, Java) on top of controller</div>
+          <div class="compare-row"><span class="label">Config</span> Centralized — one controller manages all switches</div>
+          <div class="compare-row"><span class="label">Innovation</span> Rapid — anyone can write and test new protocols</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <strong>Key SDN Principle:</strong> Data plane functionality (TCAM-based forwarding) stays in the hardware. Control plane logic (routing decisions, protocol implementation) moves to a logically centralized software controller.
+    </div>
+  </div>
+
+  <!-- SECTION 2: SDN ARCHITECTURE -->
+  <div class="section">
+    <div class="section-label">SDN Architecture</div>
+
+    <h3>Three-Layer Architecture</h3>
+
+    <div class="stack">
+      <div class="stack-layer layer-app">
+        <span class="layer-name">Application Layer</span>
+        <span class="layer-desc">Flow optimizer, load balancer, topology viewer, policy enforcement, bandwidth mgmt, automation</span>
+      </div>
+      <div class="stack-layer layer-trans">
+        <span class="layer-name">Control Layer (SDN Controller)</span>
+        <span class="layer-desc">GUI, L2/L3 module, cluster module, VPN module, QoS/ACL module, DHCP module</span>
+      </div>
+      <div class="stack-layer layer-phys">
+        <span class="layer-name">Infrastructure Layer</span>
+        <span class="layer-desc">ToR switches, DC gateways, servers, open switches (OpenFlow-enabled)</span>
+      </div>
+    </div>
+
+    <h3>Controller Interfaces</h3>
+    <div class="two-col">
+      <div class="interface-card">
+        <div class="interface-title">Northbound Interface</div>
+        <div class="interface-desc">Connects control layer to the <strong>application layer</strong>. Exposes a programming API so developers can write network apps in their preferred language (Python → POX/Ryu, Java → OpenDaylight). The northbound interface compiles application logic into network protocol instructions and maps them to controller modules.</div>
+      </div>
+      <div class="interface-card">
+        <div class="interface-title">Southbound Interface</div>
+        <div class="interface-desc">Connects control layer to the <strong>infrastructure layer</strong>. Converts network protocol rules into forwarding entries that get programmed into the TCAM of dumb switches. <strong>OpenFlow is the southbound interface protocol.</strong> Plugins like Dovs, NetConf, OpenFlow implement this interface.</div>
+      </div>
+    </div>
+
+    <h3>Three Requirements for SDN to Work</h3>
+    <div class="tag-row">
+      <span class="tag tag-good">Open interface to hardware (vendor-agnostic)</span>
+      <span class="tag tag-good">Open API for application development</span>
+      <span class="tag tag-good">Extensible OS to convert programs → forwarding rules</span>
+    </div>
+
+    <h3>SDN Controller Examples</h3>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">Python-based</div>
+        <div class="proto-names">POX &nbsp;·&nbsp; Ryu (lightweight, industry-popular)</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Java-based</div>
+        <div class="proto-names">OpenDaylight</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Enterprise / Carrier-grade</div>
+        <div class="proto-names">ONOS (very popular, open-source)</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Other</div>
+        <div class="proto-names">Maestro</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: OPENFLOW -->
+  <div class="section">
+    <div class="section-label">OpenFlow</div>
+
+    <h3>What is OpenFlow?</h3>
+    <p><strong>OpenFlow</strong> is an open-source protocol that implements the <strong>southbound interface</strong> — it controls the forwarding behaviour of Ethernet switches in an SDN network.</p>
+    <div class="tag-row">
+      <span class="tag tag-good">Originally released by Clean Slate Program, Stanford</span>
+      <span class="tag tag-good">Specifications maintained by Open Networking Forum (ONF)</span>
+      <span class="tag tag-good">Current stable version: 1.5.1</span>
+    </div>
+
+    <h3>How OpenFlow Works</h3>
+    <p>Inside each OpenFlow (OF) switch, there are two planes:</p>
+    <div class="two-col">
+      <div class="concept-card">
+        <div class="concept-title">Control Path (Software)</div>
+        <div class="concept-desc">Runs a minimal <strong>OpenFlow Client</strong> — a lightweight stub that can receive, parse, and apply configuration messages from the controller. No routing protocols run here anymore. The switch does not need to think — it just obeys the controller.</div>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Data Path (Hardware — TCAM)</div>
+        <div class="concept-desc">The actual packet forwarding engine. TCAM is <strong>programmable memory</strong> — the controller installs forwarding rules into it dynamically via OpenFlow messages. When a packet arrives, its header fields are matched against TCAM entries and the corresponding action is executed at hardware speed.</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      Controller ↔ Switch communication uses the <strong>OpenFlow Messaging API over SSL/TCP</strong>. The controller is logically centralized. The switch is just a dumb hardware executor.
+    </div>
+  </div>
+
+  <!-- SECTION 4: FLOW TABLE -->
+  <div class="section">
+    <div class="section-label">OpenFlow Flow Table</div>
+
+    <h3>Flow Table Structure</h3>
+    <p>Each entry in the OpenFlow flow table has four components:</p>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Description</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">Rule</td>
+          <td>Set of header fields to match against incoming packets</td>
+          <td>Switch Port, VLAN ID, MAC Src, MAC Dst, ETH Type, IP Src, IP Dst, IP ToS, TCP Sport, TCP Dport — wildcards (*) allowed</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Action</td>
+          <td>What to do when rule matches</td>
+          <td>Forward to port(s), encapsulate and forward, modify fields, drop, custom extensions</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Statistics</td>
+          <td>Counters maintained per rule</td>
+          <td>Packet counter, byte counter — enables traffic monitoring and bandwidth throttling per flow</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Priority</td>
+          <td>Numeric priority of the rule</td>
+          <td>When a packet matches multiple rules simultaneously, the highest priority rule is executed</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>OpenFlow Flow Table — Rule Fields</h3>
+    <div class="proto-grid">
+      <div class="proto-card">
+        <div class="proto-layer">L2 Fields</div>
+        <div class="proto-names">Switch Port &nbsp;·&nbsp; VLAN ID &nbsp;·&nbsp; MAC SRC &nbsp;·&nbsp; MAC DST &nbsp;·&nbsp; ETH Type</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">L3 Fields</div>
+        <div class="proto-names">IP SRC &nbsp;·&nbsp; IP DST &nbsp;·&nbsp; IP ToS (for QoS)</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">L4 Fields</div>
+        <div class="proto-names">TCP SPORT &nbsp;·&nbsp; TCP DPORT</div>
+      </div>
+      <div class="proto-card">
+        <div class="proto-layer">Wildcard</div>
+        <div class="proto-names">* (any value) can be used for any field not being matched</div>
+      </div>
+    </div>
+
+    <div class="callout green">
+      <strong>OpenFlow's power:</strong> Rules can span L2, L3, and L4 headers simultaneously. A traditional router only looks at L3 (IP destination). OpenFlow can match any combination of fields, enabling incredibly fine-grained per-flow control.
+    </div>
+  </div>
+
+  <!-- SECTION 5: FLOW TABLE EXAMPLES -->
+  <div class="section">
+    <div class="section-label">Flow Table Examples</div>
+
+    <h3>Use Cases as Match-Action Pairs</h3>
+
+    <h4>Layer 2 Switching</h4>
+    <p>Match only on <strong>MAC DST</strong>; all other fields are wildcards. If MAC DST = <code>12:3F:…</code>, forward to <code>eth2</code>. Behaves exactly like a normal L2 switch.</p>
+
+    <h4>Firewall</h4>
+    <p>Match on <strong>TCP DPORT</strong>. If TCP destination port = <code>22</code>, action = <strong>drop</strong>. All other fields wildcarded. This implements an SSH-blocking firewall rule with a single table entry.</p>
+
+    <h4>L3 Forwarding</h4>
+    <p>Match on <strong>IP DST subnet</strong>. If IP DST belongs to <code>202.2.*.*</code>, forward to <code>eth2</code>. Standard IP routing behavior implemented as a match-action rule.</p>
+
+    <h4>Source Routing</h4>
+    <p>Match on both <strong>IP SRC and IP DST</strong>. If SRC is from <code>16.2.3.*</code> and DST is <code>202.2.*.*</code>, forward to <code>eth2</code>. Enables path selection based on source, not just destination.</p>
+
+    <h4>Flow Switching <span class="high-badge">Interesting</span></h4>
+    <p>Match on <strong>all fields simultaneously</strong> — MAC SRC, MAC DST, ETH Type, IP SRC, IP DST, TCP SPORT, TCP DPORT. This uniquely identifies a <strong>process-to-process flow</strong>. For that specific flow, forward to a specific port. This is circuit-switching-like behaviour achieved within a packet-switched network — SDN can bridge both paradigms.</p>
+
+    <h4>VLAN Switching</h4>
+    <p>Match on <strong>VLAN ID + MAC DST</strong>. Action = forward to multiple ports (e.g., <code>eth2</code> and <code>eth3</code>). Ports in the same VLAN receive the packet — implements virtual LAN segmentation.</p>
+
+    <div class="callout yellow">
+      <strong>💡 Hint — Visual Aid:</strong> The slide at <a class="ts" href="#">~25:16</a> and <a class="ts" href="#">~26:12</a> and <a class="ts" href="#">~27:27</a> show the actual flow table entries as diagrams with all fields laid out. Worth looking at to visually confirm wildcard placement for each use case.
+    </div>
+  </div>
+
+  <!-- SECTION 6: POWER OF OPENFLOW -->
+  <div class="section">
+    <div class="section-label">Power of OpenFlow</div>
+
+    <h3>Per-User Forwarding Policies</h3>
+    <p>Each user (Bob, Alice) writes their own forwarding application on top of the same controller. The controller compiles the application and <strong>installs forwarding rules only on the specific switches</strong> that lie along the desired path. Other switches are unaffected. Multiple users' rules can coexist on the same physical network infrastructure simultaneously.</p>
+
+    <div class="callout">
+      Bob wants R1 → R2 → R4: rules installed only on R1, R2, R4.<br>
+      Alice wants R1 → R4 → R3: rules installed only on R1, R4, R3.<br>
+      Completely independent forwarding policies on a shared physical network.
+    </div>
+  </div>
+
+  <!-- SECTION 7: OPENFLOW MESSAGES -->
+  <div class="section">
+    <div class="section-label">OpenFlow Messages</div>
+
+    <h3>Controller ↔ Switch Message Types</h3>
+
+    <table class="port-table">
+      <thead>
+        <tr>
+          <th>Message</th>
+          <th>Direction</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="proto-name">HELLO</td>
+          <td>Bidirectional</td>
+          <td>Exchanged after TCP connection; negotiate OpenFlow version (highest common version is used)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Feature Request / Reply</td>
+          <td>Controller → Switch</td>
+          <td>Controller learns the datapath ID of the switch and determines which features it supports (e.g., does it support QoS-based forwarding?)</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Flow Modification</td>
+          <td>Controller → Switch</td>
+          <td>Install, modify, or delete flow entries in the switch's TCAM flow table. Core mechanism for programming the switch.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Echo Request / Reply</td>
+          <td>Bidirectional</td>
+          <td>Keepalive — checks that the TCP connection between controller and switch is still alive</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Group Configuration</td>
+          <td>Controller → Switch</td>
+          <td>Groups multiple flow entries together into group tables inside the switch for bulk rule management</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Stats Request (flow/port/queue/group/table)</td>
+          <td>Controller → Switch</td>
+          <td>Retrieves per-flow and per-port counters from the switch. Enables traffic monitoring, anomaly detection, and dynamic bandwidth throttling.</td>
+        </tr>
+        <tr>
+          <td class="proto-name">Async Messages (flow removal, config error, port up/down)</td>
+          <td>Switch → Controller</td>
+          <td>Event-driven notifications. If a port goes down, the switch notifies the controller so it can reroute traffic with a failsafe rule.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout green">
+      <strong>Packet Processing Flow:</strong> Packet arrives at OF switch → IP header extracted → fields matched against TCAM flow table → highest-priority matching rule found → corresponding action executed (forward, drop, modify, encapsulate).
+    </div>
+  </div>
+
+  <!-- SECTION 8: SUMMARY -->
+  <div class="section">
+    <div class="section-label">Concept Summary</div>
+
+    <h3>Key Takeaways</h3>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-app">CLOSED vs OPEN</span>
+      <div class="layer-content">
+        <div class="layer-name">Vendor-lock to Open Innovation</div>
+        <div class="layer-detail">Traditional networking bundles hardware + OS + apps from one vendor per device. SDN separates these: any vendor's hardware + open-source controller + custom apps. The packet forwarding hardware becomes programmable and vendor-agnostic.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-trans">INTERFACES</span>
+      <div class="layer-content">
+        <div class="layer-name">Northbound vs Southbound</div>
+        <div class="layer-detail">Northbound: controller ↔ applications (programming API, your Python/Java code lives here). Southbound: controller ↔ hardware (OpenFlow lives here — converts protocol logic to TCAM rules installed in dumb switches).</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-net">OPENFLOW</span>
+      <div class="layer-content">
+        <div class="layer-name">Match-Action Paradigm</div>
+        <div class="layer-detail">Every networking behaviour — switching, routing, firewall, QoS, NAT, load balancing — can be expressed as a <strong>match + action</strong> pair in the flow table. The rule specifies which header fields to look at; the action says what to do on a match. Wildcards (*) allow partial matching.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-dl">FLOW TABLE</span>
+      <div class="layer-content">
+        <div class="layer-name">Rule · Action · Statistics · Priority</div>
+        <div class="layer-detail">Four components per entry. Priority resolves conflicts (multiple matching rules → highest priority wins). Statistics give real-time per-flow counters for monitoring and control. Rules are stored in TCAM — programmable hardware, updated dynamically by the controller.</div>
+      </div>
+    </div>
+
+    <div class="layer-row">
+      <span class="layer-badge layer-phys">MESSAGING</span>
+      <div class="layer-content">
+        <div class="layer-name">TCP-based Controller ↔ Switch Protocol</div>
+        <div class="layer-detail">OpenFlow runs over SSL/TCP. Handshake: HELLO (version negotiation) → Feature Request (capability discovery) → Flow Modification (rule installation). Ongoing: Echo (keepalive), Stats (monitoring), Async messages (event notifications like port-down). Switch only needs a minimal OpenFlow client — no routing intelligence needed on the switch itself.</div>
+      </div>
+    </div>
+
+    <div class="callout pink">
+      <strong>Future relevance:</strong> SDN is not a niche topic. The networking industry is actively moving toward SDN-controlled infrastructure. OpenFlow, ONOS, Ryu, and OpenDaylight are real production tools used by cloud providers and ISPs today.
+    </div>
+
+    <h3>Resources to Explore</h3>
+    <div class="tag-row">
+      <span class="tag tag-good">opennetworking.org — ONF standards and OpenFlow specs</span>
+      <span class="tag tag-good">OpenFlow spec v1.5.1 (PDF on ONF site)</span>
+      <span class="tag tag-good">onosproject.org — ONOS controller</span>
+      <span class="tag tag-good">osrg.github.io/ryu — Ryu SDN Framework</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
